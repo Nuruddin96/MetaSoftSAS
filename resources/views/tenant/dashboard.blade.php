@@ -4,21 +4,26 @@
 
 @section('content')
 @if ($tenant->status === 'trial')
-    <div class="mb-6 bg-amber/15 border border-amber/40 rounded-xl px-4 py-3 text-sm">
-        ⏳ ট্রায়াল চলছে — শেষ হবে <b>{{ $tenant->trial_ends_at?->format('d M Y') }}</b>।
-        <a href="{{ route('tenant.billing') }}" class="font-semibold text-leafdk hover:underline">এখনই প্ল্যান নিন</a>
-    </div>
+    <x-ui.card padding="sm" tone="amber" class="mb-6">
+        <div class="flex items-center gap-2 text-sm">
+            <i data-lucide="clock" class="w-4 h-4 shrink-0"></i>
+            <span>ট্রায়াল চলছে — শেষ হবে <b>{{ $tenant->trial_ends_at?->format('d M Y') }}</b>।</span>
+            <a href="{{ route('tenant.billing') }}" class="font-semibold text-leafdk hover:underline shrink-0">এখনই প্ল্যান নিন</a>
+        </div>
+    </x-ui.card>
 @endif
 
 @php $checklistDone = collect($checklist)->filter()->count(); @endphp
 @if ($checklistDone < count($checklist))
-    <div class="mb-6 bg-white rounded-xl border border-ink/5 p-5 card-hover">
+    <x-ui.card class="mb-6">
         <div class="flex items-center justify-between mb-3">
-            <p class="font-bold text-sm">🚀 শুরু করার চেকলিস্ট</p>
+            <p class="font-bold text-sm flex items-center gap-2">
+                <i data-lucide="rocket" class="w-4 h-4 text-leafdk"></i> শুরু করার চেকলিস্ট
+            </p>
             <span class="text-xs text-mute">{{ $checklistDone }}/{{ count($checklist) }} সম্পন্ন</span>
         </div>
-        <div class="h-1.5 rounded-full bg-ink/5 overflow-hidden mb-4">
-            <div class="h-full bg-leaf rounded-full transition-all" style="width: {{ round($checklistDone / count($checklist) * 100) }}%"></div>
+        <div class="h-1.5 rounded-pill bg-ink/5 overflow-hidden mb-4">
+            <div class="h-full bg-leaf rounded-pill transition-all" style="width: {{ round($checklistDone / count($checklist) * 100) }}%"></div>
         </div>
         <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
             @php
@@ -30,66 +35,80 @@
                 ];
             @endphp
             @foreach ($steps as $key => [$label, $link])
-                <a href="{{ $link }}" class="flex items-center gap-2 {{ $checklist[$key] ? 'text-mute line-through' : 'text-ink hover:text-leaf' }}">
-                    <span class="w-5 h-5 rounded-full grid place-items-center shrink-0 {{ $checklist[$key] ? 'bg-leaf text-white' : 'border border-ink/20' }}">
-                        {{ $checklist[$key] ? '✓' : '' }}
+                <a href="{{ $link }}" class="flex items-center gap-2 rounded transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 {{ $checklist[$key] ? 'text-mute line-through' : 'text-ink hover:text-leaf' }}">
+                    <span class="w-5 h-5 rounded-pill grid place-items-center shrink-0 {{ $checklist[$key] ? 'bg-leaf text-white' : 'border border-ink/20' }}">
+                        @if ($checklist[$key])
+                            <i data-lucide="check" class="w-3 h-3"></i>
+                        @endif
                     </span>
                     {{ $label }}
                 </a>
             @endforeach
         </div>
-    </div>
+    </x-ui.card>
 @endif
 
 @php
     $todoItems = array_filter([
-        $pendingOrders > 0 ? ['পেন্ডিং অর্ডার কনফার্ম করুন', $pendingOrders, route('tenant.orders.index', ['status' => 'pending']), 'clock', 'text-amber'] : null,
-        $lowStockCount > 0 ? ['লো স্টক প্রোডাক্ট রিস্টক করুন', $lowStockCount, route('tenant.inventory.low'), 'triangle-alert', 'text-red-600'] : null,
-        $newMessages > 0 ? ['নতুন মেসেঞ্জার মেসেজ দেখুন', $newMessages, route('tenant.messenger.index'), 'message-circle', 'text-blue-600'] : null,
-        $newIncomplete > 0 ? ['অসম্পূর্ণ অর্ডারে কল করুন', $newIncomplete, route('tenant.incomplete'), 'phone-missed', 'text-mute'] : null,
+        $pendingOrders > 0 ? ['পেন্ডিং অর্ডার কনফার্ম করুন', $pendingOrders, route('tenant.orders.index', ['status' => 'pending']), 'clock', 'text-amber', 'bg-amber/10'] : null,
+        $lowStockCount > 0 ? ['লো স্টক প্রোডাক্ট রিস্টক করুন', $lowStockCount, route('tenant.inventory.low'), 'triangle-alert', 'text-red-600', 'bg-red-50'] : null,
+        $newMessages > 0 ? ['নতুন মেসেঞ্জার মেসেজ দেখুন', $newMessages, route('tenant.messenger.index'), 'message-circle', 'text-blue-600', 'bg-blue-50'] : null,
+        $newIncomplete > 0 ? ['অসম্পূর্ণ অর্ডারে কল করুন', $newIncomplete, route('tenant.incomplete'), 'phone-missed', 'text-mute', 'bg-ink/5'] : null,
     ]);
 @endphp
 @if (count($todoItems))
-    <div class="mb-6 bg-white rounded-xl border border-ink/5 p-5 card-hover">
-        <p class="font-bold text-sm mb-3">📋 আজকে যা করতে হবে</p>
+    <x-ui.card class="mb-6">
+        <p class="font-bold text-sm mb-3 flex items-center gap-2">
+            <i data-lucide="clipboard-list" class="w-4 h-4 text-leafdk"></i> আজকে যা করতে হবে
+        </p>
         <div class="grid sm:grid-cols-2 gap-2.5">
-            @foreach ($todoItems as [$label, $count, $link, $icon, $color])
-                <a href="{{ $link }}" class="flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-ink/5 hover:border-leaf/30 hover:bg-paper/60 transition">
+            @foreach ($todoItems as [$label, $count, $link, $icon, $textColor, $bgColor])
+                <a href="{{ $link }}" class="flex items-center justify-between gap-3 px-4 py-3 rounded-btn border border-ink/5 hover:border-leaf/30 hover:bg-paper/60 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
                     <span class="flex items-center gap-2.5 text-sm">
-                        <i data-lucide="{{ $icon }}" class="w-4 h-4 {{ $color }}"></i>
+                        <i data-lucide="{{ $icon }}" class="w-4 h-4 {{ $textColor }}"></i>
                         {{ $label }}
                     </span>
-                    <span class="w-6 h-6 rounded-full bg-ink/5 grid place-items-center text-xs font-bold {{ $color }}">{{ $count }}</span>
+                    <span class="w-6 h-6 rounded-pill {{ $bgColor }} grid place-items-center text-xs font-bold {{ $textColor }}">{{ $count }}</span>
                 </a>
             @endforeach
         </div>
-    </div>
+    </x-ui.card>
 @endif
 
+{{-- KPI stat tiles — icon + label + value, revenue tile gets a leaf accent to
+     stand out from count-based metrics. No trend arrows: the controller
+     doesn't compute a vs-yesterday comparison, so nothing is shown rather
+     than fabricating one. --}}
 <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
-    @foreach ([
-        ['আজকের অর্ডার', $todayOrders],
-        ['আজকের বিক্রি', number_format($todaySales) . '৳'],
-        ['পেন্ডিং অর্ডার', $pendingOrders],
-        ['মোট প্রোডাক্ট', $totalProducts],
-        ['মোট কাস্টমার', $totalCustomers],
-    ] as [$label, $value])
-        <div class="card-hover bg-white rounded-xl border border-ink/5 p-5">
-            <p class="text-mute text-xs">{{ $label }}</p>
-            <p class="font-disp font-extrabold text-2xl mt-1">{{ $value }}</p>
-        </div>
+    @php
+        $stats = [
+            ['আজকের অর্ডার', $todayOrders, 'receipt', false],
+            ['আজকের বিক্রি', number_format($todaySales) . '৳', 'trending-up', true],
+            ['পেন্ডিং অর্ডার', $pendingOrders, 'clock', false],
+            ['মোট প্রোডাক্ট', $totalProducts, 'package', false],
+            ['মোট কাস্টমার', $totalCustomers, 'users', false],
+        ];
+    @endphp
+    @foreach ($stats as [$label, $value, $icon, $isRevenue])
+        <x-ui.card hoverable>
+            <div class="w-9 h-9 rounded-lg grid place-items-center {{ $isRevenue ? 'bg-leaf/10 text-leafdk' : 'bg-paper text-mute' }}">
+                <i data-lucide="{{ $icon }}" class="w-[18px] h-[18px]"></i>
+            </div>
+            <p class="text-mute text-xs mt-3">{{ $label }}</p>
+            <p class="font-disp font-extrabold text-2xl lg:text-3xl mt-1 {{ $isRevenue ? 'text-leafdk' : '' }}">{{ $value }}</p>
+        </x-ui.card>
     @endforeach
 </div>
 
 <div class="grid lg:grid-cols-2 gap-6 mt-6">
-    <div class="bg-white rounded-xl border border-ink/5">
-        <div class="px-5 py-3 border-b border-ink/5 font-bold text-sm">অর্ডার কোথা থেকে আসছে</div>
+    <x-ui.card padding="none" class="overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-ink/5 font-bold text-sm">অর্ডার কোথা থেকে আসছে</div>
         @php
             $channelLabels = ['website' => 'ওয়েবসাইট', 'facebook' => 'ফেসবুক', 'whatsapp' => 'হোয়াটসঅ্যাপ', 'instagram' => 'ইনস্টাগ্রাম', 'call' => 'কল', 'others' => 'অন্যান্য'];
             $channelColors = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'others' => 'text-mute'];
             $maxCh = $byChannel->max() ?: 1;
         @endphp
-        @forelse ($channelLabels as $key => $label)
+        @foreach ($channelLabels as $key => $label)
             <div class="px-5 py-2.5 border-b border-ink/5 last:border-0">
                 <div class="flex justify-between text-sm mb-1">
                     <span class="flex items-center gap-2 {{ $channelColors[$key] }}">
@@ -98,16 +117,15 @@
                     </span>
                     <span class="text-mute">{{ $byChannel[$key] ?? 0 }}</span>
                 </div>
-                <div class="h-1.5 rounded-full bg-ink/5 overflow-hidden">
-                    <div class="h-full bg-leaf rounded-full" style="width: {{ round((($byChannel[$key] ?? 0) / $maxCh) * 100) }}%"></div>
+                <div class="h-1.5 rounded-pill bg-ink/5 overflow-hidden">
+                    <div class="h-full bg-leaf rounded-pill" style="width: {{ round((($byChannel[$key] ?? 0) / $maxCh) * 100) }}%"></div>
                 </div>
             </div>
-        @empty
-        @endforelse
-    </div>
+        @endforeach
+    </x-ui.card>
 
-    <div class="bg-white rounded-xl border border-ink/5">
-        <div class="px-5 py-3 border-b border-ink/5 flex justify-between items-center">
+    <x-ui.card padding="none" class="overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-ink/5 flex justify-between items-center">
             <span class="font-bold text-sm">শীর্ষ জেলা</span>
             @if ($moreDistrictsCount > 0)
                 <a href="{{ route('tenant.reports.locations') }}" class="text-xs text-leaf hover:underline">আরও {{ $moreDistrictsCount }}টি →</a>
@@ -118,39 +136,57 @@
                 <span>{{ $d->name }}</span><span class="text-mute">{{ $d->orders }}টি অর্ডার</span>
             </div>
         @empty
-            <p class="px-5 py-8 text-center text-mute text-sm">এখনো কোনো অর্ডার নেই।</p>
+            <div class="px-5 py-10 text-center text-mute text-sm">
+                <i data-lucide="map-pin" class="w-6 h-6 mx-auto mb-2 text-mute/50"></i>
+                এখনো কোনো অর্ডার নেই।
+            </div>
         @endforelse
-    </div>
+    </x-ui.card>
 </div>
 
-<div class="mt-8 bg-white rounded-xl border border-ink/5">
+<x-ui.card padding="none" class="overflow-hidden mt-6">
     <div class="px-5 py-4 border-b border-ink/5 flex items-center justify-between">
         <span class="font-bold">সাম্প্রতিক অর্ডার</span>
         <a href="{{ route('tenant.orders.index') }}" class="text-sm text-leaf hover:underline">সব দেখুন →</a>
     </div>
     @if ($recentOrders->isEmpty())
-        <p class="px-5 py-10 text-center text-mute text-sm">
+        <div class="px-5 py-12 text-center text-mute text-sm">
+            <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-3 text-mute/40"></i>
             এখনো কোনো অর্ডার আসেনি। <a href="{{ route('tenant.products.create') }}" class="text-leaf font-semibold hover:underline">প্রথম প্রোডাক্ট যোগ করুন</a>,
             তারপর দোকানের লিংক শেয়ার করুন: <span class="font-semibold text-ink">{{ $tenant->url() }}</span>
-        </p>
+        </div>
     @else
-        <table class="w-full text-sm">
-            <thead class="text-left text-mute"><tr class="border-b border-ink/5">
-                <th class="px-5 py-3">অর্ডার</th><th class="px-5 py-3">কাস্টমার</th>
-                <th class="px-5 py-3">মোট</th><th class="px-5 py-3">স্ট্যাটাস</th>
-            </tr></thead>
-            <tbody>
-            @foreach ($recentOrders as $order)
-                <tr class="border-b border-ink/5 last:border-0 hover:bg-paper/60">
-                    <td class="px-5 py-3"><a class="font-medium text-leaf hover:underline" href="{{ route('tenant.orders.show', $order) }}">{{ $order->order_number }}</a></td>
-                    <td class="px-5 py-3">{{ $order->customer_name }}<br><span class="text-mute text-xs">{{ $order->customer_phone }}</span></td>
-                    <td class="px-5 py-3">{{ number_format($order->total) }}৳</td>
-                    <td class="px-5 py-3"><span class="px-2 py-1 rounded bg-ink/5 text-xs">{{ $order->status }}</span></td>
-                </tr>
-            @endforeach
-            </tbody>
-        </table>
+        @php
+            $statusMeta = [
+                'pending'    => ['অপেক্ষমান', 'bg-amber/15 text-ink'],
+                'confirmed'  => ['কনফার্মড', 'bg-leaf/10 text-leafdk'],
+                'processing' => ['প্রসেসিং', 'bg-blue-50 text-blue-700'],
+                'shipped'    => ['শিপড', 'bg-blue-50 text-blue-700'],
+                'delivered'  => ['ডেলিভার্ড', 'bg-leaf/10 text-leafdk'],
+                'cancelled'  => ['বাতিল', 'bg-red-50 text-red-700'],
+                'returned'   => ['ফেরত', 'bg-red-50 text-red-700'],
+            ];
+        @endphp
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="text-left text-mute"><tr class="border-b border-ink/5">
+                    <th class="px-5 py-3 whitespace-nowrap">অর্ডার</th><th class="px-5 py-3 whitespace-nowrap">কাস্টমার</th>
+                    <th class="px-5 py-3 whitespace-nowrap">মোট</th><th class="px-5 py-3 whitespace-nowrap">স্ট্যাটাস</th>
+                </tr></thead>
+                <tbody>
+                @foreach ($recentOrders as $order)
+                    @php [$statusLabel, $statusClass] = $statusMeta[$order->status] ?? [$order->status, 'bg-ink/5 text-ink']; @endphp
+                    <tr class="border-b border-ink/5 last:border-0 hover:bg-paper/60">
+                        <td class="px-5 py-3 whitespace-nowrap"><a class="font-medium text-leaf hover:underline" href="{{ route('tenant.orders.show', $order) }}">{{ $order->order_number }}</a></td>
+                        <td class="px-5 py-3 whitespace-nowrap">{{ $order->customer_name }}<br><span class="text-mute text-xs">{{ $order->customer_phone }}</span></td>
+                        <td class="px-5 py-3 whitespace-nowrap">{{ number_format($order->total) }}৳</td>
+                        <td class="px-5 py-3 whitespace-nowrap"><span class="px-2.5 py-1 rounded-pill text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span></td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
         <div class="px-5 py-4 border-t border-ink/5">{{ $recentOrders->links() }}</div>
     @endif
-</div>
+</x-ui.card>
 @endsection
