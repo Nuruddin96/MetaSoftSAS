@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', 'MetaSoft BD — বিজনেস অটোমেশন')</title>
+    <meta name="description" content="@yield('meta_description', 'বাংলাদেশের ব্যবসার জন্য সম্পূর্ণ ই-কমার্স ও বিজনেস অটোমেশন প্ল্যাটফর্ম — ওয়েবসাইট, POS, ইনভেন্টরি, কুরিয়ার, ফ্রড চেকার সব এক জায়গায়।')">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@600;700;800&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])

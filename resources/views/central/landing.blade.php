@@ -1,6 +1,7 @@
 @extends('layouts.central')
 
 @section('title', 'MetaSoft BD — আপনার অনলাইন ব্যবসা, এক প্যানেলে')
+@section('meta_description', 'ওয়েবসাইট, POS, ইনভেন্টরি, কুরিয়ার আর অর্ডার ম্যানেজমেন্ট — সব এক প্ল্যাটফর্মে। ৭ দিন ফ্রি ট্রায়াল, কোনো কার্ড লাগবে না। আজই আপনার অনলাইন দোকান খুলুন।')
 
 @section('content')
 
@@ -25,59 +26,118 @@
 </header>
 
 {{-- ================= HERO ================= --}}
-<section class="relative overflow-hidden">
-    <div class="max-w-6xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-12 items-center">
-        <div>
-            <p class="inline-flex items-center gap-2 text-xs font-semibold tracking-wide text-leaf bg-leaf/10 px-3 py-1.5 rounded-full mb-5">
-                <span class="w-1.5 h-1.5 rounded-full bg-leaf"></span> ৭ দিন ফ্রি — কার্ড লাগবে না
-            </p>
-            <h1 class="font-disp font-extrabold text-4xl md:text-5xl leading-[1.25]">
-                আপনার অনলাইন ব্যবসা,<br>
-                <span class="text-leaf">এক প্যানেলে।</span>
-            </h1>
-            <p class="mt-5 text-lg text-mute leading-relaxed max-w-md">
-                রেজিস্ট্রেশন করলেই নিজের নামে ইকমার্স ওয়েবসাইট। অর্ডার, স্টক, কুরিয়ার, POS, ফ্রড চেক — দোকান চালানোর সবকিছু একসাথে।
-            </p>
-            <div class="mt-8 flex flex-wrap gap-3">
-                <a href="{{ route('register') }}" class="px-6 py-3.5 rounded-xl bg-ink text-white font-semibold hover:bg-ink/90">
-                    আপনার দোকান খুলুন →
-                </a>
-                <a href="#features" class="px-6 py-3.5 rounded-xl border border-ink/15 font-semibold hover:bg-white">
-                    কী কী পাবেন
-                </a>
-            </div>
-            <p class="mt-5 text-sm text-mute">
-                আপনার সাইট হবে: <span class="font-semibold text-ink">আপনারদোকান.metasoftbd.com</span>
-            </p>
-        </div>
-
-        {{-- signature: thermal receipt --}}
-        <div class="relative flex justify-center md:justify-end">
-            <div class="absolute -top-6 -left-2 md:left-6 bg-amber text-ink text-xs font-bold px-3 py-1.5 rounded shadow rotate-[-4deg]">
-                অর্ডার এলো 🎉
-            </div>
-            <div class="receipt-edge w-[300px] bg-white shadow-xl rotate-2 px-6 pt-6 pb-8 text-sm">
-                <p class="text-center font-disp font-bold text-base">রহিম ফ্যাশন হাউজ</p>
-                <p class="text-center text-xs text-mute">rahimfashion.metasoftbd.com</p>
-                <div class="my-3 border-t border-dashed border-ink/20"></div>
-                <div class="flex justify-between"><span>অর্ডার</span><span class="font-semibold">ORD-000217</span></div>
-                <div class="flex justify-between text-mute text-xs mt-0.5"><span>কুমিল্লা সদর</span><span>ক্যাশ অন ডেলিভারি</span></div>
-                <div class="my-3 border-t border-dashed border-ink/20"></div>
-                <div class="flex justify-between"><span>পাঞ্জাবি (নেভি / L)</span><span>১,২৫০৳</span></div>
-                <div class="flex justify-between mt-1"><span>ডেলিভারি চার্জ</span><span>১২০৳</span></div>
-                <div class="flex justify-between mt-2 font-bold text-base"><span>মোট</span><span>১,৩৭০৳</span></div>
-                <div class="my-3 border-t border-dashed border-ink/20"></div>
-                <div class="flex justify-between text-xs">
-                    <span class="text-leaf font-semibold">✓ ফ্রড চেক: নিরাপদ (৯২%)</span>
-                    <span class="text-mute">Steadfast-এ পাঠানো হয়েছে</span>
-                </div>
-                <div class="barcode h-10 mt-4"></div>
-                <p class="text-center text-[10px] tracking-[0.3em] text-mute mt-1">1024000002171</p>
-            </div>
-        </div>
+<x-ui.section tone="transparent" spacing="none" class="relative overflow-hidden">
+    {{-- animated background glow — decorative only, hidden from assistive tech --}}
+    <div aria-hidden="true" class="absolute inset-0 -z-10 overflow-hidden">
+        <div class="bg-glow absolute -top-32 -right-24 w-[28rem] h-[28rem] bg-leaf/25"></div>
+        <div class="bg-glow absolute -bottom-40 -left-24 w-96 h-96 bg-amber/20" style="animation-delay: -9s"></div>
     </div>
+
+    <x-ui.container>
+        <div class="py-16 md:py-24 lg:py-28 grid lg:grid-cols-2 gap-16 items-center">
+            <div>
+                <x-ui.badge tone="leaf">
+                    <span class="w-1.5 h-1.5 rounded-full bg-leaf"></span> ৭ দিন ফ্রি ট্রায়াল — কোনো কার্ড লাগবে না
+                </x-ui.badge>
+
+                <h1 class="mt-6 font-disp font-extrabold text-4xl sm:text-5xl lg:text-6xl leading-[1.1] text-ink">
+                    আপনার ব্যবসা চালান<br>
+                    <span class="text-leaf">এক প্ল্যাটফর্মে, স্বয়ংক্রিয়ভাবে।</span>
+                </h1>
+
+                <p class="mt-6 text-lg text-mute leading-relaxed max-w-lg">
+                    ওয়েবসাইট, POS, ইনভেন্টরি, কুরিয়ার আর অর্ডার ম্যানেজমেন্ট — যা আগে দশটা টুল আর একটা খাতা দিয়ে সামলাতেন, এখন একটা প্ল্যাটফর্মেই।
+                </p>
+
+                <div class="mt-9 flex flex-wrap gap-4">
+                    <x-ui.button href="{{ route('register') }}" variant="primary" size="lg">
+                        আপনার দোকান খুলুন →
+                    </x-ui.button>
+                    <x-ui.button href="#features" variant="outline" size="lg">
+                        কী কী পাবেন
+                    </x-ui.button>
+                </div>
+
+                <p class="mt-6 text-sm text-mute">
+                    আপনার সাইট হবে: <span class="font-semibold text-ink">আপনারদোকান.metasoftbd.com</span>
+                </p>
+            </div>
+
+            {{-- product visual: dashboard mockup with the receipt layered in front --}}
+            <div class="relative mx-auto w-full max-w-md lg:max-w-none" role="img"
+                 aria-label="MetaSoft প্যানেলের একটি উদাহরণ ড্যাশবোর্ড — আজকের অর্ডার, বিক্রি ও একটি অর্ডার রিসিট দেখাচ্ছে">
+                <div class="rounded-card border border-ink/10 bg-white shadow-2xl shadow-ink/10 overflow-hidden">
+                    <div class="flex items-center gap-1.5 px-4 py-3 border-b border-ink/5 bg-paper/60">
+                        <span class="w-2.5 h-2.5 rounded-full bg-ink/15"></span>
+                        <span class="w-2.5 h-2.5 rounded-full bg-ink/15"></span>
+                        <span class="w-2.5 h-2.5 rounded-full bg-ink/15"></span>
+                        <span class="ml-3 text-[11px] text-mute font-medium truncate">rahimfashion.metasoftbd.com/panel</span>
+                    </div>
+                    <div class="p-5 sm:p-6">
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="rounded-lg bg-paper/70 p-3">
+                                <p class="text-[11px] text-mute">আজকের অর্ডার</p>
+                                <p class="font-disp font-bold text-xl mt-1">৪৭</p>
+                            </div>
+                            <div class="rounded-lg bg-paper/70 p-3">
+                                <p class="text-[11px] text-mute">আজকের বিক্রি</p>
+                                <p class="font-disp font-bold text-xl mt-1">৫৮,৯০০৳</p>
+                            </div>
+                            <div class="rounded-lg bg-leaf/10 p-3">
+                                <p class="text-[11px] text-leafdk">লাভ</p>
+                                <p class="font-disp font-bold text-xl mt-1 text-leafdk">১৮,৪০০৳</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-5 space-y-2.5">
+                            @foreach ([
+                                ['র', 'রহিম আহমেদ', 'ORD-000217', 'ডেলিভার্ড'],
+                                ['স', 'সুমাইয়া খান', 'ORD-000216', 'প্রসেসিং'],
+                                ['ক', 'করিম হোসেন', 'ORD-000215', 'ডেলিভার্ড'],
+                            ] as [$initial, $name, $orderNo, $status])
+                                <div class="flex items-center justify-between rounded-lg border border-ink/5 px-3 py-2.5 text-sm">
+                                    <div class="flex items-center gap-2.5 min-w-0">
+                                        <span class="shrink-0 w-8 h-8 rounded-full bg-leaf/10 grid place-items-center text-leafdk text-xs font-bold">{{ $initial }}</span>
+                                        <div class="min-w-0">
+                                            <p class="font-medium leading-tight truncate">{{ $name }}</p>
+                                            <p class="text-[11px] text-mute">{{ $orderNo }}</p>
+                                        </div>
+                                    </div>
+                                    <span class="shrink-0 text-xs font-semibold px-2 py-1 rounded-pill bg-leaf/10 text-leafdk">{{ $status }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+
+                {{-- signature: thermal receipt, layered in front for depth --}}
+                <div class="hidden sm:block absolute -bottom-10 -left-8 w-[250px]">
+                    <div class="absolute -top-6 -left-2 bg-amber text-ink text-xs font-bold px-3 py-1.5 rounded shadow rotate-[-4deg]">
+                        অর্ডার এলো 🎉
+                    </div>
+                    <div class="receipt-edge bg-white shadow-xl rotate-2 px-5 pt-5 pb-6 text-xs">
+                        <p class="text-center font-disp font-bold text-sm">রহিম ফ্যাশন হাউজ</p>
+                        <p class="text-center text-[10px] text-mute">rahimfashion.metasoftbd.com</p>
+                        <div class="my-2.5 border-t border-dashed border-ink/20"></div>
+                        <div class="flex justify-between"><span>অর্ডার</span><span class="font-semibold">ORD-000217</span></div>
+                        <div class="flex justify-between text-mute text-[10px] mt-0.5"><span>কুমিল্লা সদর</span><span>ক্যাশ অন ডেলিভারি</span></div>
+                        <div class="my-2.5 border-t border-dashed border-ink/20"></div>
+                        <div class="flex justify-between"><span>পাঞ্জাবি (নেভি / L)</span><span>১,২৫০৳</span></div>
+                        <div class="flex justify-between mt-1"><span>ডেলিভারি চার্জ</span><span>১২০৳</span></div>
+                        <div class="flex justify-between mt-2 font-bold text-sm"><span>মোট</span><span>১,৩৭০৳</span></div>
+                        <div class="my-2.5 border-t border-dashed border-ink/20"></div>
+                        <div class="flex justify-between text-[10px]">
+                            <span class="text-leaf font-semibold">✓ ফ্রড চেক: নিরাপদ (৯২%)</span>
+                        </div>
+                        <div class="barcode h-8 mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </x-ui.container>
+
     <div class="barcode h-3 opacity-15"></div>
-</section>
+</x-ui.section>
 
 {{-- ================= FEATURES ================= --}}
 <section id="features" class="py-16 md:py-20">

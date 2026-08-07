@@ -27,4 +27,30 @@
 
     --font-body: "Hind Siliguri", sans-serif;
     --font-disp: "Noto Serif Bengali", serif;
+
+    /*
+     * Shared corner-radius scale. Use these instead of ad-hoc rounded-lg/
+     * rounded-xl/rounded-2xl choices so every button/card/pill across the
+     * SaaS shares the same three radii.
+     */
+    --radius-btn: 0.75rem;
+    --radius-card: 1.25rem;
+    --radius-pill: 9999px;
+}
+
+/*
+ * Slow, subtle drifting glow — used behind hero-style sections for a soft
+ * animated background. Respects the reduced-motion rule below (which
+ * already disables all animations globally via `animation: none !important`
+ * in each layout's <style> block).
+ */
+@keyframes drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(3%, -4%) scale(1.06); }
+}
+
+.bg-glow {
+    border-radius: 9999px;
+    filter: blur(80px);
+    animation: drift 20s ease-in-out infinite;
 }
