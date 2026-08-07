@@ -4,7 +4,7 @@
 <h1 class="font-disp font-bold text-2xl mb-2">অসম্পূর্ণ অর্ডার</h1>
 <p class="text-sm text-mute mb-6">যারা চেকআউটে নাম-নাম্বার লিখেও অর্ডার শেষ করেনি। কল করে অর্ডার কনফার্ম করান — হারানো বিক্রি ফিরিয়ে আনুন।</p>
 
-<div class="bg-white rounded-xl border border-ink/5 overflow-x-auto">
+<x-ui.card padding="none" class="overflow-x-auto">
     <table class="w-full text-sm">
         <thead class="text-left text-mute"><tr class="border-b border-ink/5">
             <th class="px-4 py-3">কাস্টমার</th><th class="px-4 py-3">কার্টে যা ছিল</th>
@@ -28,7 +28,7 @@
                     <div class="flex items-center gap-2">
                         <form method="POST" action="{{ route('tenant.incomplete.status', $item) }}">
                             @csrf
-                            <select name="status" onchange="this.form.submit()" class="rounded border border-ink/15 px-2 py-1 text-xs bg-white">
+                            <select name="status" onchange="this.form.submit()" class="rounded-btn border border-ink/15 px-2 py-1 text-xs bg-white">
                                 @foreach (['abandoned' => 'নতুন', 'contacted' => 'কল করা হয়েছে', 'discarded' => 'বাদ'] as $k => $v)
                                     <option value="{{ $k }}" @selected($item->status === $k)>{{ $v }}</option>
                                 @endforeach
@@ -36,16 +36,19 @@
                         </form>
                         <form method="POST" action="{{ route('tenant.incomplete.destroy', $item) }}" onsubmit="return confirm('এন্ট্রিটি মুছবেন?')">
                             @csrf @method('DELETE')
-                            <button class="text-red-600 text-xs hover:underline">মুছুন</button>
+                            <button class="text-red-600 text-xs hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">মুছুন</button>
                         </form>
                     </div>
                 </td>
             </tr>
         @empty
-            <tr><td colspan="4" class="px-4 py-12 text-center text-mute">কোনো অসম্পূর্ণ অর্ডার নেই। 🎉</td></tr>
+            <tr><td colspan="4" class="px-4 py-14 text-center text-mute">
+                <i data-lucide="party-popper" class="w-8 h-8 mx-auto mb-3 text-leaf/50"></i>
+                কোনো অসম্পূর্ণ অর্ডার নেই।
+            </td></tr>
         @endforelse
         </tbody>
     </table>
-</div>
+</x-ui.card>
 <div class="mt-4">{{ $items->links() }}</div>
 @endsection

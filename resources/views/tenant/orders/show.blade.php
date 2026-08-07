@@ -5,14 +5,14 @@
 @section('content')
 <div class="flex items-center justify-between mb-6">
     <h1 class="font-disp font-bold text-2xl">{{ $order->order_number }}</h1>
-    <a href="{{ route('tenant.orders.index') }}" class="text-sm text-mute hover:text-ink">← সব অর্ডার</a>
+    <a href="{{ route('tenant.orders.index') }}" class="text-sm text-mute hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">← সব অর্ডার</a>
 </div>
 
 <div class="grid lg:grid-cols-3 gap-6">
     <div class="lg:col-span-2 space-y-6">
 
-        <div class="bg-white rounded-xl border border-ink/5">
-            <div class="px-5 py-3 border-b border-ink/5 font-bold text-sm">আইটেম</div>
+        <x-ui.card padding="none">
+            <div class="px-5 py-3.5 border-b border-ink/5 font-bold text-sm">আইটেম</div>
             <table class="w-full text-sm">
                 <tbody>
                 @foreach ($order->items as $item)
@@ -33,10 +33,10 @@
                     <td class="px-5 py-3 text-right">{{ number_format($order->total) }}৳</td></tr>
                 </tbody>
             </table>
-        </div>
+        </x-ui.card>
 
         @if ($order->note)
-            <div class="bg-amber/10 border border-amber/30 rounded-xl p-4 text-sm"><b>নোট:</b> {{ $order->note }}</div>
+            <x-ui.card tone="amber" padding="sm" class="text-sm"><b>নোট:</b> {{ $order->note }}</x-ui.card>
         @endif
     </div>
 
@@ -52,52 +52,52 @@
             ];
             $channelColors = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'others' => 'text-mute'];
         @endphp
-        <div class="bg-white rounded-xl border border-ink/5 p-5">
+        <x-ui.card padding="sm">
             <p class="font-bold text-sm mb-3 flex items-center gap-2 {{ $channelColors[$order->channel] ?? 'text-mute' }}">
                 @include('partials.icon', ['platform' => $order->channel, 'class' => 'w-5 h-5'])
                 <span class="text-ink">অর্ডারের উৎস</span>
             </p>
             <form method="POST" action="{{ route('tenant.orders.channel', $order) }}">
                 @csrf
-                <select name="channel" onchange="this.form.submit()" class="w-full rounded-lg border border-ink/15 px-3 py-2.5 text-sm bg-white">
+                <select name="channel" onchange="this.form.submit()" class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm bg-white">
                     @foreach ($channelMeta as $key => $label)
                         <option value="{{ $key }}" @selected($order->channel === $key)>{{ $label }}</option>
                     @endforeach
                 </select>
             </form>
-        </div>
+        </x-ui.card>
 
-        <div class="bg-white rounded-xl border border-ink/5 p-5 text-sm space-y-1.5">
+        <x-ui.card padding="sm" class="text-sm space-y-1.5">
             <p class="font-bold mb-2">কাস্টমার</p>
             <p>{{ $order->customer_name }}</p>
             <p><a href="tel:{{ $order->customer_phone }}" class="text-leaf font-medium">{{ $order->customer_phone }}</a></p>
             <p class="text-mute">{{ $order->customer_address }}</p>
             <p class="text-xs text-mute pt-1">পেমেন্ট: {{ strtoupper($order->payment_method) }} · {{ $order->created_at->format('d M Y, h:i A') }}</p>
-        </div>
+        </x-ui.card>
 
-        <div class="bg-white rounded-xl border border-ink/5 p-5">
+        <x-ui.card padding="sm">
             <p class="font-bold text-sm mb-3">স্ট্যাটাস বদলান</p>
             <form method="POST" action="{{ route('tenant.orders.status', $order) }}" class="space-y-3">
                 @csrf
-                <select name="status" class="w-full rounded-lg border border-ink/15 px-3 py-2.5 text-sm bg-white">
+                <select name="status" class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm bg-white">
                     @foreach (['pending' => 'পেন্ডিং', 'confirmed' => 'কনফার্মড', 'processing' => 'প্রসেসিং', 'shipped' => 'শিপড', 'delivered' => 'ডেলিভারড', 'cancelled' => 'ক্যান্সেলড', 'returned' => 'রিটার্নড'] as $key => $label)
                         <option value="{{ $key }}" @selected($order->status === $key)>{{ $label }}</option>
                     @endforeach
                 </select>
-                <button class="w-full py-2.5 rounded-lg bg-leaf text-white font-semibold text-sm hover:bg-leafdk">আপডেট</button>
+                <x-ui.button type="submit" variant="accent" size="sm" class="w-full">আপডেট</x-ui.button>
             </form>
-        </div>
+        </x-ui.card>
 
-        <div class="bg-white rounded-xl border border-ink/5 p-5">
+        <x-ui.card padding="sm">
             <p class="font-bold text-sm mb-3">🔍 ফ্রড চেক</p>
             <button onclick="fraudCheck()" id="fraudBtn"
-                    class="w-full py-2.5 rounded-lg border border-ink/15 font-semibold text-sm hover:bg-paper">
+                    class="w-full py-2.5 rounded-btn border border-ink/15 font-semibold text-sm hover:bg-paper transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
                 {{ $order->customer_phone }} — চেক করুন
             </button>
-            <div id="fraudResult" class="hidden mt-3 text-sm rounded-lg p-3"></div>
-        </div>
+            <div id="fraudResult" class="hidden mt-3 text-sm rounded-btn p-3"></div>
+        </x-ui.card>
 
-        <div class="bg-white rounded-xl border border-ink/5 p-5">
+        <x-ui.card padding="sm">
             <p class="font-bold text-sm mb-3">🚚 কুরিয়ার</p>
             @if ($order->courier_consignment_id)
                 <p class="text-sm">{{ ucfirst($order->courier_provider) }}-এ পাঠানো হয়েছে ✓</p>
@@ -106,16 +106,16 @@
             @else
                 <form method="POST" action="{{ route('tenant.orders.courier', $order) }}" class="space-y-3">
                     @csrf
-                    <select name="provider" class="w-full rounded-lg border border-ink/15 px-3 py-2.5 text-sm bg-white">
+                    <select name="provider" class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm bg-white">
                         <option value="steadfast">Steadfast</option>
                         <option value="pathao">Pathao</option>
                     </select>
-                    <button class="w-full py-2.5 rounded-lg bg-ink text-white font-semibold text-sm hover:bg-ink/90"
+                    <button class="w-full py-2.5 rounded-btn bg-ink text-white font-semibold text-sm hover:bg-ink/90 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2"
                             onclick="return confirm('অর্ডারটি কুরিয়ারে পাঠাবেন?')">কুরিয়ারে পাঠান</button>
                 </form>
                 <p class="text-xs text-mute mt-2">API সেটিংস না দেয়া থাকলে <a href="{{ route('tenant.settings') }}" class="text-leaf hover:underline">সেটিংস পেজে</a> দিন।</p>
             @endif
-        </div>
+        </x-ui.card>
     </div>
 </div>
 

@@ -10,7 +10,7 @@
         <div class="flex gap-3 mb-4">
             <input id="scanInput" autofocus autocomplete="off"
                    placeholder="🔍 বারকোড স্ক্যান করুন বা প্রোডাক্ট খুঁজুন..."
-                   class="flex-1 rounded-xl border-2 border-leaf/40 px-4 py-3 text-lg focus:ring-2 focus:ring-leaf outline-none bg-white">
+                   class="flex-1 rounded-card border-2 border-leaf/40 px-4 py-3 text-lg focus:ring-2 focus:ring-leaf outline-none bg-white">
         </div>
         <p class="text-xs text-mute mb-3">স্ক্যানার দিয়ে বারকোড স্ক্যান করলেই কার্টে যোগ হবে। নিচের গ্রিড থেকেও ক্লিক করা যাবে।</p>
 
@@ -18,7 +18,7 @@
             @foreach ($products as $product)
                 @foreach ($product->variants as $v)
                     <button type="button"
-                            class="bg-white rounded-xl border border-ink/5 p-3 text-left hover:border-leaf/40 hover:shadow-sm transition pos-card pos-add"
+                            class="bg-white rounded-card border border-ink/5 p-3 text-left hover:border-leaf/40 hover:shadow-sm transition pos-card pos-add focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2"
                             data-id="{{ $v->id }}"
                             data-pname="{{ $product->name }}"
                             data-variant="{{ $v->variant_name }}"
@@ -38,7 +38,7 @@
 
     {{-- right: cart --}}
     <div>
-        <div class="bg-white rounded-xl border border-ink/5 p-4 sticky top-4">
+        <x-ui.card class="sticky top-4">
             <p class="font-bold mb-3">🧾 বিক্রি</p>
             <div id="cartItems" class="space-y-2 text-sm max-h-64 overflow-auto"></div>
             <p id="emptyMsg" class="text-mute text-sm text-center py-6">কোনো আইটেম নেই</p>
@@ -48,7 +48,7 @@
                 <div class="flex items-center justify-between">
                     <span>ডিসকাউন্ট</span>
                     <input id="discount" type="number" min="0" value="0" onchange="renderCart()"
-                           class="w-24 rounded border border-ink/15 px-2 py-1 text-right text-sm">
+                           class="w-24 rounded-btn border border-ink/15 px-2 py-1 text-right text-sm">
                 </div>
                 <div class="flex justify-between font-bold text-lg"><span>মোট</span><span id="totalShow">0৳</span></div>
             </div>
@@ -57,27 +57,27 @@
                 <div class="flex gap-2">
                     <label class="flex-1">
                         <input type="radio" name="pm" value="cash" checked class="peer sr-only" onchange="togglePm()">
-                        <span class="block text-center py-2 rounded-lg border border-ink/15 text-sm peer-checked:bg-leaf peer-checked:text-white peer-checked:border-leaf cursor-pointer">💵 ক্যাশ</span>
+                        <span class="block text-center py-2 rounded-btn border border-ink/15 text-sm peer-checked:bg-leaf peer-checked:text-white peer-checked:border-leaf cursor-pointer transition">💵 ক্যাশ</span>
                     </label>
                     <label class="flex-1">
                         <input type="radio" name="pm" value="due" class="peer sr-only" onchange="togglePm()">
-                        <span class="block text-center py-2 rounded-lg border border-ink/15 text-sm peer-checked:bg-amber peer-checked:border-amber cursor-pointer">📒 বাকি</span>
+                        <span class="block text-center py-2 rounded-btn border border-ink/15 text-sm peer-checked:bg-amber peer-checked:border-amber cursor-pointer transition">📒 বাকি</span>
                     </label>
                 </div>
 
                 <div id="dueFields" class="hidden space-y-2">
-                    <input id="custName" placeholder="কাস্টমারের নাম *" class="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                    <input id="custPhone" placeholder="মোবাইল নাম্বার * (01XXXXXXXXX)" class="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                    <input id="paidAmount" type="number" min="0" placeholder="এখন কত দিলো (0 = পুরোটা বাকি)" class="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                    <input id="custName" placeholder="কাস্টমারের নাম *" class="w-full rounded-btn border border-ink/15 px-3 py-2 text-sm">
+                    <input id="custPhone" placeholder="মোবাইল নাম্বার * (01XXXXXXXXX)" class="w-full rounded-btn border border-ink/15 px-3 py-2 text-sm">
+                    <input id="paidAmount" type="number" min="0" placeholder="এখন কত দিলো (0 = পুরোটা বাকি)" class="w-full rounded-btn border border-ink/15 px-3 py-2 text-sm">
                 </div>
 
                 <button onclick="sell()" id="sellBtn"
-                        class="w-full py-3.5 rounded-xl bg-ink text-white font-bold hover:bg-ink/90 disabled:opacity-40">
+                        class="w-full py-3.5 rounded-btn bg-ink text-white font-bold hover:bg-ink/90 disabled:opacity-40 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
                     বিক্রি সম্পন্ন করুন
                 </button>
                 <p id="posError" class="text-red-600 text-xs hidden"></p>
             </div>
-        </div>
+        </x-ui.card>
     </div>
 </div>
 

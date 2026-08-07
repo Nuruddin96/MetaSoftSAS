@@ -3,39 +3,39 @@
 @section('content')
 <div class="flex items-center justify-between mb-6">
     <h1 class="font-disp font-bold text-2xl">নতুন অর্ডার (ম্যানুয়াল)</h1>
-    <a href="{{ route('tenant.orders.index') }}" class="text-sm text-mute hover:text-ink">← সব অর্ডার</a>
+    <a href="{{ route('tenant.orders.index') }}" class="text-sm text-mute hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">← সব অর্ডার</a>
 </div>
 
 <form method="POST" action="{{ route('tenant.orders.store') }}" class="max-w-3xl space-y-6" id="orderForm">
     @csrf
 
-    <div class="bg-white rounded-xl border border-ink/5 p-6 space-y-4">
+    <x-ui.card class="space-y-4">
         <p class="font-bold text-sm">কাস্টমারের তথ্য</p>
         <div class="grid md:grid-cols-2 gap-4">
             <div>
                 <label class="text-sm font-medium">নাম *</label>
-                <input name="customer_name" value="{{ old('customer_name', request('name')) }}" required class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5">
+                <input name="customer_name" value="{{ old('customer_name', request('name')) }}" required class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
             </div>
             <div>
                 <label class="text-sm font-medium">মোবাইল নাম্বার *</label>
-                <input name="customer_phone" required placeholder="01XXXXXXXXX" class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5">
+                <input name="customer_phone" required placeholder="01XXXXXXXXX" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
             </div>
         </div>
         <div>
             <label class="text-sm font-medium">ঠিকানা</label>
-            <textarea name="customer_address" rows="2" class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5"></textarea>
+            <textarea name="customer_address" rows="2" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none"></textarea>
         </div>
         <div class="grid md:grid-cols-2 gap-4">
             <div>
                 <label class="text-sm font-medium">বিভাগ</label>
-                <select name="division_id" class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5 bg-white">
+                <select name="division_id" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
                     <option value="">— নেই —</option>
                     @foreach ($divisions as $d)<option value="{{ $d->id }}">{{ $d->bn_name }}</option>@endforeach
                 </select>
             </div>
             <div>
                 <label class="text-sm font-medium">জেলা</label>
-                <select name="district_id" class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5 bg-white">
+                <select name="district_id" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
                     <option value="">— নেই —</option>
                     @foreach ($districts as $d)<option value="{{ $d->id }}">{{ $d->bn_name }}</option>@endforeach
                 </select>
@@ -43,7 +43,7 @@
         </div>
         <div>
             <label class="text-sm font-medium">অর্ডারের উৎস</label>
-            <select name="channel" class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5 bg-white">
+            <select name="channel" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
                 <option value="call" @selected(request('channel')==='call')>📞 কল</option>
                 <option value="facebook" @selected(request('channel')==='facebook')>📘 ফেসবুক</option>
                 <option value="whatsapp" @selected(request('channel')==='whatsapp')>💬 হোয়াটসঅ্যাপ</option>
@@ -52,12 +52,12 @@
                 <option value="others" @selected(request('channel')==='others')>📦 অন্যান্য</option>
             </select>
         </div>
-    </div>
+    </x-ui.card>
 
-    <div class="bg-white rounded-xl border border-ink/5 p-6">
+    <x-ui.card>
         <div class="flex items-center justify-between mb-3">
             <p class="font-bold text-sm">প্রোডাক্ট</p>
-            <button type="button" onclick="addRow()" class="text-sm text-leaf font-semibold hover:underline">+ প্রোডাক্ট যোগ করুন</button>
+            <button type="button" onclick="addRow()" class="text-sm text-leaf font-semibold hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">+ প্রোডাক্ট যোগ করুন</button>
         </div>
         <div id="itemRows" class="space-y-3"></div>
         <p id="noItemMsg" class="text-sm text-mute text-center py-6">উপরের বাটনে ক্লিক করে প্রোডাক্ট যোগ করুন</p>
@@ -65,14 +65,14 @@
             <span class="text-sm text-mute">সাবটোটাল: </span>
             <span class="font-bold text-lg" id="subtotalShow">0৳</span>
         </div>
-    </div>
+    </x-ui.card>
 
-    <div class="bg-white rounded-xl border border-ink/5 p-6 space-y-4">
+    <x-ui.card class="space-y-4">
         <p class="font-bold text-sm">পেমেন্ট ও চার্জ</p>
         <div class="grid md:grid-cols-3 gap-4">
             <div>
                 <label class="text-sm font-medium">পেমেন্ট পদ্ধতি</label>
-                <select name="payment_method" class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5 bg-white">
+                <select name="payment_method" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
                     <option value="cod">ক্যাশ অন ডেলিভারি</option>
                     <option value="cash">ক্যাশ</option>
                     <option value="bkash">বিকাশ</option>
@@ -82,26 +82,26 @@
             </div>
             <div>
                 <label class="text-sm font-medium">ডেলিভারি চার্জ</label>
-                <input name="delivery_charge" type="number" step="0.01" min="0" value="0" class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5">
+                <input name="delivery_charge" type="number" step="0.01" min="0" value="0" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
             </div>
             <div>
                 <label class="text-sm font-medium">ডিসকাউন্ট</label>
-                <input name="discount" type="number" step="0.01" min="0" value="0" class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5">
+                <input name="discount" type="number" step="0.01" min="0" value="0" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
             </div>
         </div>
         <div>
             <label class="text-sm font-medium">নোট</label>
-            <input name="note" class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5">
+            <input name="note" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
         </div>
-    </div>
+    </x-ui.card>
 
     @if ($errors->any())
-        <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
+        <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-btn p-3">
             <ul class="list-disc ml-4">@foreach ($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul>
         </div>
     @endif
 
-    <button class="px-6 py-3 rounded-xl bg-leaf text-white font-bold hover:bg-leafdk">অর্ডার তৈরি করুন</button>
+    <x-ui.button type="submit" variant="accent" size="lg">অর্ডার তৈরি করুন</x-ui.button>
 </form>
 
 @push('scripts')
