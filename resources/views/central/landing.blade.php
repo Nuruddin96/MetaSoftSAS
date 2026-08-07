@@ -395,11 +395,31 @@
                 </ul>
             </div>
             <div class="grid grid-cols-2 gap-4">
-                {{-- আপনার কোম্পানির ছবি এখানে বসান: public/images/company-1.jpg ... --}}
-                <div class="aspect-[4/3] rounded-card bg-leaf/10 border-2 border-dashed border-leaf/30 grid place-items-center text-leaf text-sm font-medium">ছবি ১</div>
-                <div class="aspect-[4/3] rounded-card bg-amber/10 border-2 border-dashed border-amber/40 grid place-items-center text-amber text-sm font-medium mt-6">ছবি ২</div>
-                <div class="aspect-[4/3] rounded-card bg-ink/5 border-2 border-dashed border-ink/20 grid place-items-center text-mute text-sm font-medium">ছবি ৩</div>
-                <div class="aspect-[4/3] rounded-card bg-leaf/10 border-2 border-dashed border-leaf/30 grid place-items-center text-leaf text-sm font-medium mt-6">ছবি ৪</div>
+                {{--
+                    Real company photos, served from public/images/company/.
+                    Alt text below is provisional — written from the section's
+                    context (MetaSoft BD team/workplace), not from having seen
+                    the actual images. Review and correct once the files are
+                    in place and the real content is visible.
+                --}}
+                @php
+                    $companyPhotos = [
+                        ['company-1.jpg', 'MetaSoft BD টিমের কর্মক্ষেত্রের একটি মুহূর্ত'],
+                        ['company-2.jpg', 'MetaSoft BD অফিসে টিম মিটিং'],
+                        ['company-3.jpg', 'MetaSoft BD টিমের একজন সদস্য কাজ করছেন'],
+                        ['company-4.jpg', 'MetaSoft BD-এর কর্মপরিবেশ'],
+                    ];
+                @endphp
+                @foreach ($companyPhotos as [$file, $alt])
+                    <div class="aspect-[4/3] rounded-card overflow-hidden {{ $loop->iteration % 2 === 0 ? 'mt-6' : '' }}">
+                        <img
+                            src="{{ asset('images/company/' . $file) }}"
+                            alt="{{ $alt }}"
+                            loading="lazy"
+                            class="w-full h-full object-cover object-center hover:scale-105 transition-transform duration-300"
+                        >
+                    </div>
+                @endforeach
             </div>
         </div>
     </x-ui.container>
