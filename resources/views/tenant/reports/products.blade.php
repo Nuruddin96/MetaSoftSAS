@@ -4,7 +4,7 @@
 <h1 class="font-disp font-bold text-2xl mb-6">সবচেয়ে বেশি বিক্রি হওয়া প্রোডাক্ট</h1>
 @include('tenant.reports._filter')
 
-<div class="bg-white rounded-xl border border-ink/5 overflow-x-auto">
+<x-ui.card padding="none" class="overflow-x-auto">
     <table class="w-full text-sm">
         <thead class="text-left text-mute"><tr class="border-b border-ink/5">
             <th class="px-4 py-3">#</th><th class="px-4 py-3">প্রোডাক্ট</th>
@@ -21,9 +21,9 @@
                 <td class="px-4 py-3 text-leafdk font-semibold">{{ number_format($p->profit) }}৳</td>
             </tr>
         @empty
-            <tr><td colspan="5" class="px-4 py-10 text-center text-mute">এই সময়ে কোনো বিক্রি নেই।</td></tr>
+            <tr><td colspan="5" class="px-4 py-12 text-center text-mute">এই সময়ে কোনো বিক্রি নেই।</td></tr>
         @endforelse
         </tbody>
     </table>
-</div>
+</x-ui.card>
 @endsection

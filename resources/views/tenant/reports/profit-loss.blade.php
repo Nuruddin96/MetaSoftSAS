@@ -4,7 +4,7 @@
 <h1 class="font-disp font-bold text-2xl mb-6">লাভ-ক্ষতির হিসাব</h1>
 @include('tenant.reports._filter')
 
-<div class="max-w-2xl bg-white rounded-xl border border-ink/5 p-6">
+<x-ui.card class="max-w-2xl">
     <div class="space-y-3 text-sm">
         <div class="flex justify-between"><span>মোট বিক্রি</span><span class="font-semibold">{{ number_format($revenue) }}৳</span></div>
         <div class="flex justify-between text-mute"><span>— ডেলিভারি চার্জ (কুরিয়ারের)</span><span>−{{ number_format($shipping) }}৳</span></div>
@@ -29,5 +29,5 @@
     @endif
 
     <p class="text-xs text-mute mt-5">💡 সঠিক হিসাবের জন্য প্রতিটি প্রোডাক্টে "কেনা দাম" দেওয়া থাকতে হবে, আর সব খরচ খরচ পেজে এন্ট্রি করতে হবে।</p>
-</div>
+</x-ui.card>
 @endsection
