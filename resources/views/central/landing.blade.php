@@ -214,9 +214,12 @@
 </x-ui.section>
 
 {{-- ================= HOW IT WORKS ================= --}}
-<section class="py-16 bg-ink text-white">
-    <div class="max-w-6xl mx-auto px-4">
-        <h2 class="font-disp font-bold text-3xl text-center">৩ মিনিটে ব্যবসা অনলাইনে</h2>
+<x-ui.section tone="dark">
+    <x-ui.container>
+        <div class="max-w-2xl mx-auto text-center">
+            <x-ui.badge tone="white">শুরু করার ধাপ</x-ui.badge>
+            <h2 class="mt-4 font-disp font-bold text-3xl md:text-4xl">৩ মিনিটে ব্যবসা অনলাইনে</h2>
+        </div>
         <div class="grid md:grid-cols-3 gap-8 mt-12">
             @php
                 $steps = [
@@ -227,14 +230,14 @@
             @endphp
             @foreach ($steps as [$n, $t, $d])
                 <div class="text-center">
-                    <div class="w-14 h-14 mx-auto rounded-full bg-amber text-ink font-disp font-extrabold text-2xl grid place-items-center">{{ $n }}</div>
+                    <div class="w-14 h-14 mx-auto rounded-pill bg-amber text-ink font-disp font-extrabold text-2xl grid place-items-center">{{ $n }}</div>
                     <h3 class="font-bold text-xl mt-4">{{ $t }}</h3>
                     <p class="text-white/70 mt-2 text-sm leading-relaxed max-w-xs mx-auto">{{ $d }}</p>
                 </div>
             @endforeach
         </div>
-    </div>
-</section>
+    </x-ui.container>
+</x-ui.section>
 
 {{-- ================= WHY CHOOSE METASOFT ================= --}}
 <x-ui.section id="why-choose" tone="light" class="relative overflow-hidden">
@@ -362,56 +365,83 @@
 </x-ui.section>
 
 {{-- ================= COMPANY / SERVICES ================= --}}
-<section id="services" class="py-16 md:py-20">
-    <div class="max-w-6xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-center">
-        <div>
-            <h2 class="font-disp font-bold text-3xl">MetaSoft BD সম্পর্কে</h2>
-            <p class="text-mute mt-4 leading-relaxed">
-                আমরা বাংলাদেশের ছোট ও মাঝারি ব্যবসার জন্য সফটওয়্যার বানাই। হাজারো সেলার এখনো খাতা-কলম আর
-                মেসেঞ্জারে অর্ডার সামলান — আমাদের লক্ষ্য, প্রযুক্তিকে তাদের হাতের নাগালে আনা, সহজ বাংলায়।
-            </p>
-            <ul class="mt-6 space-y-3 text-sm">
-                <li class="flex gap-3"><span class="text-leaf font-bold">✓</span> বিজনেস অটোমেশন সফটওয়্যার (এই প্ল্যাটফর্ম)</li>
-                <li class="flex gap-3"><span class="text-leaf font-bold">✓</span> কাস্টম ওয়েবসাইট ও সফটওয়্যার ডেভেলপমেন্ট</li>
-                <li class="flex gap-3"><span class="text-leaf font-bold">✓</span> ডিজিটাল মার্কেটিং ও Meta Ads সাপোর্ট</li>
-                <li class="flex gap-3"><span class="text-leaf font-bold">✓</span> ব্যবসার জন্য টেকনিক্যাল পরামর্শ ও ট্রেনিং</li>
-            </ul>
+<x-ui.section id="services" tone="light">
+    <x-ui.container>
+        <div class="grid md:grid-cols-2 gap-12 items-center">
+            <div>
+                <x-ui.badge tone="leaf">আমাদের সম্পর্কে</x-ui.badge>
+                <h2 class="mt-4 font-disp font-bold text-3xl md:text-4xl">MetaSoft BD সম্পর্কে</h2>
+                <p class="text-mute mt-4 leading-relaxed">
+                    আমরা বাংলাদেশের ছোট ও মাঝারি ব্যবসার জন্য সফটওয়্যার বানাই। হাজারো সেলার এখনো খাতা-কলম আর
+                    মেসেঞ্জারে অর্ডার সামলান — আমাদের লক্ষ্য, প্রযুক্তিকে তাদের হাতের নাগালে আনা, সহজ বাংলায়।
+                </p>
+                <ul class="mt-6 space-y-3 text-sm">
+                    <li class="flex items-start gap-3">
+                        <x-ui.icon name="shield-check" class="w-4.5 h-4.5 text-leaf shrink-0 mt-0.5" />
+                        বিজনেস অটোমেশন সফটওয়্যার (এই প্ল্যাটফর্ম)
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <x-ui.icon name="shield-check" class="w-4.5 h-4.5 text-leaf shrink-0 mt-0.5" />
+                        কাস্টম ওয়েবসাইট ও সফটওয়্যার ডেভেলপমেন্ট
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <x-ui.icon name="shield-check" class="w-4.5 h-4.5 text-leaf shrink-0 mt-0.5" />
+                        ডিজিটাল মার্কেটিং ও Meta Ads সাপোর্ট
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <x-ui.icon name="shield-check" class="w-4.5 h-4.5 text-leaf shrink-0 mt-0.5" />
+                        ব্যবসার জন্য টেকনিক্যাল পরামর্শ ও ট্রেনিং
+                    </li>
+                </ul>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                {{-- আপনার কোম্পানির ছবি এখানে বসান: public/images/company-1.jpg ... --}}
+                <div class="aspect-[4/3] rounded-card bg-leaf/10 border-2 border-dashed border-leaf/30 grid place-items-center text-leaf text-sm font-medium">ছবি ১</div>
+                <div class="aspect-[4/3] rounded-card bg-amber/10 border-2 border-dashed border-amber/40 grid place-items-center text-amber text-sm font-medium mt-6">ছবি ২</div>
+                <div class="aspect-[4/3] rounded-card bg-ink/5 border-2 border-dashed border-ink/20 grid place-items-center text-mute text-sm font-medium">ছবি ৩</div>
+                <div class="aspect-[4/3] rounded-card bg-leaf/10 border-2 border-dashed border-leaf/30 grid place-items-center text-leaf text-sm font-medium mt-6">ছবি ৪</div>
+            </div>
         </div>
-        <div class="grid grid-cols-2 gap-4">
-            {{-- আপনার কোম্পানির ছবি এখানে বসান: public/images/company-1.jpg ... --}}
-            <div class="aspect-[4/3] rounded-2xl bg-leaf/10 border-2 border-dashed border-leaf/30 grid place-items-center text-leaf text-sm font-medium">ছবি ১</div>
-            <div class="aspect-[4/3] rounded-2xl bg-amber/10 border-2 border-dashed border-amber/40 grid place-items-center text-amber text-sm font-medium mt-6">ছবি ২</div>
-            <div class="aspect-[4/3] rounded-2xl bg-ink/5 border-2 border-dashed border-ink/20 grid place-items-center text-mute text-sm font-medium">ছবি ৩</div>
-            <div class="aspect-[4/3] rounded-2xl bg-leaf/10 border-2 border-dashed border-leaf/30 grid place-items-center text-leaf text-sm font-medium mt-6">ছবি ৪</div>
-        </div>
-    </div>
-</section>
+    </x-ui.container>
+</x-ui.section>
 
 {{-- ================= REFER & EARN ================= --}}
-<section class="py-16 bg-gradient-to-br from-amber/10 to-leaf/5">
-    <div class="max-w-4xl mx-auto px-4 text-center">
-        <p class="inline-block text-xs font-bold text-amber bg-white px-3 py-1.5 rounded-full mb-4">💰 রেফারেল প্রোগ্রাম</p>
-        <h2 class="font-disp font-bold text-3xl">রেফার করুন, আয় করুন</h2>
-        <p class="text-mute mt-3 max-w-lg mx-auto">কোনো বিনিয়োগ ছাড়াই — শুধু শেয়ার করুন আর কেউ যোগ দিলে আয় করুন।</p>
-
-        <div class="grid md:grid-cols-2 gap-6 mt-10">
-            <div class="bg-white rounded-2xl p-6 border border-ink/5">
-                <p class="text-3xl">🛍️</p>
-                <h3 class="font-bold text-lg mt-2">SaaS দোকান রেফার করুন</h3>
-                <p class="text-mute text-sm mt-2">কেউ আপনার লিংকে দোকান খুলে প্রথম পেমেন্ট করলেই পান প্রথম পেমেন্টের <b class="text-ink">২০%</b> — ওয়ান-টাইম বোনাস।</p>
-            </div>
-            <div class="bg-white rounded-2xl p-6 border border-ink/5">
-                <p class="text-3xl">🚀</p>
-                <h3 class="font-bold text-lg mt-2">সার্ভিস ক্লায়েন্ট রেফার করুন</h3>
-                <p class="text-mute text-sm mt-2">আমাদের মাসিক সার্ভিস প্যাকেজে ক্লায়েন্ট এনে দিন — পান <b class="text-ink">১০০০৳ প্রতি মাসে</b>, যতদিন ক্লায়েন্ট চালু থাকবে — লাইফটাইম।</p>
-            </div>
+<x-ui.section tone="transparent" class="bg-gradient-to-br from-amber/10 to-leaf/5">
+    <x-ui.container size="narrow">
+        <div class="text-center">
+            <x-ui.badge tone="amber">রেফারেল প্রোগ্রাম</x-ui.badge>
+            <h2 class="mt-4 font-disp font-bold text-3xl md:text-4xl">রেফার করুন, আয় করুন</h2>
+            <p class="mt-3 text-mute max-w-lg mx-auto">কোনো বিনিয়োগ ছাড়াই — শুধু শেয়ার করুন আর কেউ যোগ দিলে আয় করুন।</p>
         </div>
 
-        <a href="{{ route('affiliate.register') }}" class="inline-block mt-8 px-8 py-4 rounded-xl bg-amber text-ink font-bold hover:opacity-90">
-            💰 অ্যাফিলিয়েট হিসেবে যোগ দিন
-        </a>
-    </div>
-</section>
+        <div class="grid md:grid-cols-2 gap-6 mt-10">
+            <x-ui.card padding="lg" hoverable>
+                <div class="w-12 h-12 rounded-xl bg-leaf/10 grid place-items-center text-leafdk">
+                    <x-ui.icon name="storefront" class="w-6 h-6" />
+                </div>
+                <h3 class="font-bold text-lg mt-4">SaaS দোকান রেফার করুন</h3>
+                <p class="text-mute text-sm mt-2 leading-relaxed">
+                    কেউ আপনার লিংকে দোকান খুলে প্রথম পেমেন্ট করলেই পান প্রথম পেমেন্টের <b class="text-ink">২০%</b> — ওয়ান-টাইম বোনাস।
+                </p>
+            </x-ui.card>
+            <x-ui.card padding="lg" hoverable>
+                <div class="w-12 h-12 rounded-xl bg-leaf/10 grid place-items-center text-leafdk">
+                    <x-ui.icon name="rocket" class="w-6 h-6" />
+                </div>
+                <h3 class="font-bold text-lg mt-4">সার্ভিস ক্লায়েন্ট রেফার করুন</h3>
+                <p class="text-mute text-sm mt-2 leading-relaxed">
+                    আমাদের মাসিক সার্ভিস প্যাকেজে ক্লায়েন্ট এনে দিন — পান <b class="text-ink">১০০০৳ প্রতি মাসে</b>, যতদিন ক্লায়েন্ট চালু থাকবে — লাইফটাইম।
+                </p>
+            </x-ui.card>
+        </div>
+
+        <div class="mt-8 text-center">
+            <x-ui.button href="{{ route('affiliate.register') }}" variant="amber" size="lg">
+                অ্যাফিলিয়েট হিসেবে যোগ দিন
+            </x-ui.button>
+        </div>
+    </x-ui.container>
+</x-ui.section>
 
 {{-- ================= PRICING ================= --}}
 <x-ui.section id="pricing" tone="white" class="border-y border-ink/5">

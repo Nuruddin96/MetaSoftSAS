@@ -10,7 +10,7 @@
 
     Props:
       name: 'storefront' | 'shield-check' | 'chart-trending' | 'megaphone'
-          | 'whatsapp' | 'upload' | 'globe' | 'cart' | 'warehouse' | 'chevron-down'
+          | 'whatsapp' | 'upload' | 'globe' | 'cart' | 'warehouse' | 'chevron-down' | 'rocket'
 --}}
 @props(['name'])
 
@@ -91,6 +91,13 @@
 
         @case('chevron-down')
             <path d="M6 9l6 6 6-6" />
+            @break
+
+        @case('rocket')
+            <path d="M12 3c2.5 2 4 5.5 4 9 0 2-1 4-2 5l-2 2-2-2c-1-1-2-3-2-5 0-3.5 1.5-7 4-9Z" />
+            <circle cx="12" cy="9" r="1.4" />
+            <path d="M8 15l-2.5 4.5L9 18" />
+            <path d="M16 15l2.5 4.5L15 18" />
             @break
     @endswitch
 </svg>

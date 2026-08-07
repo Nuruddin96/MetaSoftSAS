@@ -9,7 +9,7 @@
 
     Props:
       href:    string|null                                    (default: null)
-      variant: 'primary' | 'accent' | 'outline' | 'ghost'      (default: 'primary')
+      variant: 'primary' | 'accent' | 'amber' | 'outline' | 'ghost'  (default: 'primary')
       size:    'default' | 'lg'                                (default: 'default')
       type:    'button' | 'submit' | 'reset' — only used when href is null
 --}}
@@ -22,6 +22,7 @@
     $variants = [
         'primary' => 'bg-ink text-white hover:bg-ink/90',
         'accent'  => 'bg-leaf text-white hover:bg-leafdk',
+        'amber'   => 'bg-amber text-ink hover:bg-amber/90',
         'outline' => 'border border-ink/15 text-ink hover:bg-white',
         'ghost'   => 'text-ink hover:bg-ink/5',
     ];
