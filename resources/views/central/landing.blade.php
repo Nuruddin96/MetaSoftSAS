@@ -173,7 +173,7 @@
                 <p class="text-mute text-sm mt-2.5 leading-relaxed">
                     অর্ডার কনফার্মের আগেই দেখুন এই নাম্বার আগে কতগুলো পার্সেল রিসিভ করেছে, কতগুলো ফেরত দিয়েছে। কনফার্ম হলে এক ক্লিকেই কুরিয়ারে পাঠান, ট্র্যাকিং অটো আপডেট হবে।
                 </p>
-                <p class="text-xs text-leafdk font-semibold mt-4">Pathao, Steadfast, RedX — ইন্টিগ্রেটেড</p>
+                <p class="text-xs text-leafdk font-semibold mt-4">Pathao, Steadfast — ইন্টিগ্রেটেড</p>
             </x-ui.card>
 
             <x-ui.card padding="lg" hoverable>
