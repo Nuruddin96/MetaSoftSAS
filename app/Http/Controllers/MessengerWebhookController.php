@@ -59,11 +59,20 @@ class MessengerWebhookController extends Controller
     protected function handleEvent(array $event, MessengerSetting $setting, MessengerApi $api): void
     {
         $psid = $event['sender']['id'] ?? null;
+        $mid  = $event['message']['mid'] ?? null;
         $text = $event['message']['text'] ?? null;
         $attachments = $event['message']['attachments'] ?? [];
 
         if (! $psid || (! $text && empty($attachments))) {
             return; // skip read receipts, delivery confirmations, etc.
+        }
+
+        // Meta's webhook delivery is at-least-once — the same event can be
+        // POSTed again after a timeout or non-2xx response. mid is Meta's own
+        // unique ID for this message; if we've already recorded it, this is a
+        // retry of something we already processed, not a new message.
+        if ($mid && MessengerMessage::withoutGlobalScopes()->where('mid', $mid)->exists()) {
+            return;
         }
 
         // resolve customer's display name once, reuse for later messages
@@ -84,15 +93,25 @@ class MessengerWebhookController extends Controller
             }
         }
 
-        MessengerMessage::withoutGlobalScopes()->create([
-            'tenant_id'      => $setting->tenant_id,
-            'sender_psid'    => $psid,
-            'customer_name'  => $name,
-            'message_text'   => $text,
-            'attachment_url' => $attachments[0]['payload']['url'] ?? null,
-            'direction'      => 'in',
-            'status'         => 'new',
-        ]);
+        try {
+            MessengerMessage::withoutGlobalScopes()->create([
+                'tenant_id'      => $setting->tenant_id,
+                'sender_psid'    => $psid,
+                'mid'            => $mid,
+                'customer_name'  => $name,
+                'message_text'   => $text,
+                'attachment_url' => $attachments[0]['payload']['url'] ?? null,
+                'direction'      => 'in',
+                'status'         => 'new',
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->getCode() !== '23000') {
+                throw $e;
+            }
+            // Race: a concurrent retry of this same mid won the insert first
+            // (between the exists() check above and this create()) — the
+            // message is already recorded, nothing else to do.
+        }
     }
 
     /**
