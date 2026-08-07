@@ -10,7 +10,7 @@
     Props:
       href:    string|null                                    (default: null)
       variant: 'primary' | 'accent' | 'amber' | 'white' | 'outline' | 'ghost'  (default: 'primary')
-      size:    'default' | 'lg'                                (default: 'default')
+      size:    'sm' | 'default' | 'lg'                          (default: 'default')
       type:    'button' | 'submit' | 'reset' — only used when href is null
 --}}
 @props(['href' => null, 'variant' => 'primary', 'size' => 'default', 'type' => 'button'])
@@ -29,6 +29,7 @@
     ];
 
     $sizes = [
+        'sm'      => 'px-4 py-2 text-sm',
         'default' => 'px-6 py-3 text-sm',
         'lg'      => 'px-7 py-3.5 text-base',
     ];

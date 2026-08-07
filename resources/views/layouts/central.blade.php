@@ -28,6 +28,10 @@
     </style>
 </head>
 <body class="font-body bg-paper text-ink antialiased">
+    <a href="#main-content"
+       class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[999] focus:px-4 focus:py-2.5 focus:rounded-btn focus:bg-ink focus:text-white focus:font-semibold focus:outline-none focus:ring-2 focus:ring-leaf focus:ring-offset-2">
+        স্কিপ করে মূল কনটেন্টে যান
+    </a>
     @yield('content')
 </body>
 </html>

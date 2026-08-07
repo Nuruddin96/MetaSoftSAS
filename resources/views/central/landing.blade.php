@@ -8,25 +8,30 @@
 {{-- ================= NAV ================= --}}
 <header class="sticky top-0 z-40 bg-paper/90 backdrop-blur border-b border-ink/10">
     <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-        <a href="/" class="flex items-center gap-2">
+        <a href="/" class="flex items-center gap-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
             <span class="w-8 h-8 rounded bg-leaf grid place-items-center text-white font-bold text-lg">M</span>
             <span class="font-disp font-bold text-lg">MetaSoft BD</span>
         </a>
-        <nav class="hidden md:flex items-center gap-7 text-sm text-mute">
-            <a href="#features" class="hover:text-ink">ফিচার</a>
-            <a href="#services" class="hover:text-ink">আমাদের সার্ভিস</a>
-            <a href="#pricing" class="hover:text-ink">প্রাইসিং</a>
+        <nav class="hidden md:flex items-center gap-5 text-sm text-mute">
+            <a href="#features" class="hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">ফিচার</a>
+            <a href="#why-choose" class="hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">কেন মেটাসফট</a>
+            <a href="#services" class="hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">আমাদের সার্ভিস</a>
+            <a href="#pricing" class="hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">প্রাইসিং</a>
+            <a href="#faq" class="hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">যা জানা দরকার</a>
         </nav>
         <div class="flex items-center gap-3">
-            <a href="{{ route('affiliate.register') }}" class="hidden sm:inline text-sm font-semibold px-4 py-2 rounded-lg bg-amber/15 text-ink hover:bg-amber/25">💰 রেফার এন্ড আর্ন</a>
-            <a href="{{ route('central.login') }}" class="text-sm font-medium px-4 py-2 rounded-lg hover:bg-ink/5">লগইন</a>
-            <a href="{{ route('register') }}" class="text-sm font-semibold px-4 py-2 rounded-lg bg-leaf text-white hover:bg-leafdk">ফ্রি ট্রায়াল শুরু করুন</a>
+            <a href="{{ route('affiliate.register') }}"
+               class="hidden sm:inline text-sm font-semibold px-4 py-2 rounded-btn bg-amber/15 text-ink hover:bg-amber/25 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+                💰 রেফার এন্ড আর্ন
+            </a>
+            <x-ui.button href="{{ route('central.login') }}" variant="ghost" size="sm">লগইন</x-ui.button>
+            <x-ui.button href="{{ route('register') }}" variant="accent" size="sm">ফ্রি ট্রায়াল শুরু করুন</x-ui.button>
         </div>
     </div>
 </header>
 
 {{-- ================= HERO ================= --}}
-<x-ui.section tone="transparent" spacing="none" class="relative overflow-hidden">
+<x-ui.section id="main-content" tabindex="-1" tone="transparent" spacing="none" class="relative overflow-hidden outline-none">
     {{-- animated background glow — decorative only, hidden from assistive tech --}}
     <div aria-hidden="true" class="absolute inset-0 -z-10 overflow-hidden">
         <div class="bg-glow absolute -top-32 -right-24 w-[28rem] h-[28rem] bg-leaf/25"></div>
