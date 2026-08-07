@@ -1,0 +1,12 @@
+-- Fix cross-tenant Messenger page hijack: page_id had no uniqueness guarantee,
+-- so two tenants could both save the same Facebook Page ID and the webhook's
+-- lookup (WHERE page_id = ? LIMIT 1) had no deterministic way to pick the
+-- rightful owner — a real customer conversation could get filed under the
+-- wrong tenant's inbox. This makes that structurally impossible.
+--
+-- Pre-flight check before applying to any environment with existing data:
+--   SELECT page_id, COUNT(*) FROM messenger_settings
+--   WHERE is_active = 1 GROUP BY page_id HAVING COUNT(*) > 1;
+-- If that returns any rows, resolve the conflict manually (deactivate/clear
+-- the illegitimate row) before this ALTER TABLE will succeed.
+ALTER TABLE messenger_settings ADD UNIQUE INDEX uq_page_id (page_id);

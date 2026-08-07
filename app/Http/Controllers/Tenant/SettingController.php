@@ -55,6 +55,24 @@ class SettingController extends Controller
             'page_name'          => 'nullable|string|max:150',
         ]);
 
+        $tenant = app('currentTenant');
+
+        // A tenant could otherwise type in ANY page_id — including one a
+        // different tenant already has connected — with no verification of
+        // actual ownership. The webhook's lookup (WHERE page_id = ? LIMIT 1)
+        // has no way to know which claim is legitimate, so a real customer's
+        // conversation could get filed under the wrong tenant's inbox.
+        $claimedByAnotherTenant = MessengerSetting::withoutGlobalScopes()
+            ->where('page_id', $data['page_id'])
+            ->where('tenant_id', '!=', $tenant->id)
+            ->exists();
+
+        if ($claimedByAnotherTenant) {
+            return back()
+                ->with('error', 'এই Facebook Page ID ইতিমধ্যে অন্য একটি স্টোরে যুক্ত করা আছে। Page ID-টি সঠিক কিনা যাচাই করুন।')
+                ->withInput();
+        }
+
         $setting = MessengerSetting::firstOrNew([]);
         $setting->page_id   = $data['page_id'];
         $setting->page_name = $data['page_name'] ?? null;
@@ -63,9 +81,25 @@ class SettingController extends Controller
             $setting->page_access_token = $data['page_access_token'];
         }
 
-        $setting->tenant_id  = app('currentTenant')->id;
+        $setting->tenant_id  = $tenant->id;
         $setting->is_active  = $request->boolean('is_active', true);
-        $setting->save();
+
+        try {
+            $setting->save();
+        } catch (\Illuminate\Database\QueryException $e) {
+            // Race condition: another tenant claimed this exact page_id between
+            // the check above and this save. The DB's unique constraint on
+            // page_id (chunk21.sql) is the real guarantee; this just turns the
+            // resulting integrity-violation exception into a normal message
+            // instead of a 500.
+            if ($e->getCode() === '23000') {
+                return back()
+                    ->with('error', 'এই Facebook Page ID ইতিমধ্যে অন্য একটি স্টোরে যুক্ত করা আছে। Page ID-টি সঠিক কিনা যাচাই করুন।')
+                    ->withInput();
+            }
+
+            throw $e;
+        }
 
         return back()->with('success', 'মেসেঞ্জার পেজ কানেক্ট করা হয়েছে।');
     }
