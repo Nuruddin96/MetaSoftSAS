@@ -396,11 +396,15 @@
             </div>
             <div class="grid grid-cols-2 gap-4">
                 {{--
-                    Real company photos, served from public/images/company/.
-                    Alt text below is provisional — written from the section's
-                    context (MetaSoft BD team/workplace), not from having seen
-                    the actual images. Review and correct once the files are
-                    in place and the real content is visible.
+                    TODO: real company photos go in public/images/company/
+                    (company-1.jpg .. company-4.jpg). Each one is only
+                    rendered if the file actually exists on disk — until
+                    then a clean placeholder shows instead of a broken
+                    image icon. Once the real files are added, they start
+                    rendering automatically on the next page load; no code
+                    change needed. Alt text below is provisional (written
+                    from the section's context, not from having seen the
+                    actual images) — review once the real photos are in.
                 --}}
                 @php
                     $companyPhotos = [
@@ -411,13 +415,21 @@
                     ];
                 @endphp
                 @foreach ($companyPhotos as [$file, $alt])
+                    @php $companyPhotoPath = public_path('images/company/' . $file); @endphp
                     <div class="aspect-[4/3] rounded-card overflow-hidden {{ $loop->iteration % 2 === 0 ? 'mt-6' : '' }}">
-                        <img
-                            src="{{ asset('images/company/' . $file) }}"
-                            alt="{{ $alt }}"
-                            loading="lazy"
-                            class="w-full h-full object-cover object-center hover:scale-105 transition-transform duration-300"
-                        >
+                        @if (file_exists($companyPhotoPath))
+                            <img
+                                src="{{ asset('images/company/' . $file) }}"
+                                alt="{{ $alt }}"
+                                loading="lazy"
+                                class="w-full h-full object-cover object-center hover:scale-105 transition-transform duration-300"
+                            >
+                        @else
+                            <div class="w-full h-full bg-paper border border-ink/10 grid place-items-center gap-2 text-mute/70">
+                                <x-ui.icon name="image" class="w-8 h-8" />
+                                <span class="text-xs font-medium">ছবি শীঘ্রই যুক্ত হবে</span>
+                            </div>
+                        @endif
                     </div>
                 @endforeach
             </div>

@@ -11,6 +11,7 @@
     Props:
       name: 'storefront' | 'shield-check' | 'chart-trending' | 'megaphone'
           | 'whatsapp' | 'upload' | 'globe' | 'cart' | 'warehouse' | 'chevron-down' | 'rocket'
+          | 'image'
 --}}
 @props(['name'])
 
@@ -98,6 +99,12 @@
             <circle cx="12" cy="9" r="1.4" />
             <path d="M8 15l-2.5 4.5L9 18" />
             <path d="M16 15l2.5 4.5L15 18" />
+            @break
+
+        @case('image')
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <circle cx="8.5" cy="9.5" r="1.5" />
+            <path d="M21 15l-5-5-9 9" />
             @break
     @endswitch
 </svg>
