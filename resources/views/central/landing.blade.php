@@ -591,36 +591,58 @@
 </section>
 
 {{-- ================= FINAL CTA ================= --}}
-<section class="py-20 text-center px-4">
-    <h2 class="font-disp font-bold text-3xl md:text-4xl">আজই আপনার দোকান খুলুন</h2>
-    <p class="text-mute mt-3">৭ দিন সম্পূর্ণ ফ্রি। পছন্দ না হলে কিছুই দিতে হবে না।</p>
-    <a href="{{ route('register') }}" class="inline-block mt-7 px-8 py-4 rounded-xl bg-leaf text-white font-bold text-lg hover:bg-leafdk">
-        ফ্রি ট্রায়াল শুরু করুন →
-    </a>
-</section>
+<x-ui.section tone="transparent" spacing="none" class="relative overflow-hidden">
+    <div aria-hidden="true" class="absolute inset-0 -z-10 overflow-hidden">
+        <div class="bg-glow absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40rem] h-[40rem] bg-leaf/15"></div>
+    </div>
+    <x-ui.container size="narrow">
+        <div class="py-20 md:py-28 text-center">
+            <h2 class="font-disp font-bold text-3xl md:text-5xl leading-tight">আজই আপনার দোকান খুলুন</h2>
+            <p class="mt-4 text-lg text-mute">৭ দিন সম্পূর্ণ ফ্রি, কোনো কার্ড লাগবে না। পছন্দ না হলে কিছুই দিতে হবে না।</p>
+            <div class="mt-8">
+                <x-ui.button href="{{ route('register') }}" variant="accent" size="lg">
+                    ফ্রি ট্রায়াল শুরু করুন →
+                </x-ui.button>
+            </div>
+        </div>
+    </x-ui.container>
+</x-ui.section>
 
 {{-- ================= FOOTER ================= --}}
 <footer class="bg-ink text-white/70 text-sm">
     <div class="barcode h-2 opacity-30 invert"></div>
-    <div class="max-w-6xl mx-auto px-4 py-10 flex flex-col md:flex-row justify-between gap-6">
-        <div>
-            <p class="font-disp font-bold text-white text-lg">MetaSoft BD</p>
-            <p class="mt-2 max-w-xs">বাংলাদেশের ব্যবসার জন্য বিজনেস অটোমেশন প্ল্যাটফর্ম।</p>
-        </div>
-        <div class="flex gap-10">
+    <x-ui.container>
+        <div class="py-12 grid md:grid-cols-3 gap-10">
             <div>
-                <p class="text-white font-semibold mb-2">লিংক</p>
-                <a href="#features" class="block hover:text-white">ফিচার</a>
-                <a href="#pricing" class="block hover:text-white mt-1">প্রাইসিং</a>
-                <a href="{{ route('register') }}" class="block hover:text-white mt-1">রেজিস্ট্রেশন</a>
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded bg-leaf grid place-items-center text-white font-bold text-lg">M</span>
+                    <span class="font-disp font-bold text-white text-lg">MetaSoft BD</span>
+                </div>
+                <p class="mt-3 max-w-xs leading-relaxed">বাংলাদেশের ব্যবসার জন্য বিজনেস অটোমেশন প্ল্যাটফর্ম।</p>
             </div>
             <div>
-                <p class="text-white font-semibold mb-2">যোগাযোগ</p>
-                <p>ঢাকা, বাংলাদেশ</p>
-                <p class="mt-1">support@metasoftbd.com</p>
+                <p class="text-white font-semibold mb-3">লিংক</p>
+                <nav class="space-y-2" aria-label="ফুটার নেভিগেশন">
+                    <a href="#features" class="block hover:text-white transition rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink">ফিচার</a>
+                    <a href="#why-choose" class="block hover:text-white transition rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink">কেন মেটাসফট</a>
+                    <a href="#pricing" class="block hover:text-white transition rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink">প্রাইসিং</a>
+                    <a href="#faq" class="block hover:text-white transition rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink">যা জানা দরকার</a>
+                    <a href="{{ route('register') }}" class="block hover:text-white transition rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink">রেজিস্ট্রেশন</a>
+                </nav>
+            </div>
+            <div>
+                <p class="text-white font-semibold mb-3">যোগাযোগ</p>
+                <div class="space-y-2">
+                    <p>ঢাকা, বাংলাদেশ</p>
+                    <a href="mailto:support@metasoftbd.com" class="block hover:text-white transition rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink">support@metasoftbd.com</a>
+                    <a href="https://wa.me/{{ preg_replace('/\D/', '', config('payment.support_whatsapp')) }}"
+                       target="_blank" rel="noopener" class="block hover:text-white transition rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-ink">
+                        WhatsApp-এ মেসেজ করুন
+                    </a>
+                </div>
             </div>
         </div>
-    </div>
+    </x-ui.container>
     <div class="border-t border-white/10 py-4 text-center text-xs">© {{ date('Y') }} MetaSoft BD — সর্বস্বত্ব সংরক্ষিত</div>
 </footer>
 
