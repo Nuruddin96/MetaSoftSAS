@@ -12,16 +12,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', $tenant->store_name)</title>
     @if ($tenant->logo_path)<link rel="icon" href="{{ asset('storage/' . $tenant->logo_path) }}">@endif
-    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@700;800&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = { theme: { extend: {
-            colors: { ink:'#132A21', paper:'#F7F6F1', mute:'#5C6B63',
-                      brand: '{{ $tenant->primary_color ?: "#128155" }}',
-                      accent: '{{ $tenant->secondary_color ?: "#f59e0b" }}' },
-            fontFamily: { body:['"Hind Siliguri"','sans-serif'], disp:['"Noto Serif Bengali"','serif'] },
-        }}};
-    </script>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    {{-- Storefront paper is a slightly different shade, and brand/accent come from this tenant's own colors. --}}
+    <style>
+        :root {
+            --color-paper: #F7F6F1;
+            --color-brand: {{ $tenant->primary_color ?: '#128155' }};
+            --color-accent: {{ $tenant->secondary_color ?: '#f59e0b' }};
+        }
+    </style>
 
     @if ($mk?->gtm_container_id)
     <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});

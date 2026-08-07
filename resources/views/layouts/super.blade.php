@@ -4,14 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', 'সুপার অ্যাডমিন') — MetaSoft BD</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@700;800&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = { theme: { extend: {
-            colors: { ink:'#1A1A2E', leaf:'#128155', leafdk:'#0C5C3C', paper:'#F2F2F7', amber:'#F5B31A', mute:'#5C6B63' },
-            fontFamily: { body:['"Hind Siliguri"','sans-serif'], disp:['"Noto Serif Bengali"','serif'] },
-        }}};
-    </script>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    {{-- Super admin uses a distinct dark-navy ink/paper, different from the shared central/panel palette. --}}
+    <style>:root { --color-ink: #1A1A2E; --color-paper: #F2F2F7; }</style>
 </head>
 <body class="font-body bg-paper text-ink antialiased">
 <div class="min-h-screen lg:flex">

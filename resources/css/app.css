@@ -5,7 +5,26 @@
 @source '../**/*.blade.php';
 @source '../**/*.js';
 
+/*
+ * Shared design tokens for all 4 layouts (central, panel, super, store).
+ * Values here are the central/panel defaults. super.blade.php and
+ * store.blade.php override --color-ink/--color-paper/--color-brand/
+ * --color-accent inline in their own <head> — see each layout for why
+ * (super uses a distinct dark navy, store's brand/accent are set per
+ * tenant at runtime from tenants.primary_color/secondary_color).
+ */
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --color-ink: #132A21;
+    --color-leaf: #128155;
+    --color-leafdk: #0C5C3C;
+    --color-paper: #F4F2EA;
+    --color-amber: #F5B31A;
+    --color-mute: #5C6B63;
+
+    /* storefront-only tokens; central/panel/super never override these */
+    --color-brand: #128155;
+    --color-accent: #F5B31A;
+
+    --font-body: "Hind Siliguri", sans-serif;
+    --font-disp: "Noto Serif Bengali", serif;
 }

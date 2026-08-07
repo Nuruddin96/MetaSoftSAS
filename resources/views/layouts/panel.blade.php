@@ -4,15 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', 'প্যানেল') — {{ app('currentTenant')->store_name }}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
-    <script>
-        tailwind.config = { theme: { extend: {
-            colors: { ink:'#132A21', leaf:'#128155', leafdk:'#0C5C3C', paper:'#F4F2EA', amber:'#F5B31A', mute:'#5C6B63' },
-            fontFamily: { body:['"Hind Siliguri"','sans-serif'], disp:['"Noto Serif Bengali"','serif'] },
-        }}};
-    </script>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
         .card-hover { transition: transform .15s ease, box-shadow .15s ease; }
         .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 20px -6px rgba(19,42,33,0.12); }
