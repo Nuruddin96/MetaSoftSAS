@@ -514,6 +514,73 @@
     </x-ui.container>
 </x-ui.section>
 
+{{-- ================= FAQ ================= --}}
+{{-- Native <details>/<summary> — accessible and keyboard-operable by default,
+     no JS/ARIA wiring needed. Every answer below is verified against actual
+     app behavior (RegisterController, CheckSubscription, CheckoutController,
+     CourierManager, SuperAdmin\TenantController), nothing invented. --}}
+<x-ui.section id="faq" tone="white">
+    <x-ui.container size="narrow">
+        <div class="text-center">
+            <x-ui.badge tone="amber">শুরু করার আগে</x-ui.badge>
+            <h2 class="mt-4 font-disp font-bold text-3xl md:text-4xl">যা জানা দরকার</h2>
+            <p class="mt-3 text-mute">সবচেয়ে বেশি জিজ্ঞাসিত প্রশ্নগুলোর সরাসরি উত্তর</p>
+        </div>
+
+        <div class="mt-10 divide-y divide-ink/10 border-t border-b border-ink/10">
+            @php
+                $faqs = [
+                    [
+                        'ট্রায়াল শেষে কি আমার কার্ড থেকে অটোমেটিক টাকা কেটে নেবে?',
+                        'না। রেজিস্ট্রেশনের সময় কোনো কার্ডের তথ্যই নেওয়া হয় না, তাই অটো চার্জ হওয়ার প্রশ্নই নেই। ৭ দিনের ট্রায়াল শেষ হলে আপনি নিজে বিলিং পেজ থেকে প্ল্যান বেছে পেমেন্ট করবেন — না করলে স্টোর সাময়িকভাবে বন্ধ থাকবে, কোনো টাকা কাটা হবে না।',
+                    ],
+                    [
+                        'আমার টেকনিক্যাল জ্ঞান নেই, তারপরও কি ব্যবহার করতে পারবো?',
+                        'হ্যাঁ। পুরো প্যানেল বাংলায়, আর রেজিস্ট্রেশন করলেই সাথে সাথে আপনার সাবডোমেইনে ওয়েবসাইট রেডি হয়ে যায় — কোনো কোডিং লাগে না। লোগো, ব্যানার, পেজ — সবকিছু সাধারণ ফর্ম দিয়েই সেট করা যায়।',
+                    ],
+                    [
+                        'আমার কাস্টমাররা কীভাবে পেমেন্ট করবে?',
+                        'এখন ক্যাশ অন ডেলিভারি (COD) সাপোর্ট করে, যেটা বাংলাদেশে বেশিরভাগ অনলাইন অর্ডারের স্বাভাবিক পদ্ধতি। কাস্টমার অর্ডার কনফার্ম করবেন, পণ্য হাতে পেয়ে টাকা দেবেন।',
+                    ],
+                    [
+                        'কাস্টমারকে কি আমার সাইটে অ্যাকাউন্ট বানাতে হবে?',
+                        'না। কাস্টমার শুধু নাম আর মোবাইল নাম্বার দিয়েই অর্ডার করতে পারবেন — কোনো পাসওয়ার্ড বা সাইনআপ প্রক্রিয়া নেই। যত কম ধাপ, তত কম কাস্টমার মাঝপথে চলে যাওয়ার সম্ভাবনা।',
+                    ],
+                    [
+                        'কুরিয়ার আর ফ্রড চেকার সেটআপ করা কি জটিল?',
+                        'না। আপনার Steadfast বা Pathao অ্যাকাউন্টের API Key সেটিংস পেজে বসিয়ে দিলেই হয়ে যায় — আলাদা কোনো ইন্টিগ্রেশন প্রজেক্ট লাগে না। এরপর ফ্রড চেকার নিজে থেকেই ওই কুরিয়ারের রিয়েল ডেলিভারি হিস্ট্রি দেখে রেজাল্ট দেবে।',
+                    ],
+                    [
+                        'পরে প্ল্যান আপগ্রেড বা ডাউনগ্রেড করতে পারবো?',
+                        'হ্যাঁ, বিলিং পেজ থেকে যেকোনো সময়। একই প্যানেল, একই ডেটা — প্ল্যান বদলালে নতুন করে সেটআপ করা লাগে না।',
+                    ],
+                    [
+                        'নিজের ডোমেইন (যেমন myshop.com) ব্যবহার করতে পারবো?',
+                        'Pro প্ল্যানে হ্যাঁ। সেটিংস থেকে ডোমেইন রিকোয়েস্ট করবেন, আমরা যাচাই করে অ্যাক্টিভেট করে দেব — এটা একটা সংক্ষিপ্ত ম্যানুয়াল ধাপ, তাই সাথে সাথে না হয়ে সাধারণত অল্প সময়ের মধ্যে চালু হয়।',
+                    ],
+                ];
+            @endphp
+            @foreach ($faqs as [$question, $answer])
+                <details class="group py-5" @if ($loop->first) open @endif>
+                    <summary class="flex items-center justify-between gap-4 cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden">
+                        <span class="font-semibold text-ink">{{ $question }}</span>
+                        <x-ui.icon name="chevron-down" class="w-5 h-5 shrink-0 text-mute transition-transform duration-200 group-open:rotate-180" />
+                    </summary>
+                    <p class="mt-3 text-mute leading-relaxed pr-8">{{ $answer }}</p>
+                </details>
+            @endforeach
+        </div>
+
+        <p class="text-center text-sm text-mute mt-8">
+            আরও প্রশ্ন আছে?
+            <a href="https://wa.me/{{ preg_replace('/\D/', '', config('payment.support_whatsapp')) }}"
+               target="_blank" rel="noopener" class="text-leaf font-semibold hover:underline">
+                WhatsApp-এ সরাসরি জিজ্ঞাসা করুন
+            </a>
+        </p>
+    </x-ui.container>
+</x-ui.section>
+
 {{-- ================= OTHER SERVICES ================= --}}
 <section class="py-14 text-center px-4 bg-ink text-white">
     <h2 class="font-disp font-bold text-2xl">শুধু ওয়েবসাইট না — সম্পূর্ণ ডিজিটাল সমাধান</h2>
