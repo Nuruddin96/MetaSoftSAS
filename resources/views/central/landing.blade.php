@@ -612,13 +612,19 @@
 </x-ui.section>
 
 {{-- ================= OTHER SERVICES ================= --}}
-<section class="py-14 text-center px-4 bg-ink text-white">
-    <h2 class="font-disp font-bold text-2xl">শুধু ওয়েবসাইট না — সম্পূর্ণ ডিজিটাল সমাধান</h2>
-    <p class="text-white/70 mt-2 max-w-lg mx-auto">ওয়েবসাইট ডেভেলপমেন্ট, কনটেন্ট ক্রিয়েশন, ডিজিটাল মার্কেটিং — আমাদের এজেন্সি সার্ভিসগুলোও দেখুন</p>
-    <a href="{{ route('services') }}" class="inline-block mt-6 px-8 py-3.5 rounded-xl bg-white text-ink font-bold hover:bg-white/90">
-        🔍 অন্যান্য সার্ভিস দেখুন
-    </a>
-</section>
+<x-ui.section tone="dark" spacing="compact">
+    <x-ui.container size="narrow" class="text-center">
+        <h2 class="font-disp font-bold text-2xl md:text-3xl">শুধু ওয়েবসাইট না — সম্পূর্ণ ডিজিটাল সমাধান</h2>
+        <p class="text-white/70 mt-3 max-w-lg mx-auto">
+            ওয়েবসাইট ডেভেলপমেন্ট, কনটেন্ট ক্রিয়েশন, ডিজিটাল মার্কেটিং — আমাদের এজেন্সি সার্ভিসগুলোও দেখুন
+        </p>
+        <div class="mt-6">
+            <x-ui.button href="{{ route('services') }}" variant="white">
+                অন্যান্য সার্ভিস দেখুন
+            </x-ui.button>
+        </div>
+    </x-ui.container>
+</x-ui.section>
 
 {{-- ================= FINAL CTA ================= --}}
 <x-ui.section tone="transparent" spacing="none" class="relative overflow-hidden">
