@@ -1,0 +1,136 @@
+@extends('layouts.panel')
+
+@section('title', 'অর্ডার')
+
+@section('content')
+<div class="flex items-center justify-between mb-6">
+    <h1 class="font-disp font-bold text-2xl">অর্ডার</h1>
+    <a href="{{ route('tenant.orders.create') }}" class="px-4 py-2.5 rounded-lg bg-leaf text-white font-semibold text-sm hover:bg-leafdk">+ নতুন অর্ডার</a>
+</div>
+
+<form class="flex flex-wrap gap-3 mb-4">
+    <input name="q" value="{{ request('q') }}" placeholder="অর্ডার নং / ফোন / নাম..."
+           class="rounded-lg border border-ink/15 px-3 py-2.5 text-sm w-full md:w-64 focus:ring-2 focus:ring-leaf outline-none">
+    <select name="status" onchange="this.form.submit()" class="rounded-lg border border-ink/15 px-3 py-2.5 text-sm bg-white">
+        <option value="">সব স্ট্যাটাস</option>
+        @foreach (['pending' => 'পেন্ডিং', 'confirmed' => 'কনফার্মড', 'processing' => 'প্রসেসিং', 'shipped' => 'শিপড', 'delivered' => 'ডেলিভারড', 'cancelled' => 'ক্যান্সেলড', 'returned' => 'রিটার্নড'] as $key => $label)
+            <option value="{{ $key }}" @selected(request('status') === $key)>{{ $label }}</option>
+        @endforeach
+    </select>
+    <select name="channel" onchange="this.form.submit()" class="rounded-lg border border-ink/15 px-3 py-2.5 text-sm bg-white">
+        <option value="">সব উৎস</option>
+        @foreach (['website' => '🌐 ওয়েবসাইট', 'facebook' => '📘 ফেসবুক', 'whatsapp' => '💬 হোয়াটসঅ্যাপ', 'instagram' => '📷 ইনস্টাগ্রাম', 'call' => '📞 কল', 'others' => '📦 অন্যান্য'] as $key => $label)
+            <option value="{{ $key }}" @selected(request('channel') === $key)>{{ $label }}</option>
+        @endforeach
+    </select>
+</form>
+
+{{-- bulk action bar --}}
+<div id="bulkBar" class="hidden mb-4 bg-ink text-white rounded-xl px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
+    <span><span id="selCount">0</span>টি সিলেক্ট করা হয়েছে</span>
+
+    <form method="POST" action="{{ route('tenant.orders.bulk-status') }}" id="bulkStatusForm" class="flex items-center gap-2">
+        @csrf
+        <select name="status" class="rounded-lg text-ink px-2 py-1.5 text-sm">
+            @foreach (['pending' => 'পেন্ডিং', 'confirmed' => 'কনফার্মড', 'processing' => 'প্রসেসিং', 'shipped' => 'শিপড', 'delivered' => 'ডেলিভারড', 'cancelled' => 'ক্যান্সেলড'] as $key => $label)
+                <option value="{{ $key }}">{{ $label }}</option>
+            @endforeach
+        </select>
+        <button class="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25">স্ট্যাটাস বদলান</button>
+    </form>
+
+    <form method="POST" action="{{ route('tenant.orders.bulk-courier') }}" id="bulkCourierForm" class="flex items-center gap-2"
+          onsubmit="return confirm('সিলেক্ট করা অর্ডারগুলো কুরিয়ারে পাঠাবেন?')">
+        @csrf
+        <select name="provider" class="rounded-lg text-ink px-2 py-1.5 text-sm">
+            <option value="steadfast">Steadfast</option>
+            <option value="pathao">Pathao</option>
+        </select>
+        <button class="px-3 py-1.5 rounded-lg bg-amber text-ink font-semibold hover:opacity-90">🚚 কুরিয়ারে পাঠান</button>
+    </form>
+</div>
+
+<div class="bg-white rounded-xl border border-ink/5 overflow-x-auto">
+    <table class="w-full text-sm">
+        <thead class="text-left text-mute"><tr class="border-b border-ink/5">
+            <th class="px-3 py-3"><input type="checkbox" id="selectAll"></th>
+            <th class="px-4 py-3">অর্ডার</th><th class="px-4 py-3">কাস্টমার</th>
+            <th class="px-4 py-3">উৎস</th><th class="px-4 py-3">মোট</th>
+            <th class="px-4 py-3">স্ট্যাটাস</th><th class="px-4 py-3">সময়</th><th class="px-4 py-3"></th>
+        </tr></thead>
+        <tbody>
+        @forelse ($orders as $order)
+            <tr class="border-b border-ink/5 last:border-0 hover:bg-paper/60">
+                <td class="px-3 py-3">
+                    <input type="checkbox" class="order-check" value="{{ $order->id }}">
+                </td>
+                <td class="px-4 py-3">
+                    <a href="{{ route('tenant.orders.show', $order) }}" class="font-medium text-leaf hover:underline">{{ $order->order_number }}</a>
+                    @if ($order->courier_consignment_id)<p class="text-[10px] text-mute">🚚 {{ ucfirst($order->courier_provider) }}</p>@endif
+                </td>
+                <td class="px-4 py-3">{{ $order->customer_name }}<br><span class="text-xs text-mute">{{ $order->customer_phone }}</span></td>
+                <td class="px-4 py-3">
+                    @php
+                        $chLabel = ['website' => 'ওয়েবসাইট', 'facebook' => 'ফেসবুক', 'whatsapp' => 'হোয়াটসঅ্যাপ', 'instagram' => 'ইনস্টাগ্রাম', 'call' => 'কল', 'others' => 'অন্যান্য'][$order->channel] ?? $order->channel;
+                        $chColor = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'others' => 'text-mute'][$order->channel] ?? 'text-mute';
+                    @endphp
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs bg-ink/5 {{ $chColor }}">
+                        @include('partials.icon', ['platform' => $order->channel, 'class' => 'w-3.5 h-3.5'])
+                        <span class="text-ink">{{ $chLabel }}</span>
+                    </span>
+                </td>
+                <td class="px-4 py-3 font-semibold">{{ number_format($order->total) }}৳</td>
+                <td class="px-4 py-3"><span class="px-2 py-1 rounded bg-ink/5 text-xs">{{ $order->status }}</span></td>
+                <td class="px-4 py-3 text-xs text-mute">{{ $order->created_at->format('d M, h:i A') }}</td>
+                <td class="px-4 py-3">
+                    <button type="button" onclick="quickFraudCheck({{ $order->id }}, '{{ $order->customer_phone }}', this)"
+                            class="text-xs text-mute hover:text-ink border border-ink/10 rounded px-2 py-1">🔍 ফ্রড</button>
+                </td>
+            </tr>
+        @empty
+            <tr><td colspan="8" class="px-4 py-12 text-center text-mute">কোনো অর্ডার নেই।</td></tr>
+        @endforelse
+        </tbody>
+    </table>
+</div>
+<div class="mt-4">{{ $orders->links() }}</div>
+
+@push('scripts')
+<script>
+    const selectAll = document.getElementById('selectAll');
+    const checks = () => document.querySelectorAll('.order-check');
+    const bulkBar = document.getElementById('bulkBar');
+    const selCount = document.getElementById('selCount');
+
+    function refreshBulkBar() {
+        const selected = [...checks()].filter(c => c.checked);
+        bulkBar.classList.toggle('hidden', selected.length === 0);
+        selCount.textContent = selected.length;
+
+        document.querySelectorAll('#bulkStatusForm input[name="order_ids[]"], #bulkCourierForm input[name="order_ids[]"]').forEach(i => i.remove());
+        selected.forEach(c => {
+            ['bulkStatusForm', 'bulkCourierForm'].forEach(formId => {
+                const inp = document.createElement('input');
+                inp.type = 'hidden'; inp.name = 'order_ids[]'; inp.value = c.value;
+                document.getElementById(formId).appendChild(inp);
+            });
+        });
+    }
+
+    selectAll.addEventListener('change', () => { checks().forEach(c => c.checked = selectAll.checked); refreshBulkBar(); });
+    document.addEventListener('change', e => { if (e.target.classList.contains('order-check')) refreshBulkBar(); });
+
+    async function quickFraudCheck(orderId, phone, btn) {
+        btn.textContent = '...';
+        const res = await fetch('{{ route('tenant.fraud.check') }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+            body: JSON.stringify({ phone }),
+        }).then(r => r.json()).catch(() => null);
+
+        const map = { new: '🆕 নতুন', safe: '✅ নিরাপদ', risky: '⚠️ ঝুঁকি', danger: '🚫 বিপজ্জনক', error: '⚠️ সমস্যা', unconfigured: '⚠️ সেট নেই' };
+        btn.textContent = (res && map[res.verdict]) || 'এরর';
+    }
+</script>
+@endpush
+@endsection
