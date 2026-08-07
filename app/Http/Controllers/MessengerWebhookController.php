@@ -6,6 +6,7 @@ use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * ONE webhook URL handles Messenger events for every tenant.
@@ -28,6 +29,14 @@ class MessengerWebhookController extends Controller
     /** Meta calls this (POST) every time a message/event happens. */
     public function receive(Request $request, MessengerApi $api)
     {
+        if (! $this->hasValidSignature($request)) {
+            Log::warning('Messenger webhook: rejected request with invalid or missing X-Hub-Signature-256.', [
+                'ip' => $request->ip(),
+            ]);
+
+            abort(403);
+        }
+
         $entries = $request->input('entry', []);
 
         foreach ($entries as $entry) {
@@ -84,5 +93,31 @@ class MessengerWebhookController extends Controller
             'direction'      => 'in',
             'status'         => 'new',
         ]);
+    }
+
+    /**
+     * Verifies Meta's HMAC-SHA256 signature over the raw request body, using
+     * the platform's single Facebook App secret (one app/webhook serves every
+     * tenant, per the class docblock above). Fails closed — an unconfigured
+     * app_secret rejects every request rather than silently accepting
+     * unverifiable ones.
+     */
+    protected function hasValidSignature(Request $request): bool
+    {
+        $secret = config('messenger.app_secret');
+
+        if (! $secret) {
+            return false;
+        }
+
+        $signature = (string) $request->header('X-Hub-Signature-256', '');
+
+        if (! str_starts_with($signature, 'sha256=')) {
+            return false;
+        }
+
+        $expected = 'sha256=' . hash_hmac('sha256', $request->getContent(), $secret);
+
+        return hash_equals($expected, $signature);
     }
 }
