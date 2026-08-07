@@ -140,36 +140,78 @@
 </x-ui.section>
 
 {{-- ================= FEATURES ================= --}}
-<section id="features" class="py-16 md:py-20">
-    <div class="max-w-6xl mx-auto px-4">
-        <h2 class="font-disp font-bold text-3xl text-center">দোকান চালানোর সব হাতিয়ার</h2>
-        <p class="text-center text-mute mt-3 max-w-xl mx-auto">আলাদা আলাদা অ্যাপ, এক্সেল শিট আর খাতা-কলমের দিন শেষ।</p>
+<x-ui.section id="features" tone="white">
+    <x-ui.container>
+        <div class="max-w-2xl">
+            <x-ui.badge tone="leaf">কেন মেটাসফট</x-ui.badge>
+            <h2 class="mt-4 font-disp font-bold text-3xl md:text-4xl leading-tight">
+                দশটা অ্যাপের কাজ, একটা প্ল্যাটফর্মে
+            </h2>
+            <p class="mt-4 text-lg text-mute leading-relaxed">
+                আলাদা ওয়েবসাইট, আলাদা POS সফটওয়্যার, খাতায় বাকির হিসাব, কুরিয়ারের অ্যাপ — প্রতিটা আলাদা রাখলে ভুল হয়, সময় নষ্ট হয়। মেটাসফট একটাতেই সব একসাথে রাখে, যাতে আপনি ব্যবসাটা চালাতে পারেন, টুল ম্যানেজ করা নিয়ে ব্যস্ত না থেকে।
+            </p>
+        </div>
 
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-10">
+        {{-- flagship pillars — the 3 things that actually set MetaSoft apart --}}
+        <div class="grid lg:grid-cols-3 gap-6 mt-12">
+            <x-ui.card padding="lg" hoverable>
+                <div class="w-14 h-14 rounded-xl bg-leaf/10 grid place-items-center text-leafdk">
+                    <x-ui.icon name="storefront" class="w-7 h-7" />
+                </div>
+                <h3 class="font-bold text-xl mt-5">অনলাইনে ও দোকানে, একসাথে বিক্রি করুন</h3>
+                <p class="text-mute text-sm mt-2.5 leading-relaxed">
+                    সাইনআপের সাথে সাথেই নিজের সাবডোমেইনে মোবাইল-ফ্রেন্ডলি ওয়েবসাইট রেডি। দোকানে বিক্রির জন্য POS + অটো বারকোড — দুই জায়গার স্টক একই ইনভেন্টরি থেকে হিসাব হয়, আলাদা করে মেলাতে হয় না।
+                </p>
+                <p class="text-xs text-leafdk font-semibold mt-4">অনলাইন স্টোর + POS, একই ইনভেন্টরি</p>
+            </x-ui.card>
+
+            <x-ui.card padding="lg" hoverable>
+                <div class="w-14 h-14 rounded-xl bg-leaf/10 grid place-items-center text-leafdk">
+                    <x-ui.icon name="shield-check" class="w-7 h-7" />
+                </div>
+                <h3 class="font-bold text-xl mt-5">প্রতারণামূলক অর্ডার থেকে বাঁচুন</h3>
+                <p class="text-mute text-sm mt-2.5 leading-relaxed">
+                    অর্ডার কনফার্মের আগেই দেখুন এই নাম্বার আগে কতগুলো পার্সেল রিসিভ করেছে, কতগুলো ফেরত দিয়েছে। কনফার্ম হলে এক ক্লিকেই কুরিয়ারে পাঠান, ট্র্যাকিং অটো আপডেট হবে।
+                </p>
+                <p class="text-xs text-leafdk font-semibold mt-4">Pathao, Steadfast, RedX — ইন্টিগ্রেটেড</p>
+            </x-ui.card>
+
+            <x-ui.card padding="lg" hoverable>
+                <div class="w-14 h-14 rounded-xl bg-leaf/10 grid place-items-center text-leafdk">
+                    <x-ui.icon name="chart-trending" class="w-7 h-7" />
+                </div>
+                <h3 class="font-bold text-xl mt-5">ব্যবসার আসল হিসাব হাতের কাছে</h3>
+                <p class="text-mute text-sm mt-2.5 leading-relaxed">
+                    কার কাছে কত বাকি — ডিজিটাল খাতায় সব হিসাব, আদায় এক ক্লিকে এন্ট্রি। কেনা দাম, বেচা দাম, খরচ মিলিয়ে মাস শেষে আসল লাভ কত, আর কোন জেলা থেকে বেশি অর্ডার আসছে — রিপোর্টে পরিষ্কার।
+                </p>
+                <p class="text-xs text-leafdk font-semibold mt-4">বাকির খাতা + লাভ-ক্ষতির রিপোর্ট</p>
+            </x-ui.card>
+        </div>
+
+        {{-- supporting features --}}
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-6">
             @php
-                $features = [
-                    ['🛍️', 'রেডি ইকমার্স ওয়েবসাইট', 'সাইনআপের সাথে সাথেই নিজের সাবডোমেইনে মোবাইল-ফ্রেন্ডলি দোকান। কাস্টমার নাম-নাম্বার দিয়েই অর্ডার করবে, কোনো রেজিস্ট্রেশন ছাড়া।'],
-                    ['🔍', 'কুরিয়ার ফ্রড চেকার', 'অর্ডার কনফার্মের আগেই দেখুন এই নাম্বার আগে কতগুলো পার্সেল রিসিভ করেছে, কতগুলো ফেরত দিয়েছে।'],
-                    ['🚚', 'এক ক্লিকে কুরিয়ার', 'Pathao, Steadfast, RedX — API বসান, অর্ডার এক ক্লিকে কুরিয়ারের প্যানেলে চলে যাবে, ট্র্যাকিং অটো আপডেট।'],
-                    ['🧾', 'POS + বারকোড', 'প্রোডাক্ট তুললেই বারকোড অটো তৈরি। প্রিন্ট করে গায়ে লাগান, স্ক্যান করে বেচুন — স্টক নিজে নিজেই মিলে যাবে।'],
-                    ['📒', 'বাকির খাতা', 'কোন কাস্টমারের কাছে কত বাকি — সব হিসাব ডিজিটাল খাতায়। টাকা পেলে এক ক্লিকে আদায় এন্ট্রি।'],
-                    ['📊', 'লাভ-ক্ষতির হিসাব', 'কেনা দাম, বেচা দাম, খরচ — মাস শেষে আসলে কত লাভ হলো, রিপোর্টে পরিষ্কার। কোন জেলা থেকে বেশি অর্ডার আসে সেটাও।'],
-                    ['📣', 'Meta Ads রেডি', 'Pixel, Conversion API আর GTM কোড বসান — অ্যাডসের রেজাল্ট সঠিকভাবে ট্র্যাক হবে, বুস্টের টাকা কাজে লাগবে।'],
-                    ['📦', 'স্টক ও গুদাম', 'একাধিক ওয়্যারহাউজ, লো-স্টক অ্যালার্ট, CSV দিয়ে একসাথে শত শত প্রোডাক্ট আপলোড।'],
-                    ['🇨🇳', 'চায়না প্রোডাক্ট সোর্সিং', 'ট্রেন্ডি প্রোডাক্ট আমাদের কিউরেটেড লিস্ট থেকে দেখুন, অর্ডার করুন — আমরা সোর্সিং করে দেবো, কোনো ঝামেলা ছাড়াই।'],
-                    ['💬', 'অর্ডার রিকভারি', 'কাস্টমার নাম-নাম্বার লিখে অর্ডার শেষ করেনি? তালিকা দেখে কল করুন — হারানো সেল ফিরিয়ে আনুন।'],
+                $supporting = [
+                    ['megaphone', 'Meta Ads রেডি', 'Pixel, Conversion API আর GTM কোড বসান — অ্যাডসের রেজাল্ট সঠিকভাবে ট্র্যাক হবে, বুস্টের টাকা কাজে লাগবে।'],
+                    ['whatsapp', 'WhatsApp ইন্টিগ্রেশন', 'আপনার নাম্বার বসান, স্টোরফ্রন্টে ফ্লোটিং WhatsApp বাটন লাইভ — কাস্টমার এক ক্লিকে মেসেজ করতে পারবে।'],
+                    ['warehouse', 'একাধিক ওয়্যারহাউজ', 'একাধিক গুদাম আলাদাভাবে ম্যানেজ করুন, স্টক কমে গেলে লো-স্টক অ্যালার্ট — শেষ হওয়ার আগেই টের পাবেন।'],
+                    ['upload', 'CSV বাল্ক আপলোড', 'একসাথে শত শত প্রোডাক্ট CSV দিয়ে আপলোড করুন — একটা একটা করে টাইপ করার দরকার নেই।'],
+                    ['globe', 'চায়না প্রোডাক্ট সোর্সিং', 'ট্রেন্ডি প্রোডাক্ট আমাদের কিউরেটেড লিস্ট থেকে দেখুন, অর্ডার করুন — আমরা সোর্সিং করে দেবো।'],
+                    ['cart', 'অর্ডার রিকভারি', 'কাস্টমার নাম-নাম্বার লিখে অর্ডার শেষ করেনি? তালিকা দেখে কল করুন — হারানো সেল ফিরিয়ে আনুন।'],
                 ];
             @endphp
-            @foreach ($features as [$icon, $title, $desc])
-                <div class="bg-white rounded-2xl p-6 border border-ink/5 hover:border-leaf/30 hover:shadow-md transition">
-                    <div class="text-2xl">{{ $icon }}</div>
-                    <h3 class="font-bold text-lg mt-3">{{ $title }}</h3>
+            @foreach ($supporting as [$icon, $title, $desc])
+                <x-ui.card hoverable>
+                    <div class="w-11 h-11 rounded-lg bg-paper grid place-items-center text-leafdk">
+                        <x-ui.icon :name="$icon" class="w-5 h-5" />
+                    </div>
+                    <h3 class="font-bold text-base mt-4">{{ $title }}</h3>
                     <p class="text-mute text-sm mt-2 leading-relaxed">{{ $desc }}</p>
-                </div>
+                </x-ui.card>
             @endforeach
         </div>
-    </div>
-</section>
+    </x-ui.container>
+</x-ui.section>
 
 {{-- ================= HOW IT WORKS ================= --}}
 <section class="py-16 bg-ink text-white">
