@@ -38,55 +38,18 @@
     $notifTotal = $notifPendingOrders + $notifLowStock + $notifNewMessages + $notifNewIncomplete;
 @endphp
 
-{{-- notification bell --}}
-<div class="fixed top-3 right-3 z-50">
-    <button id="notifBtn" class="relative w-11 h-11 rounded-full bg-white shadow-md border border-ink/10 grid place-items-center hover:border-leaf/40">
-        <i data-lucide="bell" class="w-5 h-5 text-ink"></i>
-        @if ($notifTotal > 0)
-            <span class="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-5 h-5 rounded-full grid place-items-center">{{ $notifTotal > 9 ? '9+' : $notifTotal }}</span>
-        @endif
-    </button>
-    <div id="notifPanel" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-ink/10 overflow-hidden">
-        <div class="px-4 py-3 border-b border-ink/5 font-bold text-sm">নোটিফিকেশন</div>
-        <div class="max-h-96 overflow-y-auto divide-y divide-ink/5">
-            @if ($notifPendingOrders > 0)
-                <a href="{{ route('tenant.orders.index', ['status' => 'pending']) }}" class="flex items-center gap-3 px-4 py-3 hover:bg-paper/60 text-sm">
-                    <i data-lucide="clock" class="w-4 h-4 text-amber shrink-0"></i>
-                    <span class="flex-1">{{ $notifPendingOrders }}টি অর্ডার কনফার্মেশনের অপেক্ষায়</span>
-                </a>
-            @endif
-            @if ($notifLowStock > 0)
-                <a href="{{ route('tenant.inventory.low') }}" class="flex items-center gap-3 px-4 py-3 hover:bg-paper/60 text-sm">
-                    <i data-lucide="triangle-alert" class="w-4 h-4 text-red-600 shrink-0"></i>
-                    <span class="flex-1">{{ $notifLowStock }}টি প্রোডাক্টের স্টক কম</span>
-                </a>
-            @endif
-            @if ($notifNewMessages > 0)
-                <a href="{{ route('tenant.messenger.index') }}" class="flex items-center gap-3 px-4 py-3 hover:bg-paper/60 text-sm">
-                    <i data-lucide="message-circle" class="w-4 h-4 text-blue-600 shrink-0"></i>
-                    <span class="flex-1">{{ $notifNewMessages }}টি নতুন মেসেঞ্জার মেসেজ</span>
-                </a>
-            @endif
-            @if ($notifNewIncomplete > 0)
-                <a href="{{ route('tenant.incomplete') }}" class="flex items-center gap-3 px-4 py-3 hover:bg-paper/60 text-sm">
-                    <i data-lucide="phone-missed" class="w-4 h-4 text-mute shrink-0"></i>
-                    <span class="flex-1">{{ $notifNewIncomplete }}টি অসম্পূর্ণ অর্ডার</span>
-                </a>
-            @endif
-            @if ($notifTotal === 0)
-                <p class="px-4 py-8 text-center text-mute text-sm">সব ঠিক আছে ✓ কোনো নোটিফিকেশন নেই</p>
-            @endif
-        </div>
-    </div>
-</div>
-
 <div class="min-h-screen lg:flex">
 
     {{-- sidebar --}}
     <aside class="lg:w-64 bg-ink text-white lg:min-h-screen">
-        <div class="p-4 flex items-center justify-between lg:block border-b border-white/10 lg:border-0">
-            <p class="font-disp font-bold text-lg leading-tight">{{ app('currentTenant')->store_name }}</p>
-            <button id="navToggle" class="lg:hidden text-2xl">☰</button>
+        <div class="p-4 border-b border-white/10 lg:border-0">
+            @if (app('currentTenant')->logo_path)
+                <img src="{{ asset('storage/' . app('currentTenant')->logo_path) }}"
+                     alt="{{ app('currentTenant')->store_name }}"
+                     class="h-8 max-w-[160px] object-contain bg-white/95 rounded px-2 py-1">
+            @else
+                <p class="font-disp font-bold text-lg leading-tight">{{ app('currentTenant')->store_name }}</p>
+            @endif
         </div>
 
         <nav id="navMenu" class="hidden lg:block pb-4 text-sm">
@@ -128,28 +91,32 @@
                 @if (count($items))
                     <p class="nav-group-label">{{ $groupLabel }}</p>
                     @foreach ($items as [$route, $label, $icon])
+                        @php $isActive = request()->routeIs(str_replace('.index', '', $route) . '*'); @endphp
                         <a href="{{ route($route) }}"
-                           class="flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 transition {{ request()->routeIs(str_replace('.index','',$route).'*') ? 'bg-white/10 border-l-2 border-amber' : '' }}">
-                            <i data-lucide="{{ $icon }}" class="w-[18px] h-[18px] shrink-0"></i> {{ $label }}
+                           class="flex items-center gap-3 mx-2 px-3.5 py-2.5 rounded-btn transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-ink {{ $isActive ? 'bg-white/10 text-white font-medium' : 'text-white/75 hover:bg-white/5 hover:text-white' }}">
+                            <i data-lucide="{{ $icon }}" class="w-[18px] h-[18px] shrink-0 {{ $isActive ? 'text-amber' : '' }}"></i>
+                            {{ $label }}
                         </a>
                     @endforeach
                 @endif
             @endforeach
 
             @if (request()->routeIs('tenant.reports.*'))
-                <div class="bg-black/20 py-1">
+                <div class="bg-black/20 py-1 mx-2 rounded-btn">
                     @foreach ([['tenant.reports.sales','বিক্রয়'],['tenant.reports.pl','লাভ-ক্ষতি'],['tenant.reports.locations','এলাকা'],['tenant.reports.products','প্রোডাক্ট']] as [$r,$l])
-                        <a href="{{ route($r) }}" class="block pl-12 pr-4 py-1.5 text-xs {{ request()->routeIs($r) ? 'text-amber font-semibold' : 'text-white/70 hover:text-white' }}">{{ $l }}</a>
+                        <a href="{{ route($r) }}" class="block pl-10 pr-4 py-1.5 text-xs rounded transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-ink {{ request()->routeIs($r) ? 'text-amber font-semibold' : 'text-white/70 hover:text-white' }}">{{ $l }}</a>
                     @endforeach
                 </div>
             @endif
 
-            <div class="border-t border-white/10 mt-3 pt-3 px-4 space-y-2">
-                <a href="{{ app('currentTenant')->url() }}" target="_blank" class="flex items-center gap-2 text-white/70 hover:text-white">
+            <div class="border-t border-white/10 mt-3 pt-3 px-4 space-y-1">
+                <a href="{{ app('currentTenant')->url() }}" target="_blank"
+                   class="flex items-center gap-2 -mx-2 px-2 py-1.5 rounded-btn text-white/70 hover:text-white hover:bg-white/5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-ink">
                     <i data-lucide="external-link" class="w-4 h-4"></i> দোকান দেখুন
                 </a>
-                <form method="POST" action="{{ route('tenant.logout') }}">@csrf
-                    <button class="flex items-center gap-2 text-white/70 hover:text-white">
+                <form method="POST" action="{{ route('tenant.logout') }}">
+                    @csrf
+                    <button class="flex items-center gap-2 -mx-2 px-2 py-1.5 rounded-btn text-white/70 hover:text-white hover:bg-white/5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-ink">
                         <i data-lucide="log-out" class="w-4 h-4"></i> লগআউট
                     </button>
                 </form>
@@ -157,10 +124,62 @@
         </nav>
     </aside>
 
-    {{-- main --}}
-    <main class="flex-1 p-4 lg:p-8 pb-20 lg:pb-8">
-        @yield('content')
-    </main>
+    {{-- main column: top bar + page content --}}
+    <div class="flex-1 flex flex-col min-w-0">
+        <header class="sticky top-0 z-40 h-16 shrink-0 bg-white/90 backdrop-blur border-b border-ink/5 flex items-center gap-3 px-4 lg:px-8">
+            <button id="navToggle" class="lg:hidden w-9 h-9 -ml-1.5 grid place-items-center rounded-lg hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+                <i data-lucide="menu" class="w-5 h-5" id="navToggleOpenIcon"></i>
+                <i data-lucide="x" class="w-5 h-5 hidden" id="navToggleCloseIcon"></i>
+            </button>
+
+            <p class="font-bold text-sm lg:text-base truncate">@yield('title', 'প্যানেল')</p>
+
+            <div class="relative ml-auto">
+                <button id="notifBtn" class="relative w-10 h-10 rounded-full hover:bg-ink/5 grid place-items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+                    <i data-lucide="bell" class="w-5 h-5 text-ink"></i>
+                    @if ($notifTotal > 0)
+                        <span class="absolute top-1 right-1 bg-red-600 text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full grid place-items-center">{{ $notifTotal > 9 ? '9+' : $notifTotal }}</span>
+                    @endif
+                </button>
+                <div id="notifPanel" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-card shadow-xl border border-ink/10 overflow-hidden">
+                    <div class="px-4 py-3 border-b border-ink/5 font-bold text-sm">নোটিফিকেশন</div>
+                    <div class="max-h-96 overflow-y-auto divide-y divide-ink/5">
+                        @if ($notifPendingOrders > 0)
+                            <a href="{{ route('tenant.orders.index', ['status' => 'pending']) }}" class="flex items-center gap-3 px-4 py-3 hover:bg-paper/60 text-sm transition">
+                                <i data-lucide="clock" class="w-4 h-4 text-amber shrink-0"></i>
+                                <span class="flex-1">{{ $notifPendingOrders }}টি অর্ডার কনফার্মেশনের অপেক্ষায়</span>
+                            </a>
+                        @endif
+                        @if ($notifLowStock > 0)
+                            <a href="{{ route('tenant.inventory.low') }}" class="flex items-center gap-3 px-4 py-3 hover:bg-paper/60 text-sm transition">
+                                <i data-lucide="triangle-alert" class="w-4 h-4 text-red-600 shrink-0"></i>
+                                <span class="flex-1">{{ $notifLowStock }}টি প্রোডাক্টের স্টক কম</span>
+                            </a>
+                        @endif
+                        @if ($notifNewMessages > 0)
+                            <a href="{{ route('tenant.messenger.index') }}" class="flex items-center gap-3 px-4 py-3 hover:bg-paper/60 text-sm transition">
+                                <i data-lucide="message-circle" class="w-4 h-4 text-blue-600 shrink-0"></i>
+                                <span class="flex-1">{{ $notifNewMessages }}টি নতুন মেসেঞ্জার মেসেজ</span>
+                            </a>
+                        @endif
+                        @if ($notifNewIncomplete > 0)
+                            <a href="{{ route('tenant.incomplete') }}" class="flex items-center gap-3 px-4 py-3 hover:bg-paper/60 text-sm transition">
+                                <i data-lucide="phone-missed" class="w-4 h-4 text-mute shrink-0"></i>
+                                <span class="flex-1">{{ $notifNewIncomplete }}টি অসম্পূর্ণ অর্ডার</span>
+                            </a>
+                        @endif
+                        @if ($notifTotal === 0)
+                            <p class="px-4 py-8 text-center text-mute text-sm">সব ঠিক আছে ✓ কোনো নোটিফিকেশন নেই</p>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 p-4 lg:p-8 pb-20 lg:pb-8">
+            @yield('content')
+        </main>
+    </div>
 </div>
 
 {{-- mobile bottom tab bar --}}
@@ -175,7 +194,8 @@
         ];
     @endphp
     @foreach ($mobileTabs as [$route, $label, $icon])
-        <a href="{{ route($route) }}" class="flex flex-col items-center gap-0.5 px-2 {{ request()->routeIs(str_replace('.index','',$route).'*') ? 'text-leaf' : 'text-mute' }}">
+        @php $isActive = request()->routeIs(str_replace('.index', '', $route) . '*'); @endphp
+        <a href="{{ route($route) }}" class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-btn transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf {{ $isActive ? 'text-leaf bg-leaf/10' : 'text-mute' }}">
             <i data-lucide="{{ $icon }}" class="w-5 h-5"></i>
             <span class="text-[10px]">{{ $label }}</span>
         </a>
@@ -186,8 +206,11 @@
 <div id="toastStack"></div>
 
 <script>
-    document.getElementById('navToggle')?.addEventListener('click', () =>
-        document.getElementById('navMenu').classList.toggle('hidden'));
+    document.getElementById('navToggle')?.addEventListener('click', () => {
+        document.getElementById('navMenu').classList.toggle('hidden');
+        document.getElementById('navToggleOpenIcon')?.classList.toggle('hidden');
+        document.getElementById('navToggleCloseIcon')?.classList.toggle('hidden');
+    });
 
     // ---- notification bell ----
     const notifBtn = document.getElementById('notifBtn');
