@@ -44,6 +44,33 @@
         @endif
     </div>
 
+    <div class="bg-white rounded-xl border border-ink/5 p-6 space-y-4">
+        <p class="font-bold">গ্যালারি ছবি (একাধিক)</p>
+        <p class="text-xs text-mute">থাম্বনেইল (উপরের "ছবি" ফিল্ড) হলো ফিচার্ড ছবি — এখানে প্রোডাক্টের আরও ছবি যোগ করুন। সর্বোচ্চ ৮টি, প্রতিটি সর্বোচ্চ ৪MB।</p>
+
+        @if ($product && $product->images->isNotEmpty())
+            <div id="galleryGrid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                @foreach ($product->images as $image)
+                    <div class="relative group border border-ink/10 rounded-lg overflow-hidden cursor-move" draggable="true" data-id="{{ $image->id }}">
+                        <img src="{{ asset('storage/'.$image->image_path) }}" class="w-full aspect-square object-cover pointer-events-none">
+                        <form method="POST" action="{{ route('tenant.products.images.destroy', $image) }}"
+                              onsubmit="return confirm('ছবিটি মুছে ফেলবেন?')" class="absolute top-1 right-1">
+                            @csrf @method('DELETE')
+                            <button type="submit" class="w-6 h-6 rounded-full bg-black/60 text-white text-xs grid place-items-center hover:bg-red-600">×</button>
+                        </form>
+                    </div>
+                @endforeach
+            </div>
+            <p id="reorderStatus" class="text-xs text-mute h-4"></p>
+            <p class="text-xs text-mute">ছবি টেনে (drag) ক্রম বদলাতে পারবেন — ক্রম বদলালে অটো সেভ হয়ে যাবে।</p>
+        @endif
+
+        <div>
+            <label class="text-sm font-medium">নতুন গ্যালারি ছবি যোগ করুন</label>
+            <input type="file" name="gallery[]" multiple accept="image/*" class="mt-1 w-full text-sm">
+        </div>
+    </div>
+
     <div class="bg-white rounded-xl border border-ink/5 p-6">
         <div class="flex items-center justify-between mb-4">
             <p class="font-bold">ভ্যারিয়েন্ট ও দাম</p>
@@ -98,6 +125,40 @@
             <input name="variants[${idx}][stock]" type="number" min="0" placeholder="শুরুর স্টক" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">`;
         wrap.appendChild(div);
         idx++;
+    }
+
+    const galleryGrid = document.getElementById('galleryGrid');
+    if (galleryGrid) {
+        let dragEl = null;
+
+        galleryGrid.querySelectorAll('[draggable="true"]').forEach(el => {
+            el.addEventListener('dragstart', () => { dragEl = el; el.classList.add('opacity-40'); });
+            el.addEventListener('dragend', () => el.classList.remove('opacity-40'));
+            el.addEventListener('dragover', (e) => e.preventDefault());
+            el.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (!dragEl || dragEl === el) return;
+
+                const items = Array.from(galleryGrid.children);
+                if (items.indexOf(dragEl) < items.indexOf(el)) el.after(dragEl); else el.before(dragEl);
+
+                saveGalleryOrder();
+            });
+        });
+
+        function saveGalleryOrder() {
+            const order = Array.from(galleryGrid.children).map(el => parseInt(el.dataset.id, 10));
+            const status = document.getElementById('reorderStatus');
+            status.textContent = 'সেভ হচ্ছে...';
+
+            fetch('{{ $product ? route('tenant.products.images.reorder', $product) : '#' }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+                body: JSON.stringify({ order }),
+            }).then(r => r.json()).then(res => {
+                status.textContent = res.ok ? 'ক্রম সেভ হয়েছে।' : (res.message || 'সমস্যা হয়েছে, পেজ রিফ্রেশ করুন।');
+            }).catch(() => { status.textContent = 'সমস্যা হয়েছে, আবার চেষ্টা করুন।'; });
+        }
     }
 </script>
 @endpush

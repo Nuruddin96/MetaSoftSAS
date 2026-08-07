@@ -177,6 +177,8 @@ $tenantRoutes = function () {
             Route::put('products/{product}', [ProductController::class, 'update'])->name('products.update');
             Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('products.destroy');
             Route::get('products/{product}/barcodes', [BarcodeController::class, 'print'])->name('products.barcodes');
+            Route::delete('products/images/{image}', [ProductController::class, 'destroyImage'])->name('products.images.destroy');
+            Route::post('products/{product}/images/reorder', [ProductController::class, 'reorderImages'])->name('products.images.reorder');
 
             // CSV bulk import
             Route::get('import', [ProductImportController::class, 'form'])->name('products.import.form');
