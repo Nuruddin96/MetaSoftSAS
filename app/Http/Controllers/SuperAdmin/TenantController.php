@@ -8,6 +8,7 @@ use App\Models\Plan;
 use App\Models\SubscriptionPayment;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\Domain\DomainManager;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Http\Request;
 
@@ -35,6 +36,9 @@ class TenantController extends Controller
             'orders'   => Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count(),
             'staff'    => User::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count(),
             'payments' => SubscriptionPayment::where('tenant_id', $tenant->id)->latest()->limit(10)->get(),
+            'domainActivationInstructions' => $tenant->custom_domain_request_status === 'dns_verified'
+                ? DomainManager::driver()->activationInstructions($tenant)
+                : null,
         ]);
     }
 
@@ -102,10 +106,30 @@ class TenantController extends Controller
         return redirect()->route('super.tenants')->with('success', 'টেনেন্ট ও তার সব ডেটা মুছে ফেলা হয়েছে।');
     }
 
-    public function approveDomain(Tenant $tenant)
+    /** Staff-triggered DNS TXT check — replaces the old "just trust the typed domain" approval. */
+    public function verifyDomainDns(Tenant $tenant)
     {
         if (! $tenant->custom_domain_requested) {
             return back()->with('error', 'কোনো ডোমেইন রিকোয়েস্ট নেই।');
+        }
+
+        if (! DomainManager::driver()->verifyDns($tenant)) {
+            return back()->with('error', 'TXT রেকর্ড এখনো পাওয়া যায়নি — DNS propagate হতে সময় লাগতে পারে (২৪-৪৮ ঘণ্টা পর্যন্ত), কিছুক্ষণ পর আবার চেষ্টা করুন।');
+        }
+
+        $tenant->update([
+            'custom_domain_request_status'  => 'dns_verified',
+            'custom_domain_dns_verified_at' => now(),
+        ]);
+
+        return back()->with('success', 'DNS TXT রেকর্ড যাচাই সফল হয়েছে — এখন ম্যানুয়াল সেটআপ শেষ করে Activate করুন।');
+    }
+
+    /** Staff clicks this after manually adding the domain as a cPanel addon domain. */
+    public function approveDomain(Tenant $tenant)
+    {
+        if ($tenant->custom_domain_request_status !== 'dns_verified') {
+            return back()->with('error', 'আগে DNS TXT রেকর্ড যাচাই করুন।');
         }
 
         $tenant->update([

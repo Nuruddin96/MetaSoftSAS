@@ -92,6 +92,7 @@ Route::domain(config('app.central_domain'))->group(function () {
             Route::post('tenants/{tenant}/suspend', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'suspend'])->name('tenants.suspend');
             Route::post('tenants/{tenant}/activate', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'activate'])->name('tenants.activate');
             Route::post('tenants/{tenant}/extend', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'extend'])->name('tenants.extend');
+            Route::post('tenants/{tenant}/domain/verify', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'verifyDomainDns'])->name('tenants.domain.verify');
             Route::post('tenants/{tenant}/domain/approve', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'approveDomain'])->name('tenants.domain.approve');
             Route::post('tenants/{tenant}/domain/reject', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'rejectDomain'])->name('tenants.domain.reject');
 

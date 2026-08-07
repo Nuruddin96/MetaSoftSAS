@@ -63,16 +63,32 @@
                 <p class="font-bold text-sm mb-1">🌐 কাস্টম ডোমেইন রিকোয়েস্ট</p>
                 <p class="text-sm mb-3">চাচ্ছে: <b>{{ $tenant->custom_domain_requested }}</b></p>
                 <div class="flex gap-3">
-                    <form method="POST" action="{{ route('super.tenants.domain.approve', $tenant) }}">
+                    <form method="POST" action="{{ route('super.tenants.domain.verify', $tenant) }}">
                         @csrf
-                        <button class="px-4 py-2 rounded-lg bg-leaf text-white text-sm font-semibold hover:bg-leafdk">✅ অনুমোদন করুন</button>
+                        <button class="px-4 py-2 rounded-lg bg-leaf text-white text-sm font-semibold hover:bg-leafdk">🔍 DNS যাচাই করুন</button>
                     </form>
                     <form method="POST" action="{{ route('super.tenants.domain.reject', $tenant) }}">
                         @csrf
                         <button class="px-4 py-2 rounded-lg bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100">✕ বাতিল করুন</button>
                     </form>
                 </div>
-                <p class="text-xs text-mute mt-3">অনুমোদনের আগে নিশ্চিত করুন ডোমেইনের DNS A রেকর্ড এই সার্ভারের IP-তে পয়েন্ট করা আছে।</p>
+                <p class="text-xs text-mute mt-3">টেনেন্টকে TXT রেকর্ড যোগ করতে বলা হয়েছে (সেটিংস পেজে দেখানো হয়েছে)। যাচাই করলে অ্যাপ নিজে থেকে DNS চেক করবে — এখনো পাওয়া না গেলে কিছুক্ষণ পর আবার চেষ্টা করুন।</p>
+            </div>
+        @elseif ($tenant->custom_domain_request_status === 'dns_verified')
+            <div class="bg-leaf/10 border border-leaf/30 rounded-xl p-5">
+                <p class="font-bold text-sm mb-1">✅ DNS যাচাই সম্পন্ন — <b>{{ $tenant->custom_domain_requested }}</b></p>
+                <p class="text-xs text-mute mb-3">যাচাই হয়েছে: {{ $tenant->custom_domain_dns_verified_at?->format('d M Y, h:i A') }}</p>
+                <div class="bg-white rounded-lg border border-ink/10 p-3 text-xs font-mono whitespace-pre-line mb-3">{{ $domainActivationInstructions }}</div>
+                <div class="flex gap-3">
+                    <form method="POST" action="{{ route('super.tenants.domain.approve', $tenant) }}">
+                        @csrf
+                        <button class="px-4 py-2 rounded-lg bg-leaf text-white text-sm font-semibold hover:bg-leafdk">🚀 চালু করুন (Activate)</button>
+                    </form>
+                    <form method="POST" action="{{ route('super.tenants.domain.reject', $tenant) }}">
+                        @csrf
+                        <button class="px-4 py-2 rounded-lg bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100">✕ বাতিল করুন</button>
+                    </form>
+                </div>
             </div>
         @elseif ($tenant->custom_domain_verified && $tenant->custom_domain)
             <div class="bg-leaf/10 border border-leaf/30 rounded-xl p-5 text-sm">

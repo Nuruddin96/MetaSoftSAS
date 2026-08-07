@@ -12,6 +12,7 @@ class Tenant extends Model
     protected $casts = [
         'trial_ends_at' => 'datetime',
         'subscription_ends_at' => 'datetime',
+        'custom_domain_dns_verified_at' => 'datetime',
     ];
 
     protected static function booted(): void
