@@ -236,6 +236,131 @@
     </div>
 </section>
 
+{{-- ================= WHY CHOOSE METASOFT ================= --}}
+<x-ui.section id="why-choose" tone="light" class="relative overflow-hidden">
+    <div aria-hidden="true" class="absolute inset-0 -z-10 overflow-hidden">
+        <div class="bg-glow absolute top-1/3 left-1/2 -translate-x-1/2 w-[36rem] h-[36rem] bg-leaf/10"></div>
+    </div>
+
+    <x-ui.container>
+        <div class="max-w-2xl mx-auto text-center">
+            <x-ui.badge tone="amber">কেন মেটাসফট বেছে নেবেন</x-ui.badge>
+            <h2 class="mt-4 font-disp font-bold text-3xl md:text-4xl leading-tight">
+                ম্যানুয়ালি সামলানো বা দশটা আলাদা টুলের বদলে
+            </h2>
+            <p class="mt-4 text-lg text-mute leading-relaxed">
+                খাতা-কলম, একাধিক অ্যাপ আর এক্সেল শিট দিয়ে ব্যবসা চালালে ভুল হয়, সময় নষ্ট হয়, আর সিদ্ধান্ত নিতে হয় আন্দাজে। মেটাসফট প্রতিটা সমস্যার সরাসরি সমাধান দেয় — অনুমান না করে, বাস্তব কারণে।
+            </p>
+        </div>
+
+        {{-- three alternating feature rows — each shows a concrete visual, not a generic icon card --}}
+        <div class="mt-16 space-y-16 md:space-y-24">
+
+            {{-- Row 1: visual left, text right --}}
+            <div class="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+                <div class="order-2 lg:order-1">
+                    <div class="rounded-card border border-ink/10 bg-white shadow-xl shadow-ink/5 p-2 max-w-sm mx-auto lg:mx-0">
+                        <div class="rounded-[calc(var(--radius-card)-0.5rem)] bg-ink text-white p-4">
+                            <p class="text-[11px] text-white/50 px-2 pb-2">আপনার প্যানেল</p>
+                            @php
+                                $modules = [
+                                    ['storefront', 'ওয়েবসাইট'],
+                                    ['cart', 'অর্ডার'],
+                                    ['warehouse', 'ইনভেন্টরি'],
+                                    ['shield-check', 'কাস্টমার'],
+                                    ['chart-trending', 'রিপোর্ট'],
+                                    ['megaphone', 'মার্কেটিং'],
+                                ];
+                            @endphp
+                            <div class="space-y-1">
+                                @foreach ($modules as [$icon, $label])
+                                    <div class="flex items-center gap-3 px-2 py-2 rounded-lg {{ $loop->first ? 'bg-white/10' : '' }}">
+                                        <x-ui.icon :name="$icon" class="w-4 h-4 text-white/80" />
+                                        <span class="text-sm text-white/90">{{ $label }}</span>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="order-1 lg:order-2">
+                    <x-ui.badge tone="leaf">একটাই লগইন</x-ui.badge>
+                    <h3 class="mt-4 font-disp font-bold text-2xl md:text-3xl leading-snug">সব একসাথে, এক জায়গায়</h3>
+                    <p class="mt-3 text-mute leading-relaxed">
+                        ওয়েবসাইট, অর্ডার, ইনভেন্টরি, কাস্টমার, রিপোর্ট, মার্কেটিং সেটিংস — আলাদা আলাদা অ্যাকাউন্ট বা অ্যাপে লগইন করার দরকার নেই। একটা প্যানেল থেকেই পুরো ব্যবসা দেখা যায়, তাই কোনো তথ্য কোথাও হারিয়ে যায় না।
+                    </p>
+                </div>
+            </div>
+
+            {{-- Row 2: text left, visual right --}}
+            <div class="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+                <div>
+                    <x-ui.badge tone="leaf">কম ধাপ, বেশি অর্ডার</x-ui.badge>
+                    <h3 class="mt-4 font-disp font-bold text-2xl md:text-3xl leading-snug">কাস্টমারের ঝামেলা কম, আপনার সেল বেশি</h3>
+                    <p class="mt-3 text-mute leading-relaxed">
+                        অনেক ওয়েবসাইটে অর্ডার করতে হলে আগে অ্যাকাউন্ট বানাতে হয় — এতে অনেক কাস্টমার মাঝপথে চলে যান। মেটাসফট স্টোরফ্রন্টে কাস্টমার শুধু নাম আর ফোন নাম্বার দিয়েই অর্ডার করতে পারেন, কোনো পাসওয়ার্ড বা রেজিস্ট্রেশন ছাড়াই।
+                    </p>
+                </div>
+                <div>
+                    <div class="rounded-card border border-ink/10 bg-white shadow-xl shadow-ink/5 p-6 max-w-sm mx-auto lg:ml-auto lg:mr-0">
+                        <p class="text-xs text-mute mb-4">চেকআউট</p>
+                        <label class="text-xs font-medium text-mute">আপনার নাম</label>
+                        <div class="mt-1 rounded-lg border border-ink/10 px-3 py-2.5 text-sm text-ink/40 bg-paper/50">রহিম আহমেদ</div>
+                        <label class="text-xs font-medium text-mute mt-3 block">মোবাইল নাম্বার</label>
+                        <div class="mt-1 rounded-lg border border-ink/10 px-3 py-2.5 text-sm text-ink/40 bg-paper/50">01XXXXXXXXX</div>
+                        <div class="mt-4 rounded-btn bg-leaf text-white text-center text-sm font-semibold py-3">অর্ডার করুন</div>
+                        <p class="text-center text-[11px] text-mute mt-3">মাত্র ২টি তথ্য — সাইনআপ লাগবে না</p>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Row 3: visual left, text right --}}
+            <div class="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+                <div class="order-2 lg:order-1">
+                    <div class="rounded-card border border-ink/10 bg-white shadow-xl shadow-ink/5 p-6 max-w-sm mx-auto lg:mx-0">
+                        <p class="text-xs text-mute">সাপ্তাহিক বিক্রি</p>
+                        <div class="mt-4 flex items-end gap-2.5 h-28">
+                            @foreach ([40, 65, 50, 80, 60, 95, 70] as $h)
+                                <div class="flex-1 rounded-t-md {{ $loop->iteration === 6 ? 'bg-leaf' : 'bg-leaf/20' }}" style="height: {{ $h }}%"></div>
+                            @endforeach
+                        </div>
+                        <div class="flex justify-between mt-2 text-[10px] text-mute">
+                            <span>শনি</span><span>রবি</span><span>সোম</span><span>মঙ্গল</span><span>বুধ</span><span>বৃহঃ</span><span>শুক্র</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="order-1 lg:order-2">
+                    <x-ui.badge tone="leaf">অনুমান না করে, দেখে সিদ্ধান্ত নিন</x-ui.badge>
+                    <h3 class="mt-4 font-disp font-bold text-2xl md:text-3xl leading-snug">ব্যবসার আসল অবস্থা রিপোর্টে</h3>
+                    <p class="mt-3 text-mute leading-relaxed">
+                        কোন দিন বেশি বিক্রি হয়, কোন প্রোডাক্ট সবচেয়ে লাভজনক, কোন জেলা থেকে বেশি অর্ডার আসে — সব রিপোর্টে পরিষ্কার দেখা যায়। ধারণার ওপর না, সংখ্যা দেখে সিদ্ধান্ত নেওয়া যায়।
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        {{-- supporting benefits — compact strip, deliberately not a uniform 3-col card grid --}}
+        <div class="mt-16 md:mt-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-px bg-ink/5 rounded-card overflow-hidden border border-ink/5">
+            @php
+                $benefits = [
+                    ['upload', 'বারবার একই কাজ নয়', 'বারকোড, অর্ডার নাম্বার, স্টক আপডেট — নিজে থেকেই হয়ে যায়।'],
+                    ['chart-trending', 'ছোট থেকে শুরু, বড় হওয়ার সুযোগ', 'প্ল্যান বদলে যান, একই প্যানেল — নতুন করে সেটআপ লাগে না।'],
+                    ['shield-check', 'আপনার ডেটা সুরক্ষিত', 'কুরিয়ার ও মার্কেটিং API-কি এনক্রিপ্টেড থাকে, প্রতিটা দোকানের ডেটা আলাদা।'],
+                    ['globe', 'বাংলাদেশের ব্যবসার জন্যই', 'বাংলা ইন্টারফেস, বাকির খাতা, দেশীয় কুরিয়ার — সবকিছু স্থানীয় বাস্তবতা মাথায় রেখে।'],
+                    ['cart', 'মোবাইল থেকেও চালান', 'ফোন, ট্যাব বা ল্যাপটপ — যেকোনো ডিভাইস থেকে প্যানেল ব্যবহার করা যায়।'],
+                ];
+            @endphp
+            @foreach ($benefits as [$icon, $title, $desc])
+                <div class="bg-white p-6 hover:bg-paper/40 transition">
+                    <x-ui.icon :name="$icon" class="w-5 h-5 text-leafdk" />
+                    <h4 class="font-bold text-sm mt-3">{{ $title }}</h4>
+                    <p class="text-mute text-xs mt-2 leading-relaxed">{{ $desc }}</p>
+                </div>
+            @endforeach
+        </div>
+    </x-ui.container>
+</x-ui.section>
+
 {{-- ================= COMPANY / SERVICES ================= --}}
 <section id="services" class="py-16 md:py-20">
     <div class="max-w-6xl mx-auto px-4 grid md:grid-cols-2 gap-12 items-center">
