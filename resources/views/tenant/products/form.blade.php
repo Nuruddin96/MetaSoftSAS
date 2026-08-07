@@ -11,16 +11,16 @@
     @csrf
     @if ($product) @method('PUT') @endif
 
-    <div class="bg-white rounded-xl border border-ink/5 p-6 space-y-4">
+    <x-ui.card class="space-y-4">
         <div>
             <label class="text-sm font-medium">প্রোডাক্টের নাম *</label>
             <input name="name" value="{{ old('name', $product?->name) }}" required
-                   class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
+                   class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
         </div>
         <div class="grid md:grid-cols-2 gap-4">
             <div>
                 <label class="text-sm font-medium">ক্যাটাগরি</label>
-                <select name="category_id" class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5 bg-white">
+                <select name="category_id" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
                     <option value="">— নেই —</option>
                     @foreach ($categories as $cat)
                         <option value="{{ $cat->id }}" @selected(old('category_id', $product?->category_id) == $cat->id)>{{ $cat->name }}</option>
@@ -35,16 +35,16 @@
         <div>
             <label class="text-sm font-medium">বর্ণনা</label>
             <textarea name="description" rows="3"
-                class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">{{ old('description', $product?->description) }}</textarea>
+                class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">{{ old('description', $product?->description) }}</textarea>
         </div>
         @if ($product)
             <label class="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="is_active" value="1" @checked($product->is_active)> অ্যাক্টিভ (দোকানে দেখাবে)
             </label>
         @endif
-    </div>
+    </x-ui.card>
 
-    <div class="bg-white rounded-xl border border-ink/5 p-6 space-y-4">
+    <x-ui.card class="space-y-4">
         <p class="font-bold">গ্যালারি ছবি (একাধিক)</p>
         <p class="text-xs text-mute">থাম্বনেইল (উপরের "ছবি" ফিল্ড) হলো ফিচার্ড ছবি — এখানে প্রোডাক্টের আরও ছবি যোগ করুন। সর্বোচ্চ ৮টি, প্রতিটি সর্বোচ্চ ৪MB।</p>
 
@@ -69,12 +69,12 @@
             <label class="text-sm font-medium">নতুন গ্যালারি ছবি যোগ করুন</label>
             <input type="file" name="gallery[]" multiple accept="image/*" class="mt-1 w-full text-sm">
         </div>
-    </div>
+    </x-ui.card>
 
-    <div class="bg-white rounded-xl border border-ink/5 p-6">
+    <x-ui.card>
         <div class="flex items-center justify-between mb-4">
             <p class="font-bold">ভ্যারিয়েন্ট ও দাম</p>
-            <button type="button" onclick="addVariantRow()" class="text-sm text-leaf font-semibold hover:underline">+ ভ্যারিয়েন্ট যোগ</button>
+            <button type="button" onclick="addVariantRow()" class="text-sm text-leaf font-semibold hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">+ ভ্যারিয়েন্ট যোগ</button>
         </div>
         <p class="text-xs text-mute mb-3">একটাই দাম হলে এক রো-ই রাখুন (নাম "Default")। সাইজ/কালার থাকলে প্রতিটার আলাদা রো — প্রতিটার জন্য আলাদা বারকোড অটো তৈরি হবে।</p>
 
@@ -103,11 +103,11 @@
                 </div>
             @endforeach
         </div>
-    </div>
+    </x-ui.card>
 
-    <button class="px-6 py-3 rounded-xl bg-leaf text-white font-bold hover:bg-leafdk">
+    <x-ui.button type="submit" variant="accent" size="lg">
         {{ $product ? 'আপডেট করুন' : 'প্রোডাক্ট যোগ করুন' }}
-    </button>
+    </x-ui.button>
 </form>
 
 @push('scripts')
