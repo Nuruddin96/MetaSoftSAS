@@ -11,7 +11,9 @@ use Illuminate\Http\Request;
  * before the router, not as a route middleware). If the current host is a
  * tenant's verified custom domain, rewrites the request's path to the
  * internal /shop/{slug}/... shape the existing routes already understand —
- * reusing them verbatim, no new/duplicate route registrations.
+ * reusing them verbatim, no new/duplicate route registrations — and makes
+ * the session cookie for this request host-only, since a domain scoped to
+ * .{central_domain} can never be honored by an unrelated apex domain.
  *
  * Deliberately does NOT touch the request's Host. Leaving it alone means
  * route()/url() generation keeps producing URLs on the custom domain for the
@@ -21,7 +23,10 @@ use Illuminate\Http\Request;
  * separate, later piece.)
  *
  * Only active in path tenancy mode — subdomain mode already resolves custom
- * domains natively inside ResolveTenant::resolveBySubdomain().
+ * domains natively inside ResolveTenant::resolveBySubdomain() (that method
+ * still doesn't vary session.domain itself; see the M5b commit for why that
+ * gap is untouched here — it's a separate, pre-existing, never-yet-triggered
+ * issue, not something this milestone is scoped to fix).
  */
 class ResolveCustomDomain
 {
@@ -45,6 +50,17 @@ class ResolveCustomDomain
         if (! $tenant) {
             return $next($request);
         }
+
+        // Host-only session/remember-me/CSRF cookies for THIS masked request
+        // only — SESSION_DOMAIN (e.g. .metasoftbd.com) can never legally be
+        // set for an unrelated apex domain like this one; leaving it in place
+        // would make the browser silently drop the cookie, breaking cart,
+        // CSRF, and panel login. This runs before StartSession resolves the
+        // CookieJar, so session, remember-me, and CSRF cookies alike pick up
+        // the override. Every other request path (central, www, subdomain
+        // mode, unrecognized hosts) returns above and never reaches this line
+        // — config('session.domain') is untouched for them.
+        config(['session.domain' => null]);
 
         $prefixedPath = '/shop/' . $tenant->subdomain . $request->getPathInfo();
         $queryString  = $request->getQueryString();
