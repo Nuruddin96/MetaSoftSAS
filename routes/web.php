@@ -287,20 +287,14 @@ $tenantRoutes = function () {
     });
 };
 
-if (config('app.tenancy_mode', 'subdomain') === 'path') {
-    Route::domain(config('app.central_domain'))
-        ->prefix('shop/{tenant_slug}')
-        ->where(['tenant_slug' => '[a-z0-9-]+'])
-        ->middleware('resolve.tenant')
-        ->group($tenantRoutes);
-} else {
-    Route::middleware('resolve.tenant')->group($tenantRoutes);
-}
-
 /*
 |--------------------------------------------------------------------------
 | 3. www -> apex redirect
 |--------------------------------------------------------------------------
+| Registered BEFORE the tenant routes below on purpose: in path mode that
+| group is no longer domain()-constrained (see the comment there), so this
+| still needs to win the match for any www.{central} request before the
+| tenant group's URI-only prefix match gets a chance to.
 */
 Route::domain('www.' . config('app.central_domain'))->group(function () {
     Route::any('/{any?}', function () {
@@ -309,6 +303,23 @@ Route::domain('www.' . config('app.central_domain'))->group(function () {
         );
     })->where('any', '.*');
 });
+
+if (config('app.tenancy_mode', 'subdomain') === 'path') {
+    // No domain() constraint here. A verified custom-domain request is
+    // rewritten to this exact /shop/{slug} shape by ResolveCustomDomain (a
+    // global, pre-routing middleware) without touching the request's Host —
+    // so it needs to match here on URI alone. The central-domain case (the
+    // overwhelming majority of traffic) is unaffected: the /shop/{tenant_slug}
+    // prefix already fully disambiguates this group from every other route in
+    // this file, so the domain() call was redundant for that case to begin
+    // with. The www case above is guarded by registration order, not domain().
+    Route::prefix('shop/{tenant_slug}')
+        ->where(['tenant_slug' => '[a-z0-9-]+'])
+        ->middleware('resolve.tenant')
+        ->group($tenantRoutes);
+} else {
+    Route::middleware('resolve.tenant')->group($tenantRoutes);
+}
 
 /*
 |--------------------------------------------------------------------------
