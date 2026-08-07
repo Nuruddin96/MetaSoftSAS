@@ -414,35 +414,105 @@
 </section>
 
 {{-- ================= PRICING ================= --}}
-<section id="pricing" class="py-16 bg-white border-y border-ink/5">
-    <div class="max-w-6xl mx-auto px-4">
-        <h2 class="font-disp font-bold text-3xl text-center">সহজ প্রাইসিং</h2>
-        <p class="text-center text-mute mt-3">সব প্ল্যানেই ৭ দিন ফ্রি ট্রায়াল। যেকোনো সময় প্ল্যান বদলাতে পারবেন।</p>
+<x-ui.section id="pricing" tone="white" class="border-y border-ink/5">
+    <x-ui.container size="narrow">
+        <div class="text-center">
+            <x-ui.badge tone="leaf">প্রাইসিং</x-ui.badge>
+            <h2 class="mt-4 font-disp font-bold text-3xl md:text-4xl">সহজ, স্বচ্ছ প্রাইসিং</h2>
+            <p class="mt-3 text-mute">সব প্ল্যানেই ৭ দিন ফ্রি ট্রায়াল। যেকোনো সময় প্ল্যান বদলাতে পারবেন।</p>
+        </div>
 
-        <div class="grid md:grid-cols-3 gap-6 mt-10 max-w-4xl mx-auto">
+        {{-- monthly/yearly toggle — same price fields billing.blade.php already uses (price_monthly / price_yearly),
+             this only changes which one is displayed here; registration/billing logic is untouched --}}
+        <div class="mt-8 flex justify-center">
+            <div class="inline-flex items-center gap-1 p-1 rounded-pill bg-paper border border-ink/10">
+                <button type="button" data-cycle="monthly" class="cycle-btn active px-4 py-2 rounded-pill text-sm font-semibold transition bg-white shadow-sm text-ink">
+                    মাসিক
+                </button>
+                <button type="button" data-cycle="yearly" class="cycle-btn px-4 py-2 rounded-pill text-sm font-semibold transition text-mute">
+                    বাৎসরিক
+                </button>
+            </div>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-6 mt-10">
             @foreach ($plans as $plan)
-                <div class="rounded-2xl border p-7 flex flex-col {{ $loop->iteration === 2 ? 'border-leaf ring-2 ring-leaf/20 relative' : 'border-ink/10' }}">
-                    @if ($loop->iteration === 2)
-                        <span class="absolute -top-3 left-1/2 -translate-x-1/2 bg-leaf text-white text-xs font-bold px-3 py-1 rounded-full">জনপ্রিয়</span>
+                @php
+                    $isPopular = $loop->iteration === 2;
+                    $yearlySavingsPct = $plan->price_monthly > 0
+                        ? (int) round((1 - ($plan->price_yearly / ($plan->price_monthly * 12))) * 100)
+                        : 0;
+                @endphp
+                <x-ui.card
+                    padding="lg"
+                    hoverable
+                    :class="$isPopular
+                        ? 'relative flex flex-col border-leaf ring-2 ring-leaf/20 bg-gradient-to-b from-leaf/5 to-white'
+                        : 'relative flex flex-col'"
+                >
+                    @if ($isPopular)
+                        <span class="absolute -top-3 left-1/2 -translate-x-1/2 bg-leaf text-white text-xs font-bold px-3 py-1 rounded-pill">
+                            জনপ্রিয়
+                        </span>
                     @endif
+
                     <h3 class="font-bold text-lg">{{ $plan->name }}</h3>
-                    <p class="mt-3"><span class="font-disp font-extrabold text-3xl">{{ number_format($plan->price_monthly) }}৳</span><span class="text-mute text-sm">/মাস</span></p>
-                    <ul class="mt-5 space-y-2.5 text-sm text-mute flex-1">
-                        <li>✓ {{ $plan->max_products ? number_format($plan->max_products) . 'টি প্রোডাক্ট' : 'আনলিমিটেড প্রোডাক্ট' }}</li>
-                        <li>✓ {{ $plan->max_staff ? $plan->max_staff . ' জন স্টাফ' : 'আনলিমিটেড স্টাফ' }}</li>
-                        <li>✓ {{ $plan->max_warehouses ? $plan->max_warehouses . 'টি ওয়্যারহাউজ' : 'আনলিমিটেড ওয়্যারহাউজ' }}</li>
-                        <li>✓ কুরিয়ার, ফ্রড চেকার</li>
-                        <li>{{ $plan->allow_pos ? '✓ POS বিক্রি' : '✗ POS নেই' }}</li>
-                        <li>{{ $plan->allow_custom_domain ? '✓ নিজের ডোমেইন (myshop.com)' : '✗ কাস্টম ডোমেইন নেই' }}</li>
+
+                    <div class="mt-3">
+                        <p data-cycle-price="monthly">
+                            <span class="font-disp font-extrabold text-4xl">{{ number_format($plan->price_monthly) }}৳</span>
+                            <span class="text-mute text-sm">/মাস</span>
+                        </p>
+                        <p data-cycle-price="yearly" class="hidden">
+                            <span class="font-disp font-extrabold text-4xl">{{ number_format($plan->price_yearly) }}৳</span>
+                            <span class="text-mute text-sm">/বছর</span>
+                            @if ($yearlySavingsPct > 0)
+                                <span class="ml-1 inline-block text-xs font-semibold text-leafdk bg-leaf/10 px-2 py-0.5 rounded-pill align-middle">
+                                    {{ $yearlySavingsPct }}% সেভ
+                                </span>
+                            @endif
+                        </p>
+                    </div>
+
+                    <ul class="mt-6 space-y-3 text-sm text-mute flex-1">
+                        <li class="flex items-start gap-2.5">
+                            <x-ui.icon name="shield-check" class="w-4.5 h-4.5 text-leaf shrink-0 mt-0.5" />
+                            {{ $plan->max_products ? number_format($plan->max_products) . 'টি প্রোডাক্ট' : 'আনলিমিটেড প্রোডাক্ট' }}
+                        </li>
+                        <li class="flex items-start gap-2.5">
+                            <x-ui.icon name="shield-check" class="w-4.5 h-4.5 text-leaf shrink-0 mt-0.5" />
+                            {{ $plan->max_staff ? $plan->max_staff . ' জন স্টাফ' : 'আনলিমিটেড স্টাফ' }}
+                        </li>
+                        <li class="flex items-start gap-2.5">
+                            <x-ui.icon name="shield-check" class="w-4.5 h-4.5 text-leaf shrink-0 mt-0.5" />
+                            {{ $plan->max_warehouses ? $plan->max_warehouses . 'টি ওয়্যারহাউজ' : 'আনলিমিটেড ওয়্যারহাউজ' }}
+                        </li>
+                        <li class="flex items-start gap-2.5">
+                            <x-ui.icon name="shield-check" class="w-4.5 h-4.5 text-leaf shrink-0 mt-0.5" />
+                            কুরিয়ার, ফ্রড চেকার
+                        </li>
+                        <li class="flex items-start gap-2.5 {{ ! $plan->allow_pos ? 'opacity-50' : '' }}">
+                            <x-ui.icon name="{{ $plan->allow_pos ? 'shield-check' : 'cart' }}" class="w-4.5 h-4.5 {{ $plan->allow_pos ? 'text-leaf' : 'text-mute' }} shrink-0 mt-0.5" />
+                            {{ $plan->allow_pos ? 'POS বিক্রি' : 'POS নেই' }}
+                        </li>
+                        <li class="flex items-start gap-2.5 {{ ! $plan->allow_custom_domain ? 'opacity-50' : '' }}">
+                            <x-ui.icon name="{{ $plan->allow_custom_domain ? 'shield-check' : 'globe' }}" class="w-4.5 h-4.5 {{ $plan->allow_custom_domain ? 'text-leaf' : 'text-mute' }} shrink-0 mt-0.5" />
+                            {{ $plan->allow_custom_domain ? 'নিজের ডোমেইন (myshop.com)' : 'কাস্টম ডোমেইন নেই' }}
+                        </li>
                     </ul>
-                    <a href="{{ route('register') }}" class="mt-6 text-center px-5 py-3 rounded-xl font-semibold {{ $loop->iteration === 2 ? 'bg-leaf text-white hover:bg-leafdk' : 'border border-ink/15 hover:bg-ink/5' }}">
+
+                    <x-ui.button
+                        href="{{ route('register') }}"
+                        :variant="$isPopular ? 'accent' : 'outline'"
+                        class="mt-6 w-full"
+                    >
                         ট্রায়াল শুরু করুন
-                    </a>
-                </div>
+                    </x-ui.button>
+                </x-ui.card>
             @endforeach
         </div>
-    </div>
-</section>
+    </x-ui.container>
+</x-ui.section>
 
 {{-- ================= OTHER SERVICES ================= --}}
 <section class="py-14 text-center px-4 bg-ink text-white">
@@ -486,5 +556,29 @@
     </div>
     <div class="border-t border-white/10 py-4 text-center text-xs">© {{ date('Y') }} MetaSoft BD — সর্বস্বত্ব সংরক্ষিত</div>
 </footer>
+
+<script>
+    // Pricing monthly/yearly toggle — display only, no form submission here.
+    // The actual billing cycle is chosen later on the real billing page
+    // (resources/views/tenant/billing.blade.php), which already posts
+    // cycle=monthly|yearly to BillingController — this toggle doesn't touch that.
+    document.querySelectorAll('.cycle-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const cycle = btn.dataset.cycle;
+
+            document.querySelectorAll('.cycle-btn').forEach((b) => {
+                const isActive = b === btn;
+                b.classList.toggle('bg-white', isActive);
+                b.classList.toggle('shadow-sm', isActive);
+                b.classList.toggle('text-ink', isActive);
+                b.classList.toggle('text-mute', !isActive);
+            });
+
+            document.querySelectorAll('[data-cycle-price]').forEach((el) => {
+                el.classList.toggle('hidden', el.dataset.cyclePrice !== cycle);
+            });
+        });
+    });
+</script>
 
 @endsection

@@ -18,10 +18,19 @@
     // WhatsApp uses its real (filled) brand mark instead of the stroke style,
     // for brand recognition — everything else shares one consistent line style.
     $isFilled = $name === 'whatsapp';
+
+    // Explicit fallback instead of merge(['class' => 'w-6 h-6', ...]): Blade's
+    // attribute merge APPENDS to an incoming class="" rather than replacing it,
+    // so a caller-provided size (e.g. class="w-5 h-5") wouldn't reliably beat
+    // the default in the CSS cascade — whichever utility Tailwind happens to
+    // place later in the compiled stylesheet wins, regardless of which one
+    // appears later in the HTML. Resolving the size here guarantees exactly
+    // one size class ever reaches the element.
+    $classes = $attributes->get('class') ?: 'w-6 h-6';
 @endphp
 
-<svg {{ $attributes->merge([
-        'class' => 'w-6 h-6',
+<svg {{ $attributes->except('class')->merge([
+        'class' => $classes,
         'viewBox' => '0 0 24 24',
         'fill' => $isFilled ? 'currentColor' : 'none',
         'stroke' => $isFilled ? 'none' : 'currentColor',
