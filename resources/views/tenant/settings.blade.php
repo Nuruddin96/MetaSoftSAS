@@ -105,8 +105,16 @@
         @elseif ($tenant->custom_domain_verified && $tenant->custom_domain)
             <p class="text-sm text-leafdk mt-2">✅ সক্রিয়: <b>{{ $tenant->custom_domain }}</b></p>
         @elseif ($tenant->custom_domain_request_status === 'pending')
-            <p class="text-xs text-mute mb-2">আপনার রিকোয়েস্ট পর্যালোচনাধীন।</p>
-            <p class="text-sm">⏳ <b>{{ $tenant->custom_domain_requested }}</b> — অ্যাডমিনের অনুমোদনের অপেক্ষায়</p>
+            <p class="text-xs text-mute mb-3">DNS-এ নিচের TXT রেকর্ডটি যোগ করুন — যোগ করার পর আমাদের টিম যাচাই করে পরের ধাপে নিয়ে যাবে।</p>
+            <div class="bg-paper rounded-btn p-3 text-xs font-mono mb-3 space-y-1 overflow-x-auto">
+                <p><span class="text-mute">Type:</span> TXT</p>
+                <p><span class="text-mute">Host/Name:</span> @ ({{ $tenant->custom_domain_requested }})</p>
+                <p><span class="text-mute">Value:</span> {{ $domainTxtValue }}</p>
+            </div>
+            <p class="text-sm">⏳ <b>{{ $tenant->custom_domain_requested }}</b> — DNS যাচাইয়ের অপেক্ষায়</p>
+        @elseif ($tenant->custom_domain_request_status === 'dns_verified')
+            <p class="text-xs text-leafdk mb-2">✅ DNS যাচাই সম্পন্ন হয়েছে।</p>
+            <p class="text-sm">⏳ <b>{{ $tenant->custom_domain_requested }}</b> — আমাদের টিম সেটআপ শেষ করলেই চালু হয়ে যাবে</p>
         @else
             @if ($tenant->custom_domain_request_status === 'rejected')
                 <p class="text-xs text-red-600 mb-3">আপনার আগের রিকোয়েস্টটি বাতিল হয়েছে — আবার চেষ্টা করুন বা অ্যাডমিনের সাথে যোগাযোগ করুন।</p>

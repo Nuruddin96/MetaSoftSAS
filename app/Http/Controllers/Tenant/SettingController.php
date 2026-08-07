@@ -7,18 +7,24 @@ use App\Models\CourierSetting;
 use App\Models\MarketingSetting;
 use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
+use App\Services\Domain\DomainManager;
 use Illuminate\Http\Request;
 
 class SettingController extends Controller
 {
     public function index()
     {
+        $tenant = app('currentTenant');
+
         return view('tenant.settings', [
             'messenger' => MessengerSetting::first(),
-            'tenant'   => app('currentTenant'),
+            'tenant'   => $tenant,
             'couriers' => CourierSetting::get()->keyBy('provider'),
             'marketing' => MarketingSetting::firstOrNew(['tenant_id' => app('currentTenant')->id]),
             'store'    => StoreSetting::pluck('value', 'key'),
+            'domainTxtValue' => $tenant->custom_domain_verification_token
+                ? DomainManager::expectedTxtValue($tenant->custom_domain_verification_token)
+                : null,
         ]);
     }
 
@@ -124,10 +130,12 @@ class SettingController extends Controller
         ]);
 
         $tenant->update([
-            'custom_domain_requested'      => strtolower($data['custom_domain_requested']),
-            'custom_domain_request_status' => 'pending',
+            'custom_domain_requested'          => strtolower($data['custom_domain_requested']),
+            'custom_domain_request_status'     => 'pending',
+            'custom_domain_verification_token' => DomainManager::generateVerificationToken(),
+            'custom_domain_dns_verified_at'     => null,
         ]);
 
-        return back()->with('success', 'ডোমেইন রিকোয়েস্ট পাঠানো হয়েছে — অ্যাডমিন যাচাই করে চালু করে দেবে।');
+        return back()->with('success', 'ডোমেইন রিকোয়েস্ট পাঠানো হয়েছে — DNS TXT রেকর্ড যোগ করুন, আমাদের টিম যাচাই করে চালু করে দেবে।');
     }
 }
