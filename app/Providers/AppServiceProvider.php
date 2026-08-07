@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Services\Domain\DomainDriver;
+use App\Services\Domain\ManualProvisionDriver;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -11,7 +13,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(DomainDriver::class, function () {
+            return match (config('domains.driver', 'manual')) {
+                default => new ManualProvisionDriver(),
+            };
+        });
     }
 
     /**
