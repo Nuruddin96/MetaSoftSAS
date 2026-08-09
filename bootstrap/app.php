@@ -46,18 +46,17 @@ return Application::configure(basePath: dirname(__DIR__))
         // entirely, since an explicitly-named route() parameter never
         // consults defaultParameters in the first place.
         //
-        // Also deliberately NOT gating tenant_slug on
-        // config('app.tenancy_mode') === 'path': tenant.login only needs
-        // tenant_slug when currentTenant is actually bound, and that's
-        // already what app()->bound('currentTenant') tells us directly.
-        // Adding a tenancy_mode check on top only gave this a second way to
-        // fail — e.g. if that config read doesn't come back as 'path' for
-        // whatever reason, this used to silently fall through to the
-        // parameterless route('tenant.login') call below and reproduce the
-        // exact "Missing required parameter [tenant_slug]" error this
-        // closure exists to prevent. Passing tenant_slug whenever
-        // currentTenant is bound is safe in subdomain mode too — an unused
-        // named route() parameter just becomes a harmless query string.
+        // Also deliberately NOT reading tenant_slug from app('currentTenant')
+        // (bound by resolve.tenant): that binding is unreliable at this
+        // point because Laravel sorts middleware by $middlewarePriority,
+        // which can run auth:tenant (and therefore this redirect) before
+        // resolve.tenant regardless of their order in the route group —
+        // confirmed by production still hitting the parameterless
+        // route('tenant.login') fallback below with currentTenant never
+        // bound. $request->route('tenant_slug') doesn't have this problem:
+        // it comes straight from route matching, which always completes
+        // before any middleware runs, so it's populated here even when
+        // resolve.tenant hasn't executed yet.
         $middleware->redirectGuestsTo(function (Request $request) {
             if ($request->routeIs('super.*')) {
                 return route('super.login');
@@ -67,8 +66,8 @@ return Application::configure(basePath: dirname(__DIR__))
                 return route('affiliate.login');
             }
 
-            if (app()->bound('currentTenant')) {
-                return route('tenant.login', ['tenant_slug' => app('currentTenant')->subdomain]);
+            if ($request->route('tenant_slug')) {
+                return route('tenant.login', ['tenant_slug' => $request->route('tenant_slug')]);
             }
 
             return route('tenant.login');
