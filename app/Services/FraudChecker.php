@@ -3,16 +3,52 @@
 namespace App\Services;
 
 use App\Models\FraudCheckLog;
+use App\Models\Order;
 use App\Services\Courier\CourierManager;
 
 class FraudChecker
 {
-    public function check(string $phone): array
+    /**
+     * This tenant's OWN order history for a phone number — complements
+     * check()'s courier-wide history. Nothing else in the project computes
+     * this yet, so it lives here as a small additive method rather than a
+     * separate service, next to the courier-based check it's shown
+     * alongside on the order/pending-order screen.
+     *
+     * @return array{phone: string, total: int, delivered: int, cancelled: int, returned: int, pending: int}
+     */
+    public function internalHistory(string $phone): array
+    {
+        $phone = $this->normalizePhone($phone);
+
+        $counts = Order::where('customer_phone', $phone)
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status');
+
+        return [
+            'phone' => $phone,
+            'total' => (int) $counts->sum(),
+            'delivered' => (int) ($counts['delivered'] ?? 0),
+            'cancelled' => (int) ($counts['cancelled'] ?? 0),
+            'returned' => (int) ($counts['returned'] ?? 0),
+            'pending' => (int) ($counts['pending'] ?? 0),
+        ];
+    }
+
+    protected function normalizePhone(string $phone): string
     {
         $phone = preg_replace('/\D/', '', $phone);
         if (str_starts_with($phone, '880')) {
             $phone = '0'.substr($phone, 3);
         }
+
+        return $phone;
+    }
+
+    public function check(string $phone): array
+    {
+        $phone = $this->normalizePhone($phone);
 
         $services = CourierManager::activeServices();
 

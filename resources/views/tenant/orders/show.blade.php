@@ -4,36 +4,110 @@
 
 @section('content')
 <div class="flex items-center justify-between mb-6">
-    <h1 class="font-disp font-bold text-2xl">{{ $order->order_number }}</h1>
+    <h1 class="font-disp font-bold text-2xl flex items-center gap-2">
+        {{ $order->order_number }}
+        @if ($order->status === 'pending' && $order->source === 'messenger')
+            <span class="text-xs px-2.5 py-1 rounded-pill font-semibold bg-amber/15 text-ink">📩 মেসেঞ্জার থেকে — পেন্ডিং</span>
+        @endif
+    </h1>
     <a href="{{ route('tenant.orders.index') }}" class="text-sm text-mute hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">← সব অর্ডার</a>
 </div>
 
 <div class="grid lg:grid-cols-3 gap-6">
     <div class="lg:col-span-2 space-y-6">
 
-        <x-ui.card padding="none">
-            <div class="px-5 py-3.5 border-b border-ink/5 font-bold text-sm">আইটেম</div>
-            <table class="w-full text-sm">
-                <tbody>
-                @foreach ($order->items as $item)
-                    <tr class="border-b border-ink/5 last:border-0">
-                        <td class="px-5 py-3">
-                            {{ $item->product_name }}
-                            @if ($item->variant_name && $item->variant_name !== 'Default')
-                                <span class="text-mute text-xs">({{ $item->variant_name }})</span>
-                            @endif
-                        </td>
-                        <td class="px-5 py-3 text-mute">{{ $item->quantity }} × {{ number_format($item->unit_price) }}৳</td>
-                        <td class="px-5 py-3 text-right font-medium">{{ number_format($item->line_total) }}৳</td>
-                    </tr>
-                @endforeach
-                <tr><td colspan="2" class="px-5 py-2 text-right text-mute">ডেলিভারি চার্জ</td>
-                    <td class="px-5 py-2 text-right">{{ number_format($order->delivery_charge) }}৳</td></tr>
-                <tr class="font-bold text-base"><td colspan="2" class="px-5 py-3 text-right">মোট</td>
-                    <td class="px-5 py-3 text-right">{{ number_format($order->total) }}৳</td></tr>
-                </tbody>
-            </table>
-        </x-ui.card>
+        @if ($order->items->isNotEmpty())
+            <x-ui.card padding="none">
+                <div class="px-5 py-3.5 border-b border-ink/5 font-bold text-sm">আইটেম</div>
+                <table class="w-full text-sm">
+                    <tbody>
+                    @foreach ($order->items as $item)
+                        <tr class="border-b border-ink/5 last:border-0">
+                            <td class="px-5 py-3">
+                                {{ $item->product_name }}
+                                @if ($item->variant_name && $item->variant_name !== 'Default')
+                                    <span class="text-mute text-xs">({{ $item->variant_name }})</span>
+                                @endif
+                            </td>
+                            <td class="px-5 py-3 text-mute">{{ $item->quantity }} × {{ number_format($item->unit_price) }}৳</td>
+                            <td class="px-5 py-3 text-right font-medium">{{ number_format($item->line_total) }}৳</td>
+                        </tr>
+                    @endforeach
+                    <tr><td colspan="2" class="px-5 py-2 text-right text-mute">ডেলিভারি চার্জ</td>
+                        <td class="px-5 py-2 text-right">{{ number_format($order->delivery_charge) }}৳</td></tr>
+                    <tr class="font-bold text-base"><td colspan="2" class="px-5 py-3 text-right">মোট</td>
+                        <td class="px-5 py-3 text-right">{{ number_format($order->total) }}৳</td></tr>
+                    </tbody>
+                </table>
+            </x-ui.card>
+        @else
+            <x-ui.card>
+                <p class="font-bold text-sm mb-1">অর্ডার সম্পূর্ণ করুন</p>
+                <p class="text-xs text-mute mb-4">প্রোডাক্ট এখনো বাছাই করা হয়নি — প্রোডাক্ট/ভ্যারিয়ান্ট বাছাই করে, দাম নিশ্চিত করে অর্ডার কনফার্ম করুন।</p>
+
+                <form method="POST" action="{{ route('tenant.orders.complete', $order) }}" id="completeForm" class="space-y-4">
+                    @csrf
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <p class="font-bold text-sm">প্রোডাক্ট</p>
+                            <button type="button" onclick="addRow()" class="text-sm text-leaf font-semibold hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">+ প্রোডাক্ট যোগ করুন</button>
+                        </div>
+                        <div id="itemRows" class="space-y-3"></div>
+                        <p id="noItemMsg" class="text-sm text-mute text-center py-6">উপরের বাটনে ক্লিক করে প্রোডাক্ট যোগ করুন</p>
+                        <div class="text-right mt-4 pt-4 border-t border-ink/10">
+                            <span class="text-sm text-mute">সাবটোটাল: </span>
+                            <span class="font-bold text-lg" id="subtotalShow">0৳</span>
+                        </div>
+                    </div>
+
+                    <div class="grid md:grid-cols-3 gap-4 pt-2 border-t border-ink/10">
+                        <div>
+                            <label class="text-sm font-medium">পেমেন্ট পদ্ধতি</label>
+                            <select name="payment_method" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
+                                <option value="cod">ক্যাশ অন ডেলিভারি</option>
+                                <option value="cash">ক্যাশ</option>
+                                <option value="bkash">বিকাশ</option>
+                                <option value="nagad">নগদ</option>
+                                <option value="bank">ব্যাংক</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium">ডেলিভারি চার্জ</label>
+                            <input name="delivery_charge" id="deliveryChargeInput" type="number" step="0.01" min="0" value="0" oninput="calcTotal()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium">ডিসকাউন্ট</label>
+                            <input name="discount" id="discountInput" type="number" step="0.01" min="0" value="0" oninput="calcTotal()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
+                        </div>
+                    </div>
+
+                    <div class="text-right py-2">
+                        <span class="text-sm text-mute">সর্বমোট: </span>
+                        <span class="font-bold text-xl" id="grandTotalShow">0৳</span>
+                    </div>
+
+                    @if ($errors->any())
+                        <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-btn p-3">
+                            <ul class="list-disc ml-4">@foreach ($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul>
+                        </div>
+                    @endif
+
+                    <x-ui.button type="submit" variant="accent" size="lg" class="w-full">✓ অর্ডার কনফার্ম করুন</x-ui.button>
+                </form>
+            </x-ui.card>
+        @endif
+
+        @if ($messengerMessages->isNotEmpty())
+            <x-ui.card padding="none">
+                <div class="px-5 py-3.5 border-b border-ink/5 font-bold text-sm flex items-center justify-between">
+                    <span>📩 মেসেঞ্জার কথোপকথন</span>
+                    <a href="{{ route('tenant.messenger.show', $order->messenger_psid) }}" class="text-xs font-normal text-leaf hover:underline">ইনবক্সে খুলুন →</a>
+                </div>
+                <div class="p-5">
+                    @include('tenant.messenger._thread', ['messages' => $messengerMessages])
+                </div>
+            </x-ui.card>
+        @endif
 
         @if ($order->note)
             <x-ui.card tone="amber" padding="sm" class="text-sm"><b>নোট:</b> {{ $order->note }}</x-ui.card>
@@ -153,10 +227,97 @@
         };
         const [cls, label] = styles[res.verdict] || styles.new;
         box.className = 'mt-3 text-sm rounded-lg p-3 ' + cls;
+        const internal = res.internal
+            ? `<p class="text-xs mt-2 pt-2 border-t border-ink/10">এই দোকানের নিজস্ব অর্ডার: ${res.internal.total} · ডেলিভারড: ${res.internal.delivered} · বাতিল: ${res.internal.cancelled} · রিটার্ন: ${res.internal.returned} · পেন্ডিং: ${res.internal.pending}</p>`
+            : '';
         box.innerHTML = `<p class="font-bold">${label}${res.success_ratio !== null ? ' — সাকসেস ' + res.success_ratio + '%' : ''}</p>
-            <p class="text-xs mt-1">মোট অর্ডার: ${res.total} · ডেলিভারড: ${res.delivered} · রিটার্ন: ${res.returned}</p>
+            <p class="text-xs mt-1">মোট অর্ডার (কুরিয়ার): ${res.total} · ডেলিভারড: ${res.delivered} · রিটার্ন: ${res.returned}</p>
+            ${internal}
             <p class="text-[10px] text-mute mt-1">যে কুরিয়ারের API যুক্ত আছে শুধু তার ডেটা দেখায়</p>`;
     }
 </script>
+@if ($order->items->isEmpty())
+<script>
+    const products = @json($productsJson);
+    let rowIdx = 0;
+
+    function addRow() {
+        document.getElementById('noItemMsg').style.display = 'none';
+        const wrap = document.getElementById('itemRows');
+        const div = document.createElement('div');
+        div.className = 'flex gap-3 items-center';
+        div.id = 'row' + rowIdx;
+
+        let productOptions = products.map((p, pi) => `<option value="${pi}">${p.name}</option>`).join('');
+
+        div.innerHTML = `
+            <select class="prodSelect flex-1 rounded-lg border border-ink/15 px-3 py-2 text-sm bg-white" onchange="updateVariants(${rowIdx})">
+                <option value="">প্রোডাক্ট বাছাই করুন</option>${productOptions}
+            </select>
+            <select class="variantSelect w-48 rounded-lg border border-ink/15 px-3 py-2 text-sm bg-white" onchange="calcTotal()"></select>
+            <input type="number" class="qtyInput w-20 rounded-lg border border-ink/15 px-3 py-2 text-sm" value="1" min="1" onchange="calcTotal()">
+            <span class="lineTotal w-24 text-right text-sm font-semibold">0৳</span>
+            <button type="button" onclick="removeRow(${rowIdx})" class="text-red-600 text-sm">✕</button>
+        `;
+        wrap.appendChild(div);
+        rowIdx++;
+    }
+
+    function updateVariants(idx) {
+        const row = document.getElementById('row' + idx);
+        const pi = row.querySelector('.prodSelect').value;
+        const variantSelect = row.querySelector('.variantSelect');
+        variantSelect.innerHTML = '';
+        if (pi === '') { calcTotal(); return; }
+        products[pi].variants.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v.id; opt.dataset.price = v.price;
+            opt.textContent = `${v.name} — ${v.price}৳`;
+            variantSelect.appendChild(opt);
+        });
+        calcTotal();
+    }
+
+    function removeRow(idx) {
+        document.getElementById('row' + idx)?.remove();
+        if (!document.getElementById('itemRows').children.length) document.getElementById('noItemMsg').style.display = 'block';
+        calcTotal();
+    }
+
+    function calcTotal() {
+        let subtotal = 0;
+        document.querySelectorAll('#itemRows > div').forEach(row => {
+            const variantSelect = row.querySelector('.variantSelect');
+            const qty = parseInt(row.querySelector('.qtyInput').value) || 0;
+            const opt = variantSelect.options[variantSelect.selectedIndex];
+            const price = opt ? parseFloat(opt.dataset.price || 0) : 0;
+            const lineTotal = price * qty;
+            row.querySelector('.lineTotal').textContent = lineTotal.toLocaleString() + '৳';
+            subtotal += lineTotal;
+        });
+        document.getElementById('subtotalShow').textContent = subtotal.toLocaleString() + '৳';
+
+        const delivery = parseFloat(document.getElementById('deliveryChargeInput').value) || 0;
+        const discount = Math.min(parseFloat(document.getElementById('discountInput').value) || 0, subtotal);
+        document.getElementById('grandTotalShow').textContent = (subtotal - discount + delivery).toLocaleString() + '৳';
+    }
+
+    document.getElementById('completeForm').addEventListener('submit', function (e) {
+        document.querySelectorAll('#itemRows > div').forEach(row => {
+            const variantSelect = row.querySelector('.variantSelect');
+            if (variantSelect.value) {
+                const vi = document.createElement('input');
+                vi.type = 'hidden'; vi.name = 'variant_ids[]'; vi.value = variantSelect.value;
+                this.appendChild(vi);
+                const qi = document.createElement('input');
+                qi.type = 'hidden'; qi.name = 'quantities[]'; qi.value = row.querySelector('.qtyInput').value;
+                this.appendChild(qi);
+            }
+        });
+    });
+
+    addRow(); // start with one row
+</script>
+@endif
 @endpush
 @endsection

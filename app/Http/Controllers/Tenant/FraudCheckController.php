@@ -12,6 +12,8 @@ class FraudCheckController extends Controller
     {
         $data = $request->validate(['phone' => 'required|string|max:20']);
 
-        return response()->json($checker->check($data['phone']));
+        return response()->json($checker->check($data['phone']) + [
+            'internal' => $checker->internalHistory($data['phone']),
+        ]);
     }
 }
