@@ -3,23 +3,23 @@
 @section('title', $order->order_number)
 
 @section('content')
-<div class="flex items-center justify-between mb-6">
-    <h1 class="font-disp font-bold text-2xl flex items-center gap-2">
+<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+    <h1 class="font-disp font-bold text-xl sm:text-2xl flex flex-wrap items-center gap-2 break-words">
         {{ $order->order_number }}
         @if ($order->status === 'pending' && $order->source === 'messenger')
             <span class="text-xs px-2.5 py-1 rounded-pill font-semibold bg-amber/15 text-ink">📩 মেসেঞ্জার থেকে — পেন্ডিং</span>
         @endif
     </h1>
-    <a href="{{ route('tenant.orders.index') }}" class="text-sm text-mute hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">← সব অর্ডার</a>
+    <a href="{{ route('tenant.orders.index') }}" class="shrink-0 text-sm text-mute hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">← সব অর্ডার</a>
 </div>
 
 <div class="grid lg:grid-cols-3 gap-6">
-    <div class="lg:col-span-2 space-y-6">
+    <div class="lg:col-span-2 space-y-6 min-w-0">
 
         @if ($order->items->isNotEmpty())
-            <x-ui.card padding="none">
+            <x-ui.card padding="none" class="overflow-x-auto min-w-0">
                 <div class="px-5 py-3.5 border-b border-ink/5 font-bold text-sm">আইটেম</div>
-                <table class="w-full text-sm">
+                <table class="w-full text-sm min-w-[420px]">
                     <tbody>
                     @foreach ($order->items as $item)
                         <tr class="border-b border-ink/5 last:border-0">
@@ -29,14 +29,14 @@
                                     <span class="text-mute text-xs">({{ $item->variant_name }})</span>
                                 @endif
                             </td>
-                            <td class="px-5 py-3 text-mute">{{ $item->quantity }} × {{ number_format($item->unit_price) }}৳</td>
-                            <td class="px-5 py-3 text-right font-medium">{{ number_format($item->line_total) }}৳</td>
+                            <td class="px-5 py-3 text-mute whitespace-nowrap">{{ $item->quantity }} × {{ number_format($item->unit_price) }}৳</td>
+                            <td class="px-5 py-3 text-right font-medium whitespace-nowrap">{{ number_format($item->line_total) }}৳</td>
                         </tr>
                     @endforeach
                     <tr><td colspan="2" class="px-5 py-2 text-right text-mute">ডেলিভারি চার্জ</td>
-                        <td class="px-5 py-2 text-right">{{ number_format($order->delivery_charge) }}৳</td></tr>
+                        <td class="px-5 py-2 text-right whitespace-nowrap">{{ number_format($order->delivery_charge) }}৳</td></tr>
                     <tr class="font-bold text-base"><td colspan="2" class="px-5 py-3 text-right">মোট</td>
-                        <td class="px-5 py-3 text-right">{{ number_format($order->total) }}৳</td></tr>
+                        <td class="px-5 py-3 text-right whitespace-nowrap">{{ number_format($order->total) }}৳</td></tr>
                     </tbody>
                 </table>
             </x-ui.card>
@@ -48,7 +48,7 @@
                 <form method="POST" action="{{ route('tenant.orders.complete', $order) }}" id="completeForm" class="space-y-4">
                     @csrf
                     <div>
-                        <div class="flex items-center justify-between mb-2">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                             <p class="font-bold text-sm">প্রোডাক্ট</p>
                             <button type="button" onclick="addRow()" class="text-sm text-leaf font-semibold hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">+ প্রোডাক্ট যোগ করুন</button>
                         </div>
@@ -99,11 +99,11 @@
 
         @if ($messengerMessages->isNotEmpty())
             <x-ui.card padding="none">
-                <div class="px-5 py-3.5 border-b border-ink/5 font-bold text-sm flex items-center justify-between">
+                <div class="px-5 py-3.5 border-b border-ink/5 font-bold text-sm flex flex-wrap items-center justify-between gap-2">
                     <span>📩 মেসেঞ্জার কথোপকথন</span>
-                    <a href="{{ route('tenant.messenger.show', $order->messenger_psid) }}" class="text-xs font-normal text-leaf hover:underline">ইনবক্সে খুলুন →</a>
+                    <a href="{{ route('tenant.messenger.show', $order->messenger_psid) }}" class="shrink-0 text-xs font-normal text-leaf hover:underline">ইনবক্সে খুলুন →</a>
                 </div>
-                <div class="p-5">
+                <div class="p-3 sm:p-5">
                     @include('tenant.messenger._thread', ['messages' => $messengerMessages])
                 </div>
             </x-ui.card>
@@ -114,7 +114,7 @@
         @endif
     </div>
 
-    <div class="space-y-6">
+    <div class="space-y-6 min-w-0">
         @php
             $channelMeta = [
                 'website'   => 'ওয়েবসাইট',
@@ -145,7 +145,7 @@
             <p class="font-bold mb-2">কাস্টমার</p>
             <p>{{ $order->customer_name }}</p>
             <p><a href="tel:{{ $order->customer_phone }}" class="text-leaf font-medium">{{ $order->customer_phone }}</a></p>
-            <p class="text-mute">{{ $order->customer_address }}</p>
+            <p class="text-mute break-words">{{ $order->customer_address }}</p>
             <p class="text-xs text-mute pt-1">পেমেন্ট: {{ strtoupper($order->payment_method) }} · {{ $order->created_at->format('d M Y, h:i A') }}</p>
         </x-ui.card>
 
@@ -245,19 +245,21 @@
         document.getElementById('noItemMsg').style.display = 'none';
         const wrap = document.getElementById('itemRows');
         const div = document.createElement('div');
-        div.className = 'flex gap-3 items-center';
+        div.className = 'flex flex-col sm:flex-row gap-3 sm:items-center border border-ink/10 sm:border-0 rounded-lg p-3 sm:p-0';
         div.id = 'row' + rowIdx;
 
         let productOptions = products.map((p, pi) => `<option value="${pi}">${p.name}</option>`).join('');
 
         div.innerHTML = `
-            <select class="prodSelect flex-1 rounded-lg border border-ink/15 px-3 py-2 text-sm bg-white" onchange="updateVariants(${rowIdx})">
+            <select class="prodSelect w-full sm:flex-1 rounded-lg border border-ink/15 px-3 py-2.5 sm:py-2 text-sm bg-white" onchange="updateVariants(${rowIdx})">
                 <option value="">প্রোডাক্ট বাছাই করুন</option>${productOptions}
             </select>
-            <select class="variantSelect w-48 rounded-lg border border-ink/15 px-3 py-2 text-sm bg-white" onchange="calcTotal()"></select>
-            <input type="number" class="qtyInput w-20 rounded-lg border border-ink/15 px-3 py-2 text-sm" value="1" min="1" onchange="calcTotal()">
-            <span class="lineTotal w-24 text-right text-sm font-semibold">0৳</span>
-            <button type="button" onclick="removeRow(${rowIdx})" class="text-red-600 text-sm">✕</button>
+            <select class="variantSelect w-full sm:w-48 rounded-lg border border-ink/15 px-3 py-2.5 sm:py-2 text-sm bg-white" onchange="calcTotal()"></select>
+            <div class="flex items-center gap-3">
+                <input type="number" class="qtyInput w-20 shrink-0 rounded-lg border border-ink/15 px-3 py-2.5 sm:py-2 text-sm" value="1" min="1" onchange="calcTotal()">
+                <span class="lineTotal flex-1 sm:flex-none sm:w-24 text-right text-sm font-semibold">0৳</span>
+                <button type="button" onclick="removeRow(${rowIdx})" class="shrink-0 text-red-600 text-sm px-2 py-1" aria-label="প্রোডাক্ট মুছুন">✕</button>
+            </div>
         `;
         wrap.appendChild(div);
         rowIdx++;
