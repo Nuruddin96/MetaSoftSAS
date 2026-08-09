@@ -45,6 +45,19 @@ return Application::configure(basePath: dirname(__DIR__))
         // codebase) and passing tenant_slug explicitly sidesteps that
         // entirely, since an explicitly-named route() parameter never
         // consults defaultParameters in the first place.
+        //
+        // Also deliberately NOT gating tenant_slug on
+        // config('app.tenancy_mode') === 'path': tenant.login only needs
+        // tenant_slug when currentTenant is actually bound, and that's
+        // already what app()->bound('currentTenant') tells us directly.
+        // Adding a tenancy_mode check on top only gave this a second way to
+        // fail — e.g. if that config read doesn't come back as 'path' for
+        // whatever reason, this used to silently fall through to the
+        // parameterless route('tenant.login') call below and reproduce the
+        // exact "Missing required parameter [tenant_slug]" error this
+        // closure exists to prevent. Passing tenant_slug whenever
+        // currentTenant is bound is safe in subdomain mode too — an unused
+        // named route() parameter just becomes a harmless query string.
         $middleware->redirectGuestsTo(function (Request $request) {
             if ($request->routeIs('super.*')) {
                 return route('super.login');
@@ -54,7 +67,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 return route('affiliate.login');
             }
 
-            if (app()->bound('currentTenant') && config('app.tenancy_mode', 'subdomain') === 'path') {
+            if (app()->bound('currentTenant')) {
                 return route('tenant.login', ['tenant_slug' => app('currentTenant')->subdomain]);
             }
 
