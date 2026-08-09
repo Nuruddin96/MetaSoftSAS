@@ -46,17 +46,22 @@ return Application::configure(basePath: dirname(__DIR__))
         // entirely, since an explicitly-named route() parameter never
         // consults defaultParameters in the first place.
         //
-        // Also deliberately NOT reading tenant_slug from app('currentTenant')
-        // (bound by resolve.tenant): that binding is unreliable at this
-        // point because Laravel sorts middleware by $middlewarePriority,
-        // which can run auth:tenant (and therefore this redirect) before
-        // resolve.tenant regardless of their order in the route group —
-        // confirmed by production still hitting the parameterless
-        // route('tenant.login') fallback below with currentTenant never
-        // bound. $request->route('tenant_slug') doesn't have this problem:
-        // it comes straight from route matching, which always completes
-        // before any middleware runs, so it's populated here even when
-        // resolve.tenant hasn't executed yet.
+        // $request->route('tenant_slug') is preferred over app('currentTenant')
+        // (bound by resolve.tenant): it comes straight from route matching,
+        // which always completes before any middleware runs, so it's
+        // populated here even if resolve.tenant hasn't executed yet — unlike
+        // currentTenant, which depends on resolve.tenant having already run
+        // (order not guaranteed against auth:tenant once Laravel's
+        // $middlewarePriority sorting gets involved). currentTenant is kept
+        // as a second-choice fallback for the (normally unreachable) case
+        // where the route has no tenant_slug segment at all — e.g. subdomain
+        // tenancy mode — but resolve.tenant bound a tenant anyway.
+        //
+        // Never call route('tenant.login') without a resolved slug — that's
+        // exactly the "Missing required parameter" exception this closure
+        // exists to prevent. If no tenant context can be determined at all,
+        // fall back to a plain URL instead of the named route, since
+        // route('tenant.login') has no parameterless form.
         $middleware->redirectGuestsTo(function (Request $request) {
             if ($request->routeIs('super.*')) {
                 return route('super.login');
@@ -66,11 +71,18 @@ return Application::configure(basePath: dirname(__DIR__))
                 return route('affiliate.login');
             }
 
-            if ($request->route('tenant_slug')) {
-                return route('tenant.login', ['tenant_slug' => $request->route('tenant_slug')]);
+            $tenantSlug = $request->route('tenant_slug');
+
+            if (! $tenantSlug && app()->bound('currentTenant')) {
+                $tenant = app('currentTenant');
+                $tenantSlug = $tenant->subdomain ?? $tenant->slug ?? null;
             }
 
-            return route('tenant.login');
+            if ($tenantSlug) {
+                return route('tenant.login', ['tenant_slug' => $tenantSlug]);
+            }
+
+            return url('/login');
         });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
