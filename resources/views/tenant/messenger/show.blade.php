@@ -11,18 +11,8 @@
 
 <div class="grid lg:grid-cols-3 gap-6">
     <div class="lg:col-span-2">
-        <x-ui.card class="space-y-4 max-h-[500px] overflow-y-auto">
-            @foreach ($messages as $m)
-                <div class="flex {{ $m->direction === 'out' ? 'justify-end' : 'justify-start' }}">
-                    <div class="max-w-md {{ $m->direction === 'out' ? 'bg-leaf text-white' : 'bg-paper text-ink' }} rounded-card px-4 py-2.5 text-sm">
-                        @if ($m->message_text){{ $m->message_text }}@endif
-                        @if ($m->attachment_url)
-                            <a href="{{ $m->attachment_url }}" target="_blank" class="block underline text-xs mt-1">📎 এটাচমেন্ট দেখুন</a>
-                        @endif
-                        <p class="text-[10px] mt-1 opacity-70">{{ $m->created_at?->format('d M, h:i A') }}</p>
-                    </div>
-                </div>
-            @endforeach
+        <x-ui.card>
+            @include('tenant.messenger._thread', ['messages' => $messages])
         </x-ui.card>
 
         <form method="POST" action="{{ route('tenant.messenger.reply', $psid) }}" class="flex gap-2 mt-4">
@@ -45,12 +35,93 @@
             </form>
         </x-ui.card>
 
-        <x-ui.card padding="sm">
-            <p class="font-bold text-sm mb-2">🧾 অর্ডারে রূপান্তর করুন</p>
-            <p class="text-xs text-mute mb-3">নাম প্রি-ফিল হয়ে যাবে, ফোন নাম্বার ও প্রোডাক্ট বাছাই করে দিন</p>
-            <a href="{{ route('tenant.orders.create', ['name' => $customer->customer_name, 'channel' => 'facebook']) }}"
-               class="block text-center py-2.5 rounded-btn bg-ink text-white font-semibold text-sm hover:bg-ink/90 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">নতুন অর্ডার তৈরি করুন</a>
-        </x-ui.card>
+        @if ($linkedOrder)
+            @php
+                $orderStatusLabel = ['pending' => 'পেন্ডিং', 'confirmed' => 'কনফার্মড', 'processing' => 'প্রসেসিং', 'shipped' => 'শিপড', 'delivered' => 'ডেলিভারড', 'cancelled' => 'বাতিল', 'returned' => 'রিটার্ন'][$linkedOrder->status] ?? $linkedOrder->status;
+            @endphp
+            <x-ui.card padding="sm">
+                <p class="font-bold text-sm mb-2">🧾 লিংকড অর্ডার</p>
+                <a href="{{ route('tenant.orders.show', $linkedOrder) }}"
+                   class="block rounded-btn border border-ink/10 px-3 py-2.5 hover:bg-paper/60 transition">
+                    <span class="font-semibold text-sm text-leaf">{{ $linkedOrder->order_number }}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-pill font-semibold bg-amber/15 text-ink ml-1">{{ $orderStatusLabel }}</span>
+                    @if ($linkedOrder->items()->exists())
+                        <p class="text-xs text-mute mt-1">{{ number_format($linkedOrder->total) }}৳</p>
+                    @else
+                        <p class="text-xs text-mute mt-1">প্রোডাক্ট এখনো বাছাই করা হয়নি</p>
+                    @endif
+                </a>
+            </x-ui.card>
+        @else
+            <x-ui.card padding="sm">
+                <p class="font-bold text-sm mb-2">🧾 নতুন অর্ডার</p>
+                <p class="text-xs text-mute mb-3">কাস্টমার ফোন নাম্বার দিলে এখানে অর্ডার এমনিতেই তৈরি হয়ে যাবে। প্রয়োজনে ম্যানুয়ালিও শুরু করতে পারেন।</p>
+                <a href="{{ route('tenant.orders.create', ['name' => $customer->customer_name, 'channel' => 'facebook']) }}"
+                   class="block text-center py-2.5 rounded-btn border border-ink/15 font-semibold text-sm hover:bg-paper transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">ম্যানুয়ালি অর্ডার শুরু করুন</a>
+            </x-ui.card>
+        @endif
     </div>
 </div>
+
+@push('scripts')
+<script>
+(function () {
+    const thread = document.getElementById('threadMessages');
+    if (!thread) return;
+
+    let afterId = parseInt(thread.dataset.lastId || '0', 10);
+    const psid = @json($psid);
+
+    function appendBubble(m) {
+        if (document.querySelector(`.msg-bubble[data-id="${m.id}"]`)) return;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'msg-bubble flex ' + (m.direction === 'out' ? 'justify-end' : 'justify-start');
+        wrap.dataset.id = m.id;
+
+        const bubble = document.createElement('div');
+        bubble.className = 'max-w-md ' + (m.direction === 'out' ? 'bg-leaf text-white' : 'bg-paper text-ink') + ' rounded-card px-4 py-2.5 text-sm';
+
+        const text = document.createElement('div');
+        text.textContent = m.message_text || '';
+        bubble.appendChild(text);
+
+        if (m.attachment_url) {
+            const a = document.createElement('a');
+            a.href = m.attachment_url; a.target = '_blank';
+            a.className = 'block underline text-xs mt-1';
+            a.textContent = '📎 এটাচমেন্ট দেখুন';
+            bubble.appendChild(a);
+        }
+
+        const time = document.createElement('p');
+        time.className = 'text-[10px] mt-1 opacity-70';
+        time.textContent = m.time_label || '';
+        bubble.appendChild(time);
+
+        wrap.appendChild(bubble);
+        thread.appendChild(wrap);
+    }
+
+    async function poll() {
+        try {
+            const res = await fetch(`{{ route('tenant.messenger.updates') }}?after_id=${afterId}&psid=${encodeURIComponent(psid)}`, { headers: { Accept: 'application/json' } });
+            if (!res.ok) return;
+            const data = await res.json();
+            afterId = data.latest_id;
+
+            const newMessages = data.messages || [];
+            if (newMessages.length) {
+                newMessages.forEach(appendBubble);
+                thread.scrollTop = thread.scrollHeight;
+            }
+        } catch (e) {
+            // silent — next tick tries again
+        }
+    }
+
+    setInterval(poll, 4000);
+})();
+</script>
+@endpush
 @endsection

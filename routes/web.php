@@ -205,6 +205,7 @@ $tenantRoutes = function () {
             Route::get('orders/create', [OrderController::class, 'create'])->name('orders.create');
             Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
             Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+            Route::post('orders/{order}/complete', [OrderController::class, 'complete'])->name('orders.complete');
             Route::post('orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status');
             Route::post('orders/{order}/channel', [OrderController::class, 'updateChannel'])->name('orders.channel');
             Route::post('orders/{order}/courier', [CourierController::class, 'send'])->name('orders.courier');
@@ -262,6 +263,7 @@ $tenantRoutes = function () {
 
             // Messenger inbox
             Route::get('messenger', [MessengerInboxController::class, 'index'])->name('messenger.index');
+            Route::get('messenger/updates', [MessengerInboxController::class, 'updates'])->name('messenger.updates');
             Route::get('messenger/{psid}', [MessengerInboxController::class, 'show'])->name('messenger.show');
             Route::post('messenger/{psid}/reply', [MessengerInboxController::class, 'reply'])->name('messenger.reply');
             Route::post('messenger/{psid}/status', [MessengerInboxController::class, 'updateStatus'])->name('messenger.status');

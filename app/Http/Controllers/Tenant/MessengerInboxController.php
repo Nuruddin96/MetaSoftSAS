@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FacebookPage;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
+use App\Models\Order;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Http\Request;
 
@@ -39,6 +40,7 @@ class MessengerInboxController extends Controller
             'psid' => $psid,
             'messages' => $messages,
             'customer' => $messages->last(),
+            'linkedOrder' => Order::where('messenger_psid', $psid)->latest()->first(),
         ]);
     }
 
@@ -131,5 +133,63 @@ class MessengerInboxController extends Controller
         MessengerMessage::where('sender_psid', $psid)->update(['status' => $data['status']]);
 
         return back()->with('success', 'স্ট্যাটাস আপডেট হয়েছে।');
+    }
+
+    /**
+     * Polling endpoint for the "feels real-time" inbox — Hostinger shared
+     * hosting has no confirmed queue worker/scheduler running, so this is
+     * plain request/response polled from the browser rather than
+     * WebSockets/Echo/Reverb. Runs under the normal tenant panel middleware
+     * stack, so every query here is auto-scoped by BelongsToTenant exactly
+     * like index()/show() — no manual tenant_id filtering needed, and no
+     * way for one tenant's poll to see another tenant's messages.
+     */
+    public function updates(Request $request)
+    {
+        $afterId = (int) $request->query('after_id', 0);
+        $psid = $request->query('psid');
+
+        $newMessages = MessengerMessage::where('id', '>', $afterId)->orderBy('id')->get();
+
+        $touchedPsids = $newMessages->pluck('sender_psid')->unique();
+
+        $conversations = [];
+
+        if ($touchedPsids->isNotEmpty()) {
+            $latestIds = MessengerMessage::whereIn('sender_psid', $touchedPsids)
+                ->selectRaw('MAX(id) as id')->groupBy('sender_psid')->pluck('id');
+
+            $conversations = MessengerMessage::whereIn('id', $latestIds)->get()
+                ->map(fn ($c) => [
+                    'psid' => $c->sender_psid,
+                    'customer_name' => $c->customer_name,
+                    'message_text' => $c->message_text,
+                    'has_attachment' => (bool) $c->attachment_url,
+                    'direction' => $c->direction,
+                    'status' => $c->status,
+                    'time_label' => optional($c->created_at)->diffForHumans(),
+                    'unread' => MessengerMessage::where('sender_psid', $c->sender_psid)
+                        ->where('status', 'new')->where('direction', 'in')->count(),
+                ])->values();
+        }
+
+        $response = [
+            'latest_id' => max($afterId, (int) MessengerMessage::max('id')),
+            'conversations' => $conversations,
+            'unread_total' => MessengerMessage::where('status', 'new')->where('direction', 'in')->count(),
+        ];
+
+        if ($psid) {
+            $response['messages'] = $newMessages->where('sender_psid', $psid)->values()
+                ->map(fn ($m) => [
+                    'id' => $m->id,
+                    'direction' => $m->direction,
+                    'message_text' => $m->message_text,
+                    'attachment_url' => $m->attachment_url,
+                    'time_label' => optional($m->created_at)->format('d M, h:i A'),
+                ])->values();
+        }
+
+        return response()->json($response);
     }
 }
