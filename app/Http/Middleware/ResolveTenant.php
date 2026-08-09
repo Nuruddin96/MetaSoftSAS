@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Tenant;
+use App\Services\TenantResolver;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
@@ -38,7 +39,7 @@ class ResolveTenant
             return $next($request); // central routes — no tenant context
         }
 
-        $tenant = Tenant::where('subdomain', strtolower($slug))->first();
+        $tenant = TenantResolver::fromRequest($request);
 
         abort_if(! $tenant, 404, 'Store not found');
 
@@ -61,16 +62,7 @@ class ResolveTenant
             return $next($request); // central app
         }
 
-        $tenant = null;
-
-        if (str_ends_with($host, '.'.$central)) {
-            $subdomain = str_replace('.'.$central, '', $host);
-            $tenant = Tenant::where('subdomain', $subdomain)->first();
-        } else {
-            $tenant = Tenant::where('custom_domain', $host)
-                ->where('custom_domain_verified', true)
-                ->first();
-        }
+        $tenant = TenantResolver::fromRequest($request);
 
         abort_if(! $tenant, 404, 'Store not found');
 
