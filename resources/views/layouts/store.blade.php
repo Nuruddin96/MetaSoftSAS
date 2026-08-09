@@ -58,9 +58,11 @@
     <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
         <a href="{{ route('storefront.home') }}" class="flex items-center gap-2 min-w-0">
             @if ($tenant->logo_path)
-                <img src="{{ asset('storage/' . $tenant->logo_path) }}" alt="{{ $tenant->store_name }}" class="h-10 max-w-[160px] object-contain">
+                <img src="{{ asset('storage/' . $tenant->logo_path) }}" alt="{{ $tenant->store_name }}" class="h-10 max-w-[160px] object-contain"
+                     onerror="this.style.display='none'; this.nextElementSibling?.classList.remove('hidden');">
+                <span class="hidden font-disp font-bold text-lg text-ink truncate">{{ $tenant->store_name }}</span>
             @else
-                <span class="font-disp font-bold text-lg text-brand truncate">{{ $tenant->store_name }}</span>
+                <span class="font-disp font-bold text-lg text-ink truncate">{{ $tenant->store_name }}</span>
             @endif
         </a>
 

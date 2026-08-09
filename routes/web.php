@@ -35,6 +35,7 @@ use App\Http\Controllers\Tenant\FraudCheckController;
 use App\Http\Controllers\Tenant\IncompleteOrderController;
 use App\Http\Controllers\Tenant\InventoryController;
 use App\Http\Controllers\Tenant\MessengerInboxController;
+use App\Http\Controllers\Tenant\NotificationController;
 use App\Http\Controllers\Tenant\OrderController;
 use App\Http\Controllers\Tenant\PosController;
 use App\Http\Controllers\Tenant\ProductController;
@@ -170,6 +171,9 @@ $tenantRoutes = function () {
         Route::middleware(['auth:tenant', 'check.subscription'])->group(function () {
 
             Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+            // Notification bell "mark seen" beacon (session-based, see NotificationController)
+            Route::post('notifications/seen', [NotificationController::class, 'markSeen'])->name('notifications.seen');
 
             // Billing
             Route::get('billing', [BillingController::class, 'index'])->name('billing');

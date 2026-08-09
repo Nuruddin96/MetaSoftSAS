@@ -8,11 +8,27 @@ document.getElementById('navToggle')?.addEventListener('click', () => {
 });
 
 // ---- notification bell (layouts/panel.blade.php) ----
+// Opening the bell marks every category "seen" — see
+// NotificationController::markSeen(). sendBeacon (not fetch) because this
+// fires from a click that may be immediately followed by navigation
+// elsewhere on the page; a beacon is guaranteed to still go out. The badge
+// hides immediately client-side (instant feedback) while the session mark
+// persisted server-side is what keeps it hidden across a page refresh.
 const notifBtn = document.getElementById('notifBtn');
 const notifPanel = document.getElementById('notifPanel');
+const notifBadge = document.getElementById('notifBadge');
 notifBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
+    const opening = notifPanel.classList.contains('hidden');
     notifPanel.classList.toggle('hidden');
+
+    if (opening) {
+        notifBadge?.classList.add('hidden');
+        const seenUrl = notifBtn.dataset.seenUrl;
+        if (seenUrl && navigator.sendBeacon) {
+            navigator.sendBeacon(seenUrl, new URLSearchParams({ _token: notifBtn.dataset.csrf }));
+        }
+    }
 });
 document.addEventListener('click', (e) => {
     if (!notifPanel?.contains(e.target) && e.target !== notifBtn) notifPanel?.classList.add('hidden');

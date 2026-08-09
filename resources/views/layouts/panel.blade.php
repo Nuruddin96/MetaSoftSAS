@@ -11,16 +11,38 @@
 <body class="font-body bg-paper text-ink antialiased">
 @php
     $notifTenant = app('currentTenant');
-    $notifPendingOrders = \App\Models\Order::where('status', 'pending')->count();
+
+    // Notifications have no persisted record of their own to hang a
+    // read/unread flag on — badges below are live business-state counts.
+    // "Read" is tracked per-category as a session timestamp instead (set
+    // by NotificationController::markSeen() when the bell is opened, see
+    // its docblock): once seen, only items newer than that mark still
+    // count as unread. A category never seen this session shows its full
+    // current count, same as before this existed.
+    $notifSeen = [
+        'pending_orders' => session('notif_seen.pending_orders'),
+        'low_stock' => session('notif_seen.low_stock'),
+        'messages' => session('notif_seen.messages'),
+        'incomplete' => session('notif_seen.incomplete'),
+    ];
+
+    $notifPendingOrders = \App\Models\Order::where('status', 'pending')
+        ->when($notifSeen['pending_orders'], fn ($q) => $q->where('created_at', '>', $notifSeen['pending_orders']))
+        ->count();
     $notifLowStock = (int) \Illuminate\Support\Facades\DB::table('product_variants as pv')
         ->leftJoin('inventory as i', 'i.variant_id', '=', 'pv.id')
         ->where('pv.tenant_id', $notifTenant->id)
         ->select('pv.id')
         ->groupBy('pv.id', 'pv.low_stock_threshold')
         ->havingRaw('COALESCE(SUM(i.quantity), 0) <= pv.low_stock_threshold')
+        ->when($notifSeen['low_stock'], fn ($q) => $q->havingRaw('MAX(i.updated_at) > ?', [$notifSeen['low_stock']]))
         ->get()->count();
-    $notifNewMessages = \App\Models\MessengerMessage::where('status', 'new')->where('direction', 'in')->count();
-    $notifNewIncomplete = \App\Models\IncompleteOrder::where('status', 'abandoned')->count();
+    $notifNewMessages = \App\Models\MessengerMessage::where('status', 'new')->where('direction', 'in')
+        ->when($notifSeen['messages'], fn ($q) => $q->where('created_at', '>', $notifSeen['messages']))
+        ->count();
+    $notifNewIncomplete = \App\Models\IncompleteOrder::where('status', 'abandoned')
+        ->when($notifSeen['incomplete'], fn ($q) => $q->where('created_at', '>', $notifSeen['incomplete']))
+        ->count();
     $notifTotal = $notifPendingOrders + $notifLowStock + $notifNewMessages + $notifNewIncomplete;
 @endphp
 
@@ -32,7 +54,9 @@
             @if (app('currentTenant')->logo_path)
                 <img src="{{ asset('storage/' . app('currentTenant')->logo_path) }}"
                      alt="{{ app('currentTenant')->store_name }}"
-                     class="h-8 max-w-[160px] object-contain bg-white/95 rounded px-2 py-1">
+                     class="h-8 max-w-[160px] object-contain bg-white/95 rounded px-2 py-1"
+                     onerror="this.style.display='none'; this.nextElementSibling?.classList.remove('hidden');">
+                <p class="hidden font-disp font-bold text-lg leading-tight">{{ app('currentTenant')->store_name }}</p>
             @else
                 <p class="font-disp font-bold text-lg leading-tight">{{ app('currentTenant')->store_name }}</p>
             @endif
@@ -121,11 +145,10 @@
             <p class="font-bold text-sm lg:text-base truncate">@yield('title', 'প্যানেল')</p>
 
             <div class="relative ml-auto">
-                <button id="notifBtn" class="relative w-10 h-10 rounded-full hover:bg-ink/5 grid place-items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+                <button id="notifBtn" data-seen-url="{{ route('tenant.notifications.seen') }}" data-csrf="{{ csrf_token() }}"
+                        class="relative w-10 h-10 rounded-full hover:bg-ink/5 grid place-items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
                     <i data-lucide="bell" class="w-5 h-5 text-ink"></i>
-                    @if ($notifTotal > 0)
-                        <span class="absolute top-1 right-1 bg-red-600 text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full grid place-items-center">{{ $notifTotal > 9 ? '9+' : $notifTotal }}</span>
-                    @endif
+                    <span id="notifBadge" class="absolute top-1 right-1 bg-red-600 text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full grid place-items-center {{ $notifTotal > 0 ? '' : 'hidden' }}">{{ $notifTotal > 9 ? '9+' : $notifTotal }}</span>
                 </button>
                 <div id="notifPanel" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-card shadow-xl border border-ink/10 overflow-hidden">
                     <div class="px-4 py-3 border-b border-ink/5 font-bold text-sm">নোটিফিকেশন</div>
@@ -171,10 +194,14 @@
 {{-- mobile bottom tab bar --}}
 <nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10 flex items-center justify-around py-2 z-30">
     @php
+        // POS stays fully available (desktop sidebar + mobile hamburger menu,
+        // routes/controller/permissions untouched) — this bottom bar is only a
+        // quick-access shortcut row, and Messenger is the more frequently
+        // needed shortcut there on mobile.
         $mobileTabs = [
             ['tenant.dashboard', 'হোম', 'layout-dashboard'],
             ['tenant.orders.index', 'অর্ডার', 'receipt'],
-            $tenant->plan?->allow_pos ? ['tenant.pos', 'POS', 'calculator'] : ['tenant.products.index', 'প্রোডাক্ট', 'package'],
+            ['tenant.messenger.index', 'মেসেঞ্জার', 'message-circle'],
             ['tenant.customers.index', 'কাস্টমার', 'users'],
             ['tenant.settings', 'সেটিংস', 'settings'],
         ];
