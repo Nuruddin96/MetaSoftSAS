@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
+use App\Models\Affiliate;
+use App\Models\AffiliateCommission;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\SubscriptionPayment;
-use App\Models\Affiliate;
-use App\Models\AffiliateCommission;
 use App\Models\Tenant;
 use App\Services\Payment\BkashService;
 use App\Services\Payment\SslCommerzService;
@@ -20,14 +20,14 @@ class BillingController extends Controller
         $tenant = app('currentTenant');
 
         return view('tenant.billing', [
-            'tenant'        => $tenant,
-            'plans'         => Plan::where('is_active', 1)->orderBy('sort_order')->get(),
-            'payments'      => SubscriptionPayment::where('tenant_id', $tenant->id)->latest()->limit(10)->get(),
-            'hasBkash'      => $this->bkashConfigured(),
-            'hasSsl'        => $this->sslConfigured(),
-            'manualNote'    => config('payment.manual_note'),
-            'supportPhone'  => config('payment.support_phone'),
-            'supportWa'     => config('payment.support_whatsapp'),
+            'tenant' => $tenant,
+            'plans' => Plan::where('is_active', 1)->orderBy('sort_order')->get(),
+            'payments' => SubscriptionPayment::where('tenant_id', $tenant->id)->latest()->limit(10)->get(),
+            'hasBkash' => $this->bkashConfigured(),
+            'hasSsl' => $this->sslConfigured(),
+            'manualNote' => config('payment.manual_note'),
+            'supportPhone' => config('payment.support_phone'),
+            'supportWa' => config('payment.support_whatsapp'),
         ]);
     }
 
@@ -66,7 +66,7 @@ class BillingController extends Controller
     {
         $data = $request->validate([
             'plan_id' => 'required|exists:plans,id',
-            'cycle'   => 'required|in:monthly,yearly',
+            'cycle' => 'required|in:monthly,yearly',
             'gateway' => 'required|in:sslcommerz,bkash',
         ]);
 
@@ -78,7 +78,7 @@ class BillingController extends Controller
         }
 
         $tenant = app('currentTenant');
-        $plan   = Plan::findOrFail($data['plan_id']);
+        $plan = Plan::findOrFail($data['plan_id']);
         $amount = $data['cycle'] === 'yearly' ? $plan->price_yearly : $plan->price_monthly;
 
         if ($amount <= 0) {
@@ -87,16 +87,16 @@ class BillingController extends Controller
 
         $payment = SubscriptionPayment::create([
             'tenant_id' => $tenant->id,
-            'gateway'   => $data['gateway'],
-            'amount'    => $amount,
-            'status'    => 'pending',
+            'gateway' => $data['gateway'],
+            'amount' => $amount,
+            'status' => 'pending',
             'gateway_response' => ['plan_id' => $plan->id, 'cycle' => $data['cycle']],
         ]);
 
-        $tranId = 'SUB-' . $tenant->id . '-' . $payment->id;
+        $tranId = 'SUB-'.$tenant->id.'-'.$payment->id;
         $payment->update(['trx_id' => $tranId]);
 
-        $callback = $tenant->url() . '/panel/billing/callback/' . $data['gateway'];
+        $callback = $tenant->url().'/panel/billing/callback/'.$data['gateway'];
 
         return $data['gateway'] === 'bkash'
             ? $this->startBkash($bkash, $payment, $tenant, $amount, $tranId, $callback)
@@ -119,23 +119,23 @@ class BillingController extends Controller
 
         $payment->update(['status' => 'failed', 'gateway_response' => $session]);
 
-        return back()->with('error', 'bKash পেমেন্ট শুরু করা যায়নি: ' . ($session['statusMessage'] ?? 'গেটওয়ে সাড়া দেয়নি।'));
+        return back()->with('error', 'bKash পেমেন্ট শুরু করা যায়নি: '.($session['statusMessage'] ?? 'গেটওয়ে সাড়া দেয়নি।'));
     }
 
     protected function startSsl(SslCommerzService $ssl, SubscriptionPayment $payment, Tenant $tenant, float $amount, string $tranId, string $callback)
     {
         $session = $ssl->createSession([
             'total_amount' => $amount,
-            'tran_id'      => $tranId,
-            'success_url'  => $callback,
-            'fail_url'     => $callback,
-            'cancel_url'   => $callback,
-            'cus_name'     => $tenant->owner_name,
-            'cus_email'    => $tenant->owner_email,
-            'cus_phone'    => $tenant->owner_phone,
-            'cus_add1'     => $tenant->store_name,
-            'cus_city'     => 'Dhaka',
-            'value_a'      => $tenant->id,
+            'tran_id' => $tranId,
+            'success_url' => $callback,
+            'fail_url' => $callback,
+            'cancel_url' => $callback,
+            'cus_name' => $tenant->owner_name,
+            'cus_email' => $tenant->owner_email,
+            'cus_phone' => $tenant->owner_phone,
+            'cus_add1' => $tenant->store_name,
+            'cus_city' => 'Dhaka',
+            'value_a' => $tenant->id,
         ]);
 
         if (($session['status'] ?? '') === 'SUCCESS' && ! empty($session['GatewayPageURL'])) {
@@ -144,7 +144,7 @@ class BillingController extends Controller
 
         $payment->update(['status' => 'failed', 'gateway_response' => $session]);
 
-        return back()->with('error', 'পেমেন্ট শুরু করা যায়নি: ' . ($session['failedreason'] ?? 'গেটওয়ে সাড়া দেয়নি।'));
+        return back()->with('error', 'পেমেন্ট শুরু করা যায়নি: '.($session['failedreason'] ?? 'গেটওয়ে সাড়া দেয়নি।'));
     }
 
     /** Both gateways redirect the browser back here. */
@@ -158,7 +158,7 @@ class BillingController extends Controller
     protected function bkashCallback(Request $request, BkashService $bkash)
     {
         $paymentId = $request->input('paymentID');
-        $status    = $request->input('status'); // success | failure | cancel
+        $status = $request->input('status'); // success | failure | cancel
 
         $payment = $paymentId
             ? SubscriptionPayment::where('gateway_response->paymentID', $paymentId)->first()
@@ -174,6 +174,7 @@ class BillingController extends Controller
 
         if ($status !== 'success') {
             $payment->update(['status' => 'failed']);
+
             return redirect()->route('tenant.billing')->with('error', 'পেমেন্ট বাতিল হয়েছে।');
         }
 
@@ -186,13 +187,14 @@ class BillingController extends Controller
 
         if (($result['transactionStatus'] ?? '') !== 'Completed') {
             $payment->update(['status' => 'failed', 'gateway_response' => array_merge($payment->gateway_response, ['result' => $result])]);
+
             return redirect()->route('tenant.billing')->with('error', 'পেমেন্ট সম্পন্ন হয়নি। টাকা কাটা গেলে অ্যাডমিনের সাথে যোগাযোগ করুন।');
         }
 
         $payment->update(['trx_id' => $result['trxID'] ?? $payment->trx_id]);
         $this->activateSubscription($payment, $result);
 
-        return redirect()->route('tenant.billing')->with('success', '🎉 পেমেন্ট সফল! ট্রানজেকশন: ' . ($result['trxID'] ?? ''));
+        return redirect()->route('tenant.billing')->with('success', '🎉 পেমেন্ট সফল! ট্রানজেকশন: '.($result['trxID'] ?? ''));
     }
 
     protected function sslCallback(Request $request, SslCommerzService $ssl)
@@ -212,6 +214,7 @@ class BillingController extends Controller
 
         if ($status !== 'VALID') {
             $payment->update(['status' => 'failed']);
+
             return redirect()->route('tenant.billing')->with('error', 'পেমেন্ট সম্পন্ন হয়নি। আবার চেষ্টা করুন।');
         }
 
@@ -219,6 +222,7 @@ class BillingController extends Controller
 
         if (! in_array($validation['status'] ?? '', ['VALID', 'VALIDATED'])) {
             $payment->update(['status' => 'failed', 'gateway_response' => $validation]);
+
             return redirect()->route('tenant.billing')->with('error', 'পেমেন্ট ভেরিফাই করা যায়নি।');
         }
 
@@ -229,10 +233,10 @@ class BillingController extends Controller
 
     protected function activateSubscription(SubscriptionPayment $payment, array $result): void
     {
-        $meta   = $payment->gateway_response ?? [];
+        $meta = $payment->gateway_response ?? [];
         $planId = $meta['plan_id'] ?? 1;
-        $cycle  = $meta['cycle'] ?? 'monthly';
-        $days   = $cycle === 'yearly' ? 365 : 30;
+        $cycle = $meta['cycle'] ?? 'monthly';
+        $days = $cycle === 'yearly' ? 365 : 30;
 
         $tenant = Tenant::find($payment->tenant_id);
 
@@ -243,24 +247,24 @@ class BillingController extends Controller
         $endsAt = $base->copy()->addDays($days);
 
         $subscription = Subscription::create([
-            'tenant_id'     => $tenant->id,
-            'plan_id'       => $planId,
+            'tenant_id' => $tenant->id,
+            'plan_id' => $planId,
             'billing_cycle' => $cycle,
-            'starts_at'     => now(),
-            'ends_at'       => $endsAt,
-            'status'        => 'active',
+            'starts_at' => now(),
+            'ends_at' => $endsAt,
+            'status' => 'active',
         ]);
 
         $payment->update([
-            'status'           => 'completed',
-            'subscription_id'  => $subscription->id,
-            'paid_at'          => now(),
+            'status' => 'completed',
+            'subscription_id' => $subscription->id,
+            'paid_at' => now(),
             'gateway_response' => array_merge($meta, ['result' => $result]),
         ]);
 
         $tenant->update([
-            'status'               => 'active',
-            'plan_id'              => $planId,
+            'status' => 'active',
+            'plan_id' => $planId,
             'subscription_ends_at' => $endsAt,
         ]);
 
@@ -288,13 +292,13 @@ class BillingController extends Controller
 
         AffiliateCommission::create([
             'affiliate_id' => $affiliate->id,
-            'type'         => 'saas',
+            'type' => 'saas',
             'source_label' => $tenant->store_name,
-            'tenant_id'    => $tenant->id,
-            'amount'       => round($payment->amount * 0.20, 2),
+            'tenant_id' => $tenant->id,
+            'amount' => round($payment->amount * 0.20, 2),
             'is_recurring' => false,
-            'status'       => 'pending',
-            'note'         => 'প্রথম সাবস্ক্রিপশন পেমেন্টের ২০% — ওয়ান টাইম',
+            'status' => 'pending',
+            'note' => 'প্রথম সাবস্ক্রিপশন পেমেন্টের ২০% — ওয়ান টাইম',
         ]);
     }
 }

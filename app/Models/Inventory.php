@@ -10,7 +10,9 @@ class Inventory extends Model
     use BelongsToTenant;
 
     protected $table = 'inventory';
+
     protected $guarded = [];
+
     public $timestamps = false;
 
     protected static function booted(): void

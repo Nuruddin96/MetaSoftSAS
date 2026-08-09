@@ -10,7 +10,7 @@ class CartController extends Controller
 {
     protected function key(): string
     {
-        return 'cart_' . app('currentTenant')->id;
+        return 'cart_'.app('currentTenant')->id;
     }
 
     public function index()
@@ -20,13 +20,13 @@ class CartController extends Controller
 
         $items = $variants->map(fn ($v) => [
             'variant' => $v,
-            'qty'     => $cart[$v->id],
-            'total'   => $cart[$v->id] * $v->selling_price,
+            'qty' => $cart[$v->id],
+            'total' => $cart[$v->id] * $v->selling_price,
         ]);
 
         return view('storefront.cart', [
-            'tenant'   => app('currentTenant'),
-            'items'    => $items,
+            'tenant' => app('currentTenant'),
+            'items' => $items,
             'subtotal' => $items->sum('total'),
         ]);
     }
@@ -35,7 +35,7 @@ class CartController extends Controller
     {
         $data = $request->validate([
             'variant_id' => 'required|exists:product_variants,id',
-            'qty'        => 'nullable|integer|min:1|max:100',
+            'qty' => 'nullable|integer|min:1|max:100',
         ]);
 
         $cart = session($this->key(), []);
@@ -50,7 +50,9 @@ class CartController extends Controller
         $cart = [];
         foreach ((array) $request->input('qty', []) as $variantId => $qty) {
             $qty = (int) $qty;
-            if ($qty > 0) $cart[(int) $variantId] = min($qty, 100);
+            if ($qty > 0) {
+                $cart[(int) $variantId] = min($qty, 100);
+            }
         }
         session([$this->key() => $cart]);
 

@@ -19,7 +19,7 @@ class RegisterController extends Controller
         'support', 'help', 'billing', 'pay', 'cdn', 'static', 'test', 'dev', 'demo',
     ];
 
-    public function show(\Illuminate\Http\Request $request)
+    public function show(Request $request)
     {
         return view('central.register', ['ref' => $request->query('ref')]);
     }
@@ -27,13 +27,13 @@ class RegisterController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'store_name'  => ['required', 'string', 'max:100'],
-            'owner_name'  => ['required', 'string', 'max:100'],
+            'store_name' => ['required', 'string', 'max:100'],
+            'owner_name' => ['required', 'string', 'max:100'],
             'owner_phone' => ['required', 'regex:/^01[3-9][0-9]{8}$/'],
             'owner_email' => ['required', 'email', 'unique:tenants,owner_email'],
-            'password'    => ['required', 'string', 'min:6', 'confirmed'],
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
         ], [
-            'owner_phone.regex'  => 'সঠিক বাংলাদেশি মোবাইল নাম্বার দিন (01XXXXXXXXX)।',
+            'owner_phone.regex' => 'সঠিক বাংলাদেশি মোবাইল নাম্বার দিন (01XXXXXXXXX)।',
             'owner_email.unique' => 'এই ইমেইলে আগেই একাউন্ট খোলা হয়েছে।',
             'password.confirmed' => 'দুইবার দেয়া পাসওয়ার্ড মিলছে না।',
         ]);
@@ -55,30 +55,30 @@ class RegisterController extends Controller
 
         $tenant = DB::transaction(function () use ($data, $subdomain, $referrer) {
             $tenant = Tenant::create([
-                'store_name'  => $data['store_name'],
-                'subdomain'   => $subdomain,
-                'owner_name'  => $data['owner_name'],
+                'store_name' => $data['store_name'],
+                'subdomain' => $subdomain,
+                'owner_name' => $data['owner_name'],
                 'owner_phone' => $data['owner_phone'],
                 'owner_email' => $data['owner_email'],
-                'status'      => 'trial',
-                'plan_id'     => 1, // Starter during trial
+                'status' => 'trial',
+                'plan_id' => 1, // Starter during trial
                 'referred_by_affiliate_id' => $referrer?->id,
             ]);
 
             User::withoutGlobalScopes()->create([
                 'tenant_id' => $tenant->id,
-                'name'      => $data['owner_name'],
-                'email'     => $data['owner_email'],
-                'phone'     => $data['owner_phone'],
-                'password'  => Hash::make($data['password']),
-                'role'      => 'owner',
+                'name' => $data['owner_name'],
+                'email' => $data['owner_email'],
+                'phone' => $data['owner_phone'],
+                'password' => Hash::make($data['password']),
+                'role' => 'owner',
             ]);
 
             return $tenant;
         });
 
         // Their site is now live — send them to their panel
-        return redirect()->away($tenant->url() . '/panel/login?registered=1');
+        return redirect()->away($tenant->url().'/panel/login?registered=1');
     }
 
     /**
@@ -105,7 +105,7 @@ class RegisterController extends Controller
             in_array($candidate, self::RESERVED, true) ||
             Tenant::where('subdomain', $candidate)->exists()
         ) {
-            $candidate = $base . $i;
+            $candidate = $base.$i;
             $i++;
         }
 

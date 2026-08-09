@@ -54,17 +54,17 @@ class ResolveTenant
 
     protected function resolveBySubdomain(Request $request, Closure $next)
     {
-        $host    = strtolower($request->getHost());
+        $host = strtolower($request->getHost());
         $central = config('app.central_domain');
 
-        if ($host === $central || $host === 'www.' . $central) {
+        if ($host === $central || $host === 'www.'.$central) {
             return $next($request); // central app
         }
 
         $tenant = null;
 
-        if (str_ends_with($host, '.' . $central)) {
-            $subdomain = str_replace('.' . $central, '', $host);
+        if (str_ends_with($host, '.'.$central)) {
+            $subdomain = str_replace('.'.$central, '', $host);
             $tenant = Tenant::where('subdomain', $subdomain)->first();
         } else {
             $tenant = Tenant::where('custom_domain', $host)
@@ -75,7 +75,7 @@ class ResolveTenant
         abort_if(! $tenant, 404, 'Store not found');
 
         // Separate session cookie per tenant only needed in subdomain mode
-        config(['session.cookie' => 'sess_' . $tenant->id]);
+        config(['session.cookie' => 'sess_'.$tenant->id]);
 
         $this->bind($tenant);
 

@@ -32,7 +32,7 @@ class CentralLoginController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'email'    => ['required', 'email'],
+            'email' => ['required', 'email'],
             'password' => ['required'],
         ]);
 
@@ -42,15 +42,16 @@ class CentralLoginController extends Controller
 
         $request->session()->regenerate();
 
-        $user   = Auth::guard('tenant')->user();
+        $user = Auth::guard('tenant')->user();
         $tenant = Tenant::find($user->tenant_id);
 
         if (! $tenant) {
             Auth::guard('tenant')->logout();
+
             return back()->withErrors(['email' => 'এই একাউন্টের দোকান খুঁজে পাওয়া যায়নি।']);
         }
 
-        return redirect()->away($tenant->url() . '/panel');
+        return redirect()->away($tenant->url().'/panel');
     }
 
     public function forgotForm()
@@ -78,7 +79,7 @@ class CentralLoginController extends Controller
             ['token' => Hash::make($token), 'created_at' => now()]
         );
 
-        $resetUrl = route('central.password.reset', ['token' => $token]) . '?email=' . urlencode($data['email']);
+        $resetUrl = route('central.password.reset', ['token' => $token]).'?email='.urlencode($data['email']);
 
         try {
             Mail::raw(
@@ -106,8 +107,8 @@ class CentralLoginController extends Controller
     public function resetPassword(Request $request)
     {
         $data = $request->validate([
-            'token'    => 'required',
-            'email'    => 'required|email',
+            'token' => 'required',
+            'email' => 'required|email',
             'password' => 'required|min:6|confirmed',
         ]);
 
@@ -119,6 +120,7 @@ class CentralLoginController extends Controller
 
         if (now()->diffInMinutes($record->created_at) > 60) {
             DB::table('password_reset_tokens')->where('email', $data['email'])->delete();
+
             return back()->withErrors(['token' => 'লিংকের মেয়াদ শেষ — আবার রিসেট করুন।']);
         }
 
@@ -134,7 +136,7 @@ class CentralLoginController extends Controller
         $tenant = Tenant::find($user->tenant_id);
 
         return redirect()->away(
-            ($tenant ? $tenant->url() . '/panel/login' : route('central.login'))
+            ($tenant ? $tenant->url().'/panel/login' : route('central.login'))
         )->with('reset_success', 'পাসওয়ার্ড বদলানো হয়েছে। এখন লগইন করুন।');
     }
 }

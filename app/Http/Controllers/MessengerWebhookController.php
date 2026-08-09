@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FacebookPage;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Services\Messenger\MessengerApi;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -41,25 +43,70 @@ class MessengerWebhookController extends Controller
 
         foreach ($entries as $entry) {
             $pageId = $entry['id'] ?? null;
-            if (! $pageId) continue;
+            if (! $pageId) {
+                continue;
+            }
 
-            $setting = MessengerSetting::withoutGlobalScopes()
-                ->where('page_id', $pageId)->where('is_active', 1)->first();
+            $owner = $this->resolvePageOwner($pageId);
 
-            if (! $setting) continue; // page not connected to any tenant — ignore
+            if (! $owner) {
+                continue;
+            } // page not connected to any tenant — ignore
 
             foreach (($entry['messaging'] ?? []) as $event) {
-                $this->handleEvent($event, $setting, $api);
+                $this->handleEvent($event, $owner, $api);
             }
         }
 
         return response()->json(['ok' => true]);
     }
 
-    protected function handleEvent(array $event, MessengerSetting $setting, MessengerApi $api): void
+    /**
+     * Resolves which tenant owns an incoming page_id — checks OAuth-
+     * connected Pages (facebook_pages) first, falls back to the legacy
+     * manually-pasted messenger_settings row. Purely additive: neither
+     * table's own data or the caller's signature/dedup logic changes,
+     * this only decides which row supplies tenant_id/page_access_token.
+     *
+     * The facebook_pages query is skipped entirely (not try/caught) when
+     * those tables don't exist yet — database/sql/chunk23.sql is additive
+     * and may not be imported on every environment yet. Skipping via an
+     * explicit existence check, rather than swallowing exceptions, means a
+     * genuine, unrelated DB error still surfaces normally instead of being
+     * silently absorbed here.
+     */
+    protected function resolvePageOwner(string $pageId): ?object
+    {
+        $page = FacebookPage::tablesReady()
+            ? FacebookPage::withoutGlobalScopes()->where('page_id', $pageId)->where('is_active', 1)->first()
+            : null;
+
+        if ($page) {
+            return (object) [
+                'tenant_id' => $page->tenant_id,
+                'page_access_token' => $page->page_access_token,
+                'facebook_page_id' => $page->id,
+            ];
+        }
+
+        $setting = MessengerSetting::withoutGlobalScopes()
+            ->where('page_id', $pageId)->where('is_active', 1)->first();
+
+        if ($setting) {
+            return (object) [
+                'tenant_id' => $setting->tenant_id,
+                'page_access_token' => $setting->page_access_token,
+                'facebook_page_id' => null,
+            ];
+        }
+
+        return null;
+    }
+
+    protected function handleEvent(array $event, object $owner, MessengerApi $api): void
     {
         $psid = $event['sender']['id'] ?? null;
-        $mid  = $event['message']['mid'] ?? null;
+        $mid = $event['message']['mid'] ?? null;
         $text = $event['message']['text'] ?? null;
         $attachments = $event['message']['attachments'] ?? [];
 
@@ -77,7 +124,7 @@ class MessengerWebhookController extends Controller
 
         // resolve customer's display name once, reuse for later messages
         $existing = MessengerMessage::withoutGlobalScopes()
-            ->where('tenant_id', $setting->tenant_id)
+            ->where('tenant_id', $owner->tenant_id)
             ->where('sender_psid', $psid)
             ->whereNotNull('customer_name')
             ->first();
@@ -86,25 +133,37 @@ class MessengerWebhookController extends Controller
 
         if (! $name) {
             try {
-                $profile = $api->getProfile($psid, $setting->page_access_token);
-                $name = trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? '')) ?: null;
+                $profile = $api->getProfile($psid, $owner->page_access_token);
+                $name = trim(($profile['first_name'] ?? '').' '.($profile['last_name'] ?? '')) ?: null;
             } catch (\Throwable $e) {
                 $name = null;
             }
         }
 
+        // facebook_page_id is only ever included in the INSERT when the
+        // column is confirmed to exist (FacebookPage::tablesReady()) — an
+        // Eloquent create() builds its column list from this array's keys
+        // regardless of whether the schema actually has that column, so
+        // simply passing null here when the column is missing would still
+        // throw a SQL "unknown column" error, not silently no-op it.
+        $attributes = [
+            'tenant_id' => $owner->tenant_id,
+            'sender_psid' => $psid,
+            'mid' => $mid,
+            'customer_name' => $name,
+            'message_text' => $text,
+            'attachment_url' => $attachments[0]['payload']['url'] ?? null,
+            'direction' => 'in',
+            'status' => 'new',
+        ];
+
+        if (FacebookPage::tablesReady()) {
+            $attributes['facebook_page_id'] = $owner->facebook_page_id;
+        }
+
         try {
-            MessengerMessage::withoutGlobalScopes()->create([
-                'tenant_id'      => $setting->tenant_id,
-                'sender_psid'    => $psid,
-                'mid'            => $mid,
-                'customer_name'  => $name,
-                'message_text'   => $text,
-                'attachment_url' => $attachments[0]['payload']['url'] ?? null,
-                'direction'      => 'in',
-                'status'         => 'new',
-            ]);
-        } catch (\Illuminate\Database\QueryException $e) {
+            MessengerMessage::withoutGlobalScopes()->create($attributes);
+        } catch (QueryException $e) {
             if ($e->getCode() !== '23000') {
                 throw $e;
             }
@@ -135,7 +194,7 @@ class MessengerWebhookController extends Controller
             return false;
         }
 
-        $expected = 'sha256=' . hash_hmac('sha256', $request->getContent(), $secret);
+        $expected = 'sha256='.hash_hmac('sha256', $request->getContent(), $secret);
 
         return hash_equals($expected, $signature);
     }

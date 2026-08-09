@@ -7,5 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 class SourceProductImage extends Model
 {
     protected $guarded = [];
+
     public $timestamps = false;
 }

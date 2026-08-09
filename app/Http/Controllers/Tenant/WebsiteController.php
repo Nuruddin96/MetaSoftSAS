@@ -23,10 +23,10 @@ class WebsiteController extends Controller
     public function index()
     {
         return view('tenant.website.index', [
-            'tenant'  => app('currentTenant'),
-            'set'     => StoreSetting::pluck('value', 'key'),
+            'tenant' => app('currentTenant'),
+            'set' => StoreSetting::pluck('value', 'key'),
             'banners' => Banner::orderBy('sort_order')->get(),
-            'pages'   => Page::orderBy('sort_order')->get(),
+            'pages' => Page::orderBy('sort_order')->get(),
         ]);
     }
 
@@ -34,18 +34,18 @@ class WebsiteController extends Controller
     public function brand(Request $request)
     {
         $data = $request->validate([
-            'store_name'      => 'required|string|max:150',
-            'primary_color'   => 'required|regex:/^#[0-9A-Fa-f]{6}$/',
+            'store_name' => 'required|string|max:150',
+            'primary_color' => 'required|regex:/^#[0-9A-Fa-f]{6}$/',
             'secondary_color' => 'nullable|regex:/^#[0-9A-Fa-f]{6}$/',
-            'logo'            => 'nullable|image|max:2048',
-            'announcement'    => 'nullable|string|max:200',
+            'logo' => 'nullable|image|max:2048',
+            'announcement' => 'nullable|string|max:200',
         ]);
 
         $tenant = app('currentTenant');
 
         $update = [
-            'store_name'      => $data['store_name'],
-            'primary_color'   => $data['primary_color'],
+            'store_name' => $data['store_name'],
+            'primary_color' => $data['primary_color'],
             'secondary_color' => $data['secondary_color'] ?? $tenant->secondary_color,
         ];
 
@@ -53,7 +53,7 @@ class WebsiteController extends Controller
             if ($tenant->logo_path) {
                 Storage::disk('public')->delete($tenant->logo_path);
             }
-            $update['logo_path'] = $request->file('logo')->store('branding/' . $tenant->id, 'public');
+            $update['logo_path'] = $request->file('logo')->store('branding/'.$tenant->id, 'public');
         }
 
         $tenant->update($update);
@@ -79,8 +79,8 @@ class WebsiteController extends Controller
     public function homepage(Request $request)
     {
         $data = $request->validate([
-            'featured_title'  => 'nullable|string|max:100',
-            'hero_style'      => 'nullable|in:slider,simple,none',
+            'featured_title' => 'nullable|string|max:100',
+            'hero_style' => 'nullable|in:slider,simple,none',
         ]);
 
         $this->put('featured_title', $data['featured_title'] ?? null);
@@ -95,16 +95,16 @@ class WebsiteController extends Controller
     public function footer(Request $request)
     {
         $data = $request->validate([
-            'footer_about'     => 'nullable|string|max:500',
-            'footer_phone'     => 'nullable|string|max:50',
-            'footer_email'     => 'nullable|string|max:100',
-            'footer_address'   => 'nullable|string|max:255',
-            'footer_note'      => 'nullable|string|max:255',
-            'social_facebook'  => 'nullable|url|max:255',
+            'footer_about' => 'nullable|string|max:500',
+            'footer_phone' => 'nullable|string|max:50',
+            'footer_email' => 'nullable|string|max:100',
+            'footer_address' => 'nullable|string|max:255',
+            'footer_note' => 'nullable|string|max:255',
+            'social_facebook' => 'nullable|url|max:255',
             'social_instagram' => 'nullable|url|max:255',
-            'social_youtube'   => 'nullable|url|max:255',
-            'social_tiktok'    => 'nullable|url|max:255',
-            'whatsapp_number'  => 'nullable|string|max:20',
+            'social_youtube' => 'nullable|url|max:255',
+            'social_tiktok' => 'nullable|url|max:255',
+            'whatsapp_number' => 'nullable|string|max:20',
         ]);
 
         foreach ($data as $key => $value) {
@@ -121,9 +121,9 @@ class WebsiteController extends Controller
     public function storeBanner(Request $request)
     {
         $data = $request->validate([
-            'image'       => 'required|image|max:4096',
-            'title'       => 'nullable|string|max:150',
-            'subtitle'    => 'nullable|string|max:255',
+            'image' => 'required|image|max:4096',
+            'title' => 'nullable|string|max:150',
+            'subtitle' => 'nullable|string|max:255',
             'button_text' => 'nullable|string|max:50',
             'button_link' => 'nullable|string|max:255',
         ]);
@@ -131,13 +131,13 @@ class WebsiteController extends Controller
         $tenant = app('currentTenant');
 
         Banner::create([
-            'image_path'  => $request->file('image')->store('banners/' . $tenant->id, 'public'),
-            'title'       => $data['title'] ?? null,
-            'subtitle'    => $data['subtitle'] ?? null,
+            'image_path' => $request->file('image')->store('banners/'.$tenant->id, 'public'),
+            'title' => $data['title'] ?? null,
+            'subtitle' => $data['subtitle'] ?? null,
             'button_text' => $data['button_text'] ?? null,
             'button_link' => $data['button_link'] ?? null,
-            'sort_order'  => (int) Banner::max('sort_order') + 1,
-            'is_active'   => 1,
+            'sort_order' => (int) Banner::max('sort_order') + 1,
+            'is_active' => 1,
         ]);
 
         return back()->with('success', 'ব্যানার যোগ হয়েছে।');
@@ -158,17 +158,17 @@ class WebsiteController extends Controller
     public function storePage(Request $request)
     {
         $data = $request->validate([
-            'title'   => 'required|string|max:150',
+            'title' => 'required|string|max:150',
             'content' => 'nullable|string|max:50000',
         ]);
 
         Page::create([
-            'title'          => $data['title'],
-            'content'        => $data['content'] ?? null,
+            'title' => $data['title'],
+            'content' => $data['content'] ?? null,
             'show_in_footer' => $request->boolean('show_in_footer', true),
             'show_in_header' => $request->boolean('show_in_header'),
-            'sort_order'     => (int) Page::max('sort_order') + 1,
-            'is_active'      => 1,
+            'sort_order' => (int) Page::max('sort_order') + 1,
+            'is_active' => 1,
         ]);
 
         return back()->with('success', 'পেজ তৈরি হয়েছে।');
@@ -182,16 +182,16 @@ class WebsiteController extends Controller
     public function updatePage(Request $request, Page $page)
     {
         $data = $request->validate([
-            'title'   => 'required|string|max:150',
+            'title' => 'required|string|max:150',
             'content' => 'nullable|string|max:50000',
         ]);
 
         $page->update([
-            'title'          => $data['title'],
-            'content'        => $data['content'] ?? null,
+            'title' => $data['title'],
+            'content' => $data['content'] ?? null,
             'show_in_footer' => $request->boolean('show_in_footer'),
             'show_in_header' => $request->boolean('show_in_header'),
-            'is_active'      => $request->boolean('is_active'),
+            'is_active' => $request->boolean('is_active'),
         ]);
 
         return redirect()->route('tenant.website')->with('success', 'পেজ আপডেট হয়েছে।');

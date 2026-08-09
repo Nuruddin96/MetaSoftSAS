@@ -19,7 +19,7 @@ class CreateSuperAdmin extends Command
             ['name' => $this->option('name'), 'password' => Hash::make($this->argument('password'))]
         );
 
-        $this->info('Super admin ready: ' . $admin->email);
+        $this->info('Super admin ready: '.$admin->email);
 
         return self::SUCCESS;
     }

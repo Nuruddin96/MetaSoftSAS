@@ -9,8 +9,9 @@ use App\Models\SubscriptionPayment;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Domain\DomainManager;
-use Illuminate\Support\Facades\Hash;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class TenantController extends Controller
 {
@@ -18,10 +19,10 @@ class TenantController extends Controller
     {
         $tenants = Tenant::with('plan')
             ->when($request->q, fn ($q) => $q->where(fn ($qq) => $qq
-                ->where('store_name', 'like', '%' . $request->q . '%')
-                ->orWhere('subdomain', 'like', '%' . $request->q . '%')
-                ->orWhere('owner_phone', 'like', '%' . $request->q . '%')
-                ->orWhere('owner_email', 'like', '%' . $request->q . '%')))
+                ->where('store_name', 'like', '%'.$request->q.'%')
+                ->orWhere('subdomain', 'like', '%'.$request->q.'%')
+                ->orWhere('owner_phone', 'like', '%'.$request->q.'%')
+                ->orWhere('owner_email', 'like', '%'.$request->q.'%')))
             ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->latest()->paginate(25)->withQueryString();
 
@@ -31,10 +32,10 @@ class TenantController extends Controller
     public function show(Tenant $tenant)
     {
         return view('super.tenant-show', [
-            'tenant'   => $tenant->load('plan'),
-            'plans'    => Plan::orderBy('sort_order')->get(),
-            'orders'   => Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count(),
-            'staff'    => User::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count(),
+            'tenant' => $tenant->load('plan'),
+            'plans' => Plan::orderBy('sort_order')->get(),
+            'orders' => Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count(),
+            'staff' => User::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count(),
             'payments' => SubscriptionPayment::where('tenant_id', $tenant->id)->latest()->limit(10)->get(),
             'domainActivationInstructions' => $tenant->custom_domain_request_status === 'dns_verified'
                 ? DomainManager::driver()->activationInstructions($tenant)
@@ -45,7 +46,8 @@ class TenantController extends Controller
     public function suspend(Tenant $tenant)
     {
         $tenant->update(['status' => 'suspended']);
-        return back()->with('success', $tenant->store_name . ' সাসপেন্ড করা হয়েছে।');
+
+        return back()->with('success', $tenant->store_name.' সাসপেন্ড করা হয়েছে।');
     }
 
     public function activate(Tenant $tenant)
@@ -55,7 +57,8 @@ class TenantController extends Controller
             : (($tenant->trial_ends_at && $tenant->trial_ends_at->isFuture()) ? 'trial' : 'expired');
 
         $tenant->update(['status' => $status]);
-        return back()->with('success', $tenant->store_name . ' অ্যাক্টিভেট করা হয়েছে (' . $status . ')।');
+
+        return back()->with('success', $tenant->store_name.' অ্যাক্টিভেট করা হয়েছে ('.$status.')।');
     }
 
     public function edit(Tenant $tenant)
@@ -66,11 +69,11 @@ class TenantController extends Controller
     public function update(Request $request, Tenant $tenant)
     {
         $data = $request->validate([
-            'store_name'  => 'required|string|max:150',
-            'subdomain'   => 'required|string|max:63|regex:/^[a-z0-9-]+$/|unique:tenants,subdomain,' . $tenant->id,
-            'owner_name'  => 'required|string|max:150',
+            'store_name' => 'required|string|max:150',
+            'subdomain' => 'required|string|max:63|regex:/^[a-z0-9-]+$/|unique:tenants,subdomain,'.$tenant->id,
+            'owner_name' => 'required|string|max:150',
             'owner_phone' => 'required|string|max:20',
-            'owner_email' => 'required|email|unique:tenants,owner_email,' . $tenant->id,
+            'owner_email' => 'required|email|unique:tenants,owner_email,'.$tenant->id,
         ], [
             'subdomain.regex' => 'সাবডোমেইনে শুধু ছোট হাতের ইংরেজি অক্ষর, সংখ্যা ও হাইফেন ব্যবহার করা যাবে।',
         ]);
@@ -96,7 +99,7 @@ class TenantController extends Controller
 
         $owner->update(['password' => Hash::make($data['password'])]);
 
-        return back()->with('success', $owner->email . ' — এর পাসওয়ার্ড পরিবর্তন করা হয়েছে।');
+        return back()->with('success', $owner->email.' — এর পাসওয়ার্ড পরিবর্তন করা হয়েছে।');
     }
 
     public function destroy(Tenant $tenant)
@@ -118,7 +121,7 @@ class TenantController extends Controller
         }
 
         $tenant->update([
-            'custom_domain_request_status'  => 'dns_verified',
+            'custom_domain_request_status' => 'dns_verified',
             'custom_domain_dns_verified_at' => now(),
         ]);
 
@@ -133,12 +136,12 @@ class TenantController extends Controller
         }
 
         $tenant->update([
-            'custom_domain'                 => $tenant->custom_domain_requested,
-            'custom_domain_verified'        => 1,
-            'custom_domain_request_status'  => 'approved',
+            'custom_domain' => $tenant->custom_domain_requested,
+            'custom_domain_verified' => 1,
+            'custom_domain_request_status' => 'approved',
         ]);
 
-        return back()->with('success', $tenant->custom_domain . ' চালু করা হয়েছে।');
+        return back()->with('success', $tenant->custom_domain.' চালু করা হয়েছে।');
     }
 
     public function rejectDomain(Tenant $tenant)
@@ -154,24 +157,24 @@ class TenantController extends Controller
     {
         $data = $request->validate([
             'subscription_ends_at' => 'required|date|after:today',
-            'plan_id'              => 'required|exists:plans,id',
+            'plan_id' => 'required|exists:plans,id',
         ]);
 
         $tenant->update([
-            'status'               => 'active',
-            'plan_id'              => $data['plan_id'],
-            'subscription_ends_at' => \Carbon\Carbon::parse($data['subscription_ends_at'])->endOfDay(),
+            'status' => 'active',
+            'plan_id' => $data['plan_id'],
+            'subscription_ends_at' => Carbon::parse($data['subscription_ends_at'])->endOfDay(),
         ]);
 
         SubscriptionPayment::create([
             'tenant_id' => $tenant->id,
-            'gateway'   => 'manual',
-            'amount'    => 0,
-            'status'    => 'completed',
-            'paid_at'   => now(),
-            'gateway_response' => ['note' => 'Manual extend to ' . $data['subscription_ends_at'] . ' by super admin'],
+            'gateway' => 'manual',
+            'amount' => 0,
+            'status' => 'completed',
+            'paid_at' => now(),
+            'gateway_response' => ['note' => 'Manual extend to '.$data['subscription_ends_at'].' by super admin'],
         ]);
 
-        return back()->with('success', 'সাবস্ক্রিপশন ' . \Carbon\Carbon::parse($data['subscription_ends_at'])->format('d M Y') . ' পর্যন্ত আপডেট হয়েছে।');
+        return back()->with('success', 'সাবস্ক্রিপশন '.Carbon::parse($data['subscription_ends_at'])->format('d M Y').' পর্যন্ত আপডেট হয়েছে।');
     }
 }

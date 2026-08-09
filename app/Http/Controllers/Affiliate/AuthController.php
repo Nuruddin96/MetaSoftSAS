@@ -18,19 +18,19 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $data = $request->validate([
-            'name'     => 'required|string|max:150',
-            'email'    => 'required|email|unique:affiliates,email',
-            'phone'    => 'required|regex:/^01[3-9][0-9]{8}$/',
+            'name' => 'required|string|max:150',
+            'email' => 'required|email|unique:affiliates,email',
+            'phone' => 'required|regex:/^01[3-9][0-9]{8}$/',
             'password' => 'required|min:6|confirmed',
         ], [
-            'phone.regex'   => 'সঠিক মোবাইল নাম্বার দিন (01XXXXXXXXX)।',
-            'email.unique'  => 'এই ইমেইলে আগেই অ্যাফিলিয়েট একাউন্ট আছে।',
+            'phone.regex' => 'সঠিক মোবাইল নাম্বার দিন (01XXXXXXXXX)।',
+            'email.unique' => 'এই ইমেইলে আগেই অ্যাফিলিয়েট একাউন্ট আছে।',
         ]);
 
         $affiliate = Affiliate::create([
-            'name'     => $data['name'],
-            'email'    => $data['email'],
-            'phone'    => $data['phone'],
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'phone' => $data['phone'],
             'password' => Hash::make($data['password']),
         ]);
 
@@ -47,7 +47,7 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'email'    => 'required|email',
+            'email' => 'required|email',
             'password' => 'required',
         ]);
 

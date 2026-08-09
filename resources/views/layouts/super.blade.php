@@ -48,6 +48,5 @@
         @yield('content')
     </main>
 </div>
-<script>document.getElementById('navToggle')?.addEventListener('click', () => document.getElementById('navMenu').classList.toggle('hidden'));</script>
 </body>
 </html>

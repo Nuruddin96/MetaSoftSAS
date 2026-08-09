@@ -7,20 +7,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    <style>
-        .card-hover { transition: transform .15s ease, box-shadow .15s ease; }
-        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 20px -6px rgba(19,42,33,0.12); }
-        .btn-loading { position: relative; pointer-events: none; opacity: .75; }
-        .btn-loading .btn-spinner { display: inline-block; }
-        .btn-spinner { display:none; width:16px; height:16px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation: spin .6s linear infinite; margin-right:6px; vertical-align:-3px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        #toastStack { position: fixed; top: 16px; right: 16px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
-        .toast { min-width: 260px; max-width: 360px; padding: 12px 16px; border-radius: 10px; font-size: 14px; box-shadow: 0 10px 25px -8px rgba(19,42,33,0.25); animation: toastIn .25s ease; }
-        @keyframes toastIn { from { opacity:0; transform: translateX(20px);} to { opacity:1; transform: translateX(0);} }
-        .toast.leaving { animation: toastOut .2s ease forwards; }
-        @keyframes toastOut { to { opacity:0; transform: translateX(20px);} }
-        .nav-group-label { font-size:11px; letter-spacing:.06em; color:rgba(255,255,255,.4); padding:14px 16px 4px; text-transform:uppercase; }
-    </style>
 </head>
 <body class="font-body bg-paper text-ink antialiased">
 @php
@@ -206,38 +192,7 @@
 <div id="toastStack"></div>
 
 <script>
-    document.getElementById('navToggle')?.addEventListener('click', () => {
-        document.getElementById('navMenu').classList.toggle('hidden');
-        document.getElementById('navToggleOpenIcon')?.classList.toggle('hidden');
-        document.getElementById('navToggleCloseIcon')?.classList.toggle('hidden');
-    });
-
-    // ---- notification bell ----
-    const notifBtn = document.getElementById('notifBtn');
-    const notifPanel = document.getElementById('notifPanel');
-    notifBtn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        notifPanel.classList.toggle('hidden');
-    });
-    document.addEventListener('click', (e) => {
-        if (!notifPanel?.contains(e.target) && e.target !== notifBtn) notifPanel?.classList.add('hidden');
-    });
-
     lucide.createIcons();
-
-    // ---- toast system ----
-    function showToast(message, type = 'success') {
-        const stack = document.getElementById('toastStack');
-        const el = document.createElement('div');
-        const styles = {
-            success: 'bg-white border border-leaf/30 text-leafdk',
-            error:   'bg-white border border-red-200 text-red-700',
-        };
-        el.className = 'toast ' + (styles[type] || styles.success);
-        el.innerHTML = (type === 'error' ? '⚠️ ' : '✅ ') + message;
-        stack.appendChild(el);
-        setTimeout(() => { el.classList.add('leaving'); setTimeout(() => el.remove(), 200); }, 4000);
-    }
 
     @if (session('success'))
         showToast(@json(session('success')), 'success');
@@ -251,19 +206,6 @@
     @if ($errors->any())
         showToast(@json($errors->first()), 'error');
     @endif
-
-    // ---- button loading state on form submit ----
-    document.querySelectorAll('form').forEach(form => {
-        form.addEventListener('submit', function () {
-            if (form.dataset.noLoading) return;
-            const btn = form.querySelector('button[type="submit"], button:not([type])');
-            if (btn && !btn.classList.contains('btn-loading')) {
-                btn.dataset.originalText = btn.innerHTML;
-                btn.classList.add('btn-loading');
-                btn.innerHTML = '<span class="btn-spinner"></span>' + btn.innerHTML;
-            }
-        });
-    });
 </script>
 @stack('scripts')
 </body>

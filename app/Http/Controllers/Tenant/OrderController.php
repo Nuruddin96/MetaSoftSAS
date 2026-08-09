@@ -6,54 +6,54 @@ use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Inventory;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\StockMovement;
-use App\Models\StoreSetting;
 use App\Models\Warehouse;
 use App\Services\Courier\CourierManager;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
     public function create()
     {
-        $products = \App\Models\Product::with('variants')->where('is_active', 1)->orderBy('name')->get();
+        $products = Product::with('variants')->where('is_active', 1)->orderBy('name')->get();
 
         $productsJson = $products->map(fn ($p) => [
-            'name'     => $p->name,
+            'name' => $p->name,
             'variants' => $p->variants->map(fn ($v) => [
-                'id'    => $v->id,
-                'name'  => $v->variant_name,
+                'id' => $v->id,
+                'name' => $v->variant_name,
                 'price' => (float) $v->selling_price,
             ])->values(),
         ])->values();
 
         return view('tenant.orders.create', [
             'productsJson' => $productsJson,
-            'divisions'    => DB::table('bd_divisions')->orderBy('id')->get(),
-            'districts'    => DB::table('bd_districts')->orderBy('name')->get(),
+            'divisions' => DB::table('bd_divisions')->orderBy('id')->get(),
+            'districts' => DB::table('bd_districts')->orderBy('name')->get(),
         ]);
     }
 
     public function store(Request $request)
     {
         $data = $request->validate([
-            'customer_name'    => 'required|string|max:150',
-            'customer_phone'   => 'required|regex:/^01[3-9][0-9]{8}$/',
+            'customer_name' => 'required|string|max:150',
+            'customer_phone' => 'required|regex:/^01[3-9][0-9]{8}$/',
             'customer_address' => 'nullable|string|max:1000',
-            'division_id'      => 'nullable|integer|exists:bd_divisions,id',
-            'district_id'      => 'nullable|integer|exists:bd_districts,id',
-            'channel'          => 'required|in:website,facebook,instagram,whatsapp,call,others',
-            'payment_method'   => 'required|in:cod,cash,bkash,nagad,bank',
-            'delivery_charge'  => 'nullable|numeric|min:0',
-            'discount'         => 'nullable|numeric|min:0',
-            'note'             => 'nullable|string|max:500',
-            'variant_ids'      => 'required|array|min:1',
-            'variant_ids.*'    => 'required|exists:product_variants,id',
-            'quantities'       => 'required|array|min:1',
-            'quantities.*'     => 'required|integer|min:1',
+            'division_id' => 'nullable|integer|exists:bd_divisions,id',
+            'district_id' => 'nullable|integer|exists:bd_districts,id',
+            'channel' => 'required|in:website,facebook,instagram,whatsapp,call,others',
+            'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
+            'delivery_charge' => 'nullable|numeric|min:0',
+            'discount' => 'nullable|numeric|min:0',
+            'note' => 'nullable|string|max:500',
+            'variant_ids' => 'required|array|min:1',
+            'variant_ids.*' => 'required|exists:product_variants,id',
+            'quantities' => 'required|array|min:1',
+            'quantities.*' => 'required|integer|min:1',
         ], [
             'customer_phone.regex' => 'সঠিক মোবাইল নাম্বার দিন (01XXXXXXXXX)।',
         ]);
@@ -64,7 +64,7 @@ class OrderController extends Controller
             $customer = Customer::firstOrCreate(
                 ['phone' => $data['customer_phone']],
                 ['name' => $data['customer_name'], 'address' => $data['customer_address'] ?? null,
-                 'division_id' => $data['division_id'] ?? null, 'district_id' => $data['district_id'] ?? null]
+                    'division_id' => $data['division_id'] ?? null, 'district_id' => $data['district_id'] ?? null]
             );
 
             $subtotal = 0;
@@ -76,23 +76,23 @@ class OrderController extends Controller
             $deliveryCharge = (float) ($data['delivery_charge'] ?? 0);
 
             $order = Order::create([
-                'source'           => 'manual',
-                'channel'          => $data['channel'],
-                'customer_id'      => $customer->id,
-                'customer_name'    => $data['customer_name'],
-                'customer_phone'   => $data['customer_phone'],
+                'source' => 'manual',
+                'channel' => $data['channel'],
+                'customer_id' => $customer->id,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'],
                 'customer_address' => $data['customer_address'] ?? null,
-                'division_id'      => $data['division_id'] ?? null,
-                'district_id'      => $data['district_id'] ?? null,
-                'subtotal'         => $subtotal,
-                'discount'         => $discount,
-                'delivery_charge'  => $deliveryCharge,
-                'total'            => $subtotal - $discount + $deliveryCharge,
-                'payment_method'   => $data['payment_method'],
-                'status'           => 'confirmed',
-                'confirmed_at'     => now(),
-                'note'             => $data['note'] ?? null,
-                'fb_event_id'      => (string) Str::uuid(),
+                'division_id' => $data['division_id'] ?? null,
+                'district_id' => $data['district_id'] ?? null,
+                'subtotal' => $subtotal,
+                'discount' => $discount,
+                'delivery_charge' => $deliveryCharge,
+                'total' => $subtotal - $discount + $deliveryCharge,
+                'payment_method' => $data['payment_method'],
+                'status' => 'confirmed',
+                'confirmed_at' => now(),
+                'note' => $data['note'] ?? null,
+                'fb_event_id' => (string) Str::uuid(),
             ]);
 
             $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
@@ -102,15 +102,15 @@ class OrderController extends Controller
                 $qty = $data['quantities'][$i] ?? 1;
 
                 $order->items()->create([
-                    'tenant_id'      => $order->tenant_id,
-                    'variant_id'     => $v->id,
-                    'product_name'   => $v->product->name,
-                    'variant_name'   => $v->variant_name,
-                    'sku'            => $v->sku,
-                    'unit_price'     => $v->selling_price,
+                    'tenant_id' => $order->tenant_id,
+                    'variant_id' => $v->id,
+                    'product_name' => $v->product->name,
+                    'variant_name' => $v->variant_name,
+                    'sku' => $v->sku,
+                    'unit_price' => $v->selling_price,
                     'purchase_price' => $v->purchase_price,
-                    'quantity'       => $qty,
-                    'line_total'     => $v->selling_price * $qty,
+                    'quantity' => $qty,
+                    'line_total' => $v->selling_price * $qty,
                 ]);
 
                 if ($warehouse) {
@@ -132,7 +132,7 @@ class OrderController extends Controller
             return $order;
         });
 
-        return redirect()->route('tenant.orders.show', $order)->with('success', 'অর্ডার তৈরি হয়েছে — ' . $order->order_number);
+        return redirect()->route('tenant.orders.show', $order)->with('success', 'অর্ডার তৈরি হয়েছে — '.$order->order_number);
     }
 
     public function index(Request $request)
@@ -142,9 +142,9 @@ class OrderController extends Controller
             ->when($request->channel, fn ($q) => $q->where('channel', $request->channel))
             ->when($request->q, function ($q) use ($request) {
                 $q->where(fn ($qq) => $qq
-                    ->where('order_number', 'like', '%' . $request->q . '%')
-                    ->orWhere('customer_phone', 'like', '%' . $request->q . '%')
-                    ->orWhere('customer_name', 'like', '%' . $request->q . '%'));
+                    ->where('order_number', 'like', '%'.$request->q.'%')
+                    ->orWhere('customer_phone', 'like', '%'.$request->q.'%')
+                    ->orWhere('customer_name', 'like', '%'.$request->q.'%'));
             })
             ->latest()->paginate(20)->withQueryString();
 
@@ -165,7 +165,7 @@ class OrderController extends Controller
         ]);
 
         $order->update([
-            'status'       => $data['status'],
+            'status' => $data['status'],
             'confirmed_at' => $data['status'] === 'confirmed' ? now() : $order->confirmed_at,
             'delivered_at' => $data['status'] === 'delivered' ? now() : $order->delivered_at,
         ]);
@@ -188,9 +188,9 @@ class OrderController extends Controller
     public function bulkStatus(Request $request)
     {
         $data = $request->validate([
-            'order_ids'   => 'required|array|min:1',
+            'order_ids' => 'required|array|min:1',
             'order_ids.*' => 'exists:orders,id',
-            'status'      => 'required|in:pending,confirmed,processing,shipped,delivered,cancelled,returned',
+            'status' => 'required|in:pending,confirmed,processing,shipped,delivered,cancelled,returned',
         ]);
 
         $count = Order::whereIn('id', $data['order_ids'])->update(['status' => $data['status']]);
@@ -202,9 +202,9 @@ class OrderController extends Controller
     public function bulkCourier(Request $request)
     {
         $data = $request->validate([
-            'order_ids'   => 'required|array|min:1',
+            'order_ids' => 'required|array|min:1',
             'order_ids.*' => 'exists:orders,id',
-            'provider'    => 'required|in:steadfast,pathao',
+            'provider' => 'required|in:steadfast,pathao',
         ]);
 
         $service = CourierManager::forProvider($data['provider']);
@@ -216,17 +216,18 @@ class OrderController extends Controller
         $orders = Order::whereIn('id', $data['order_ids'])
             ->whereNull('courier_consignment_id')->with('items')->get();
 
-        $sent = 0; $failed = 0;
+        $sent = 0;
+        $failed = 0;
 
         foreach ($orders as $order) {
             try {
                 $result = $service->createShipment($order);
                 $order->update([
-                    'courier_provider'       => $data['provider'],
+                    'courier_provider' => $data['provider'],
                     'courier_consignment_id' => $result['consignment_id'],
-                    'courier_tracking_code'  => $result['tracking_code'],
-                    'courier_status'         => 'pending',
-                    'status'                 => $order->status === 'pending' ? 'processing' : $order->status,
+                    'courier_tracking_code' => $result['tracking_code'],
+                    'courier_status' => 'pending',
+                    'status' => $order->status === 'pending' ? 'processing' : $order->status,
                 ]);
                 $sent++;
             } catch (\Throwable $e) {
@@ -235,7 +236,9 @@ class OrderController extends Controller
         }
 
         $msg = "$sent টি অর্ডার কুরিয়ারে পাঠানো হয়েছে।";
-        if ($failed) $msg .= " $failed টি ব্যর্থ হয়েছে।";
+        if ($failed) {
+            $msg .= " $failed টি ব্যর্থ হয়েছে।";
+        }
 
         return back()->with($failed && ! $sent ? 'error' : 'success', $msg);
     }

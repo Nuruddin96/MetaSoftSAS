@@ -10,5 +10,6 @@ class StoreSetting extends Model
     use BelongsToTenant;
 
     protected $guarded = [];
+
     public $timestamps = true;
 }

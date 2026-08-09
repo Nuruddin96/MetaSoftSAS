@@ -83,8 +83,8 @@ class SourceProductController extends Controller
             $maxOrder++;
             SourceProductImage::create([
                 'source_product_id' => $product->id,
-                'image_path'        => $image->store('source-products/' . $product->id, 'public'),
-                'sort_order'        => $maxOrder,
+                'image_path' => $image->store('source-products/'.$product->id, 'public'),
+                'sort_order' => $maxOrder,
             ]);
         }
 
@@ -97,15 +97,15 @@ class SourceProductController extends Controller
     protected function validated(Request $request): array
     {
         $data = $request->validate([
-            'name'                => 'required|string|max:200',
-            'description'         => 'nullable|string|max:2000',
-            'unit_price'          => 'required|numeric|min:0',
-            'max_price'           => 'nullable|numeric|min:0|gte:unit_price',
-            'min_order_qty'       => 'nullable|integer|min:1',
-            'delivery_time_days'  => 'nullable|string|max:50',
-            'shipping_cost'       => 'nullable|numeric|min:0',
-            'images'              => 'nullable|array|max:8',
-            'images.*'            => 'image|max:4096',
+            'name' => 'required|string|max:200',
+            'description' => 'nullable|string|max:2000',
+            'unit_price' => 'required|numeric|min:0',
+            'max_price' => 'nullable|numeric|min:0|gte:unit_price',
+            'min_order_qty' => 'nullable|integer|min:1',
+            'delivery_time_days' => 'nullable|string|max:50',
+            'shipping_cost' => 'nullable|numeric|min:0',
+            'images' => 'nullable|array|max:8',
+            'images.*' => 'image|max:4096',
         ], [
             'max_price.gte' => 'সর্বোচ্চ দাম সর্বনিম্ন দামের চেয়ে বেশি হতে হবে।',
         ]);

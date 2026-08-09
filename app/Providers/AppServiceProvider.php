@@ -15,7 +15,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->bind(DomainDriver::class, function () {
             return match (config('domains.driver', 'manual')) {
-                default => new ManualProvisionDriver(),
+                default => new ManualProvisionDriver,
             };
         });
     }

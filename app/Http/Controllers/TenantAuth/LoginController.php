@@ -16,13 +16,14 @@ class LoginController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'email'    => ['required', 'email'],
+            'email' => ['required', 'email'],
             'password' => ['required'],
         ]);
 
         // BelongsToTenant global scope already restricts to current tenant
         if (Auth::guard('tenant')->attempt($credentials + ['is_active' => 1], $request->boolean('remember'))) {
             $request->session()->regenerate();
+
             return redirect()->intended(route('tenant.dashboard'));
         }
 

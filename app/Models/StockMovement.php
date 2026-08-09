@@ -10,6 +10,7 @@ class StockMovement extends Model
     use BelongsToTenant;
 
     protected $guarded = [];
+
     public $timestamps = false;
 
     protected static function booted(): void

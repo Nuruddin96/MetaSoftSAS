@@ -10,7 +10,9 @@ class FraudCheckLog extends Model
     use BelongsToTenant;
 
     protected $guarded = [];
+
     protected $casts = ['result' => 'array'];
+
     public $timestamps = false;
 
     protected static function booted(): void

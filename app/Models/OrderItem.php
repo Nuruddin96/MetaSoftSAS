@@ -10,6 +10,7 @@ class OrderItem extends Model
     use BelongsToTenant;
 
     protected $guarded = [];
+
     public $timestamps = false;
 
     public function order()

@@ -11,12 +11,11 @@ class ProductController extends Controller
     public function index()
     {
         return view('storefront.products', [
-            'tenant'     => app('currentTenant'),
+            'tenant' => app('currentTenant'),
             'categories' => Category::where('is_active', 1)->get(),
-            'products'   => Product::with('variants')->where('is_active', 1)
-                                ->when(request('category'), fn ($q, $slug) =>
-                                    $q->whereHas('category', fn ($c) => $c->where('slug', $slug)))
-                                ->latest()->paginate(24)->withQueryString(),
+            'products' => Product::with('variants')->where('is_active', 1)
+                ->when(request('category'), fn ($q, $slug) => $q->whereHas('category', fn ($c) => $c->where('slug', $slug)))
+                ->latest()->paginate(24)->withQueryString(),
         ]);
     }
 
@@ -26,7 +25,7 @@ class ProductController extends Controller
             ->where('slug', $slug)->where('is_active', 1)->firstOrFail();
 
         return view('storefront.product', [
-            'tenant'  => app('currentTenant'),
+            'tenant' => app('currentTenant'),
             'product' => $product,
         ]);
     }

@@ -26,8 +26,8 @@ class ProductVariant extends Model
 
             if (empty($v->barcode)) {
                 $base = str_pad((string) ($v->tenant_id % 10000), 4, '0', STR_PAD_LEFT)
-                      . str_pad((string) ($v->id % 100000000), 8, '0', STR_PAD_LEFT);
-                $updates['barcode'] = $base . self::ean13CheckDigit($base);
+                      .str_pad((string) ($v->id % 100000000), 8, '0', STR_PAD_LEFT);
+                $updates['barcode'] = $base.self::ean13CheckDigit($base);
             }
 
             if ($updates) {
@@ -46,8 +46,15 @@ class ProductVariant extends Model
         return (10 - ($sum % 10)) % 10;
     }
 
-    public function product()   { return $this->belongsTo(Product::class); }
-    public function inventory() { return $this->hasMany(Inventory::class, 'variant_id'); }
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    public function inventory()
+    {
+        return $this->hasMany(Inventory::class, 'variant_id');
+    }
 
     public function totalStock(): int
     {

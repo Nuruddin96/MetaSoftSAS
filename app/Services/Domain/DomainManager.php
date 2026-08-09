@@ -19,6 +19,6 @@ class DomainManager
     /** The exact TXT record value every driver checks for — kept in one place so drivers never disagree on the format. */
     public static function expectedTxtValue(string $token): string
     {
-        return 'metasoft-domain-verify=' . $token;
+        return 'metasoft-domain-verify='.$token;
     }
 }

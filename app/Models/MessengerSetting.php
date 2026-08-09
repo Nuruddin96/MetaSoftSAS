@@ -13,6 +13,6 @@ class MessengerSetting extends Model
 
     protected $casts = [
         'page_access_token' => 'encrypted',
-        'is_active'         => 'boolean',
+        'is_active' => 'boolean',
     ];
 }

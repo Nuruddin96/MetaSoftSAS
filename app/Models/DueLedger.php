@@ -10,5 +10,6 @@ class DueLedger extends Model
     use BelongsToTenant;
 
     protected $table = 'due_ledger';
+
     protected $guarded = [];
 }

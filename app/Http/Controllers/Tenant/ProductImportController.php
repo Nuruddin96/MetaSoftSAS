@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\Warehouse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ProductImportController extends Controller
 {
@@ -28,13 +29,15 @@ class ProductImportController extends Controller
         ];
 
         $handle = fopen('php://temp', 'r+');
-        foreach ($rows as $row) fputcsv($handle, $row);
+        foreach ($rows as $row) {
+            fputcsv($handle, $row);
+        }
         rewind($handle);
         $csv = stream_get_contents($handle);
         fclose($handle);
 
-        return response("\xEF\xBB\xBF" . $csv, 200, [
-            'Content-Type'        => 'text/csv; charset=UTF-8',
+        return response("\xEF\xBB\xBF".$csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="product-template.csv"',
         ]);
     }
@@ -43,7 +46,7 @@ class ProductImportController extends Controller
     {
         $request->validate(['file' => 'required|file|mimes:csv,txt|max:4096']);
 
-        $tenant    = app('currentTenant');
+        $tenant = app('currentTenant');
         $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
 
         $handle = fopen($request->file('file')->getRealPath(), 'r');
@@ -63,7 +66,9 @@ class ProductImportController extends Controller
             }
         }
 
-        $created = 0; $skipped = 0; $errors = [];
+        $created = 0;
+        $skipped = 0;
+        $errors = [];
         $productCount = Product::count();
 
         DB::transaction(function () use ($handle, $header, $tenant, $warehouse, &$created, &$skipped, &$errors, &$productCount) {
@@ -72,7 +77,9 @@ class ProductImportController extends Controller
 
             while (($row = fgetcsv($handle)) !== false) {
                 $line++;
-                if (count(array_filter($row)) === 0) continue;
+                if (count(array_filter($row)) === 0) {
+                    continue;
+                }
 
                 $data = array_combine($header, array_pad(array_slice($row, 0, count($header)), count($header), null));
                 $name = trim($data['name'] ?? '');
@@ -80,13 +87,19 @@ class ProductImportController extends Controller
 
                 if ($name === '' || ! is_numeric($price)) {
                     $skipped++;
-                    if (count($errors) < 5) $errors[] = "লাইন $line: নাম বা বিক্রয় মূল্য ঠিক নেই";
+                    if (count($errors) < 5) {
+                        $errors[] = "লাইন $line: নাম বা বিক্রয় মূল্য ঠিক নেই";
+                    }
+
                     continue;
                 }
 
                 if (! $tenant->isWithinLimit('max_products', $productCount)) {
-                    if (count($errors) < 5) $errors[] = "প্ল্যানের প্রোডাক্ট লিমিট শেষ — বাকিগুলো বাদ পড়েছে";
+                    if (count($errors) < 5) {
+                        $errors[] = 'প্ল্যানের প্রোডাক্ট লিমিট শেষ — বাকিগুলো বাদ পড়েছে';
+                    }
                     $skipped++;
+
                     continue;
                 }
 
@@ -98,15 +111,15 @@ class ProductImportController extends Controller
                     if (! empty($data['category'])) {
                         $categoryId = Category::firstOrCreate(
                             ['name' => trim($data['category'])],
-                            ['slug' => \Illuminate\Support\Str::slug($data['category']) . '-' . \Illuminate\Support\Str::lower(\Illuminate\Support\Str::random(3))]
+                            ['slug' => Str::slug($data['category']).'-'.Str::lower(Str::random(3))]
                         )->id;
                     }
 
                     $productsByName[$key] = Product::create([
-                        'name'        => $name,
+                        'name' => $name,
                         'category_id' => $categoryId,
                         'description' => $data['description'] ?? null,
-                        'is_active'   => 1,
+                        'is_active' => 1,
                     ]);
                     $productCount++;
                     $created++;
@@ -115,10 +128,10 @@ class ProductImportController extends Controller
                 $product = $productsByName[$key];
 
                 $variant = $product->variants()->create([
-                    'tenant_id'      => $tenant->id,
-                    'variant_name'   => trim($data['variant'] ?? '') ?: 'Default',
+                    'tenant_id' => $tenant->id,
+                    'variant_name' => trim($data['variant'] ?? '') ?: 'Default',
                     'purchase_price' => is_numeric($data['purchase_price'] ?? null) ? $data['purchase_price'] : 0,
-                    'selling_price'  => $price,
+                    'selling_price' => $price,
                 ]);
 
                 if ($product->variants()->count() > 1) {
@@ -127,9 +140,9 @@ class ProductImportController extends Controller
 
                 if ($warehouse) {
                     Inventory::create([
-                        'variant_id'   => $variant->id,
+                        'variant_id' => $variant->id,
                         'warehouse_id' => $warehouse->id,
-                        'quantity'     => is_numeric($data['stock'] ?? null) ? (int) $data['stock'] : 0,
+                        'quantity' => is_numeric($data['stock'] ?? null) ? (int) $data['stock'] : 0,
                     ]);
                 }
             }
@@ -137,8 +150,10 @@ class ProductImportController extends Controller
 
         fclose($handle);
 
-        $msg = "$created টি প্রোডাক্ট যোগ হয়েছে।" . ($skipped ? " $skipped টি সারি বাদ পড়েছে।" : '');
-        if ($errors) $msg .= ' (' . implode('; ', $errors) . ')';
+        $msg = "$created টি প্রোডাক্ট যোগ হয়েছে।".($skipped ? " $skipped টি সারি বাদ পড়েছে।" : '');
+        if ($errors) {
+            $msg .= ' ('.implode('; ', $errors).')';
+        }
 
         return redirect()->route('tenant.products.index')->with($created ? 'success' : 'error', $msg);
     }

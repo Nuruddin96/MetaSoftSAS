@@ -24,7 +24,7 @@ class ClientPaymentController extends Controller
 
         return view('super.clients.payments', [
             'payments' => $payments,
-            'clients'  => Client::orderBy('business_name')->get(),
+            'clients' => Client::orderBy('business_name')->get(),
             'totalBdt' => (clone $this->filtered($request))->where('currency', 'BDT')->sum('amount'),
             'totalUsd' => (clone $this->filtered($request))->where('currency', 'USD')->sum('amount'),
         ]);
@@ -42,18 +42,18 @@ class ClientPaymentController extends Controller
     public function store(Request $request, Client $client)
     {
         $data = $request->validate([
-            'payment_type'  => 'required|in:monthly,ad_spend,advance,other',
-            'amount'        => 'required|numeric|min:0.01',
-            'currency'      => 'required|in:BDT,USD',
-            'gateway'       => 'required|in:bkash,nagad,bank,cash,other',
-            'month_for'     => 'nullable|string|max:50',
-            'payment_date'  => 'required|date',
-            'attachment'    => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
-            'note'          => 'nullable|string|max:255',
+            'payment_type' => 'required|in:monthly,ad_spend,advance,other',
+            'amount' => 'required|numeric|min:0.01',
+            'currency' => 'required|in:BDT,USD',
+            'gateway' => 'required|in:bkash,nagad,bank,cash,other',
+            'month_for' => 'nullable|string|max:50',
+            'payment_date' => 'required|date',
+            'attachment' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
+            'note' => 'nullable|string|max:255',
         ]);
 
         if ($request->hasFile('attachment')) {
-            $data['attachment_path'] = $request->file('attachment')->store('client-payments/' . $client->id, 'public');
+            $data['attachment_path'] = $request->file('attachment')->store('client-payments/'.$client->id, 'public');
         }
         unset($data['attachment']);
         $data['client_id'] = $client->id;

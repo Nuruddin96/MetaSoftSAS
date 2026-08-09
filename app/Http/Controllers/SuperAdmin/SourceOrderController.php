@@ -23,7 +23,7 @@ class SourceOrderController extends Controller
     public function update(Request $request, SourceOrder $order)
     {
         $data = $request->validate([
-            'status'     => 'required|in:pending,contacted,confirmed,shipped,delivered,cancelled',
+            'status' => 'required|in:pending,contacted,confirmed,shipped,delivered,cancelled',
             'admin_note' => 'nullable|string|max:1000',
         ]);
 

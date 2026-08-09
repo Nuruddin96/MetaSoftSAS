@@ -14,8 +14,8 @@ class Order extends Model
 
     protected $casts = [
         'fraud_summary' => 'array',
-        'confirmed_at'  => 'datetime',
-        'delivered_at'  => 'datetime',
+        'confirmed_at' => 'datetime',
+        'delivered_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -27,13 +27,20 @@ class Order extends Model
                     ->where('tenant_id', $o->tenant_id)
                     ->lockForUpdate()
                     ->max('id');
-                $o->order_number = 'ORD-' . str_pad((string) (($last ?? 0) + 1), 6, '0', STR_PAD_LEFT);
+                $o->order_number = 'ORD-'.str_pad((string) (($last ?? 0) + 1), 6, '0', STR_PAD_LEFT);
             }
         });
     }
 
-    public function items()    { return $this->hasMany(OrderItem::class); }
-    public function customer() { return $this->belongsTo(Customer::class); }
+    public function items()
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
+    }
 
     public function profit(): float
     {

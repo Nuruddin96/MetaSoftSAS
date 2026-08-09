@@ -13,22 +13,22 @@ class DashboardController extends Controller
         $affiliate = auth('affiliate')->user();
 
         return view('affiliate.dashboard', [
-            'affiliate'      => $affiliate,
-            'referredTenants'=> $affiliate->referredTenants()->latest()->limit(10)->get(),
-            'commissions'    => $affiliate->commissions()->latest()->limit(15)->get(),
-            'pendingTotal'   => (float) $affiliate->commissions()->where('status', 'pending')->sum('amount'),
-            'paidTotal'      => (float) $affiliate->commissions()->where('status', 'paid')->sum('amount'),
-            'serviceLeads'   => $affiliate->serviceLeads()->latest()->limit(10)->get(),
+            'affiliate' => $affiliate,
+            'referredTenants' => $affiliate->referredTenants()->latest()->limit(10)->get(),
+            'commissions' => $affiliate->commissions()->latest()->limit(15)->get(),
+            'pendingTotal' => (float) $affiliate->commissions()->where('status', 'pending')->sum('amount'),
+            'paidTotal' => (float) $affiliate->commissions()->where('status', 'paid')->sum('amount'),
+            'serviceLeads' => $affiliate->serviceLeads()->latest()->limit(10)->get(),
         ]);
     }
 
     public function submitLead(Request $request)
     {
         $data = $request->validate([
-            'client_name'  => 'required|string|max:150',
+            'client_name' => 'required|string|max:150',
             'client_phone' => 'required|regex:/^01[3-9][0-9]{8}$/',
-            'package'      => 'nullable|string|max:100',
-            'note'         => 'nullable|string|max:500',
+            'package' => 'nullable|string|max:100',
+            'note' => 'nullable|string|max:500',
         ], [
             'client_phone.regex' => 'সঠিক মোবাইল নাম্বার দিন (01XXXXXXXXX)।',
         ]);

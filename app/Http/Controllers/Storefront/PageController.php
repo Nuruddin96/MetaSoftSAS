@@ -13,7 +13,7 @@ class PageController extends Controller
 
         return view('storefront.page', [
             'tenant' => app('currentTenant'),
-            'page'   => $page,
+            'page' => $page,
         ]);
     }
 }

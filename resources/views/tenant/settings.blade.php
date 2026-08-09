@@ -42,8 +42,61 @@
     </x-ui.card>
 
     <x-ui.card>
-        <p class="font-bold mb-1">📩 Messenger ইনবক্স</p>
-        <p class="text-xs text-mute mb-4">আপনার Facebook Page কানেক্ট করুন — মেসেঞ্জারের সব মেসেজ সরাসরি প্যানেলে চলে আসবে, এক ক্লিকে অর্ডারে রূপান্তর করা যাবে।</p>
+        <p class="font-bold mb-1">🔗 Facebook কানেক্ট (Messenger)</p>
+        <p class="text-xs text-mute mb-4">Facebook দিয়ে লগইন করে সরাসরি আপনার Page কানেক্ট করুন — কোনো টোকেন কপি-পেস্ট করা লাগবে না, ওয়েবহুক সাবস্ক্রিপশনও স্বয়ংক্রিয়ভাবে হয়ে যাবে।</p>
+
+        @if (! $facebookConnection)
+            {{-- Not Connected --}}
+            <x-ui.button href="{{ route('tenant.facebook.connect') }}" variant="accent" size="sm">Connect Facebook</x-ui.button>
+
+        @elseif ($facebookPages->where('is_active', true)->isEmpty())
+            {{-- Facebook Connected / No Page Selected --}}
+            <p class="text-sm text-leafdk mb-3">✅ Facebook কানেক্ট করা হয়েছে — এখন একটি Page বাছাই করুন।</p>
+            <div class="flex flex-wrap gap-2">
+                <x-ui.button href="{{ route('tenant.facebook.pages') }}" variant="accent" size="sm">Page বাছাই করুন</x-ui.button>
+                <x-ui.button href="{{ route('tenant.facebook.connect') }}" variant="outline" size="sm">Reconnect Facebook</x-ui.button>
+            </div>
+
+        @else
+            {{-- Page Connected / Subscription Failed / Reconnect Required --}}
+            <div class="space-y-3 mb-3">
+                @foreach ($facebookPages->where('is_active', true) as $fbPage)
+                    <div class="border border-ink/10 rounded-btn p-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="font-semibold text-sm">{{ $fbPage->page_name ?? 'নামহীন Page' }}</p>
+                                <p class="text-xs text-mute">Page ID: {{ $fbPage->page_id }}</p>
+                            </div>
+                            @if ($fbPage->status === 'active')
+                                <x-ui.badge tone="leaf">✅ সক্রিয়, সাবস্ক্রাইবড</x-ui.badge>
+                            @elseif ($fbPage->status === 'subscription_failed')
+                                <x-ui.badge tone="amber">⚠️ সাবস্ক্রিপশন ব্যর্থ</x-ui.badge>
+                            @else
+                                <x-ui.badge tone="amber">🔄 পুনরায় কানেক্ট প্রয়োজন</x-ui.badge>
+                            @endif
+                        </div>
+
+                        <div class="flex flex-wrap gap-2 mt-3">
+                            @if ($fbPage->status === 'needs_reconnect')
+                                <x-ui.button href="{{ route('tenant.facebook.connect') }}" variant="accent" size="sm">Reconnect Facebook</x-ui.button>
+                            @elseif ($fbPage->status === 'subscription_failed')
+                                <x-ui.button href="{{ route('tenant.facebook.pages') }}" variant="accent" size="sm">আবার চেষ্টা করুন</x-ui.button>
+                            @endif
+                            <form method="POST" action="{{ route('tenant.facebook.pages.disconnect', $fbPage) }}" onsubmit="return confirm('এই Page ডিসকানেক্ট করতে চান?');">
+                                @csrf
+                                <x-ui.button type="submit" variant="outline" size="sm">Disconnect</x-ui.button>
+                            </form>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+            <x-ui.button href="{{ route('tenant.facebook.pages') }}" variant="outline" size="sm">আরেকটি Page যোগ করুন</x-ui.button>
+        @endif
+    </x-ui.card>
+
+    <x-ui.card>
+        <p class="font-bold mb-1">🛠️ উন্নত: ম্যানুয়াল Page Access Token</p>
+        <p class="text-xs text-mute mb-4">উপরের <b>Connect Facebook</b> ব্যবহার করাই সহজ ও সুপারিশকৃত। শুধু প্রয়োজন হলে (যেমন OAuth কাজ না করলে) নিচে ম্যানুয়ালি Page ID ও Access Token দিন।</p>
         <form method="POST" action="{{ route('tenant.settings.messenger') }}" class="space-y-3">
             @csrf
             <input name="page_id" value="{{ $messenger->page_id ?? '' }}" required placeholder="Facebook Page ID"

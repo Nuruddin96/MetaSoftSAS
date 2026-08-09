@@ -25,9 +25,9 @@ class CheckSubscription
         $tenant = app('currentTenant');
 
         $expired = match ($tenant->status) {
-            'trial'  => $tenant->trial_ends_at?->isPast() ?? true,
+            'trial' => $tenant->trial_ends_at?->isPast() ?? true,
             'active' => $tenant->subscription_ends_at?->isPast() ?? true,
-            default  => true, // expired, suspended
+            default => true, // expired, suspended
         };
 
         if (! $expired) {

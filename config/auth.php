@@ -1,5 +1,9 @@
 <?php
 
+use App\Models\Affiliate;
+use App\Models\SuperAdmin;
+use App\Models\User;
+
 return [
     'defaults' => [
         'guard' => 'tenant',
@@ -29,15 +33,15 @@ return [
     'providers' => [
         'tenant_users' => [
             'driver' => 'eloquent',
-            'model' => App\Models\User::class,
+            'model' => User::class,
         ],
         'super_admins' => [
             'driver' => 'eloquent',
-            'model' => App\Models\SuperAdmin::class,
+            'model' => SuperAdmin::class,
         ],
         'affiliates' => [
             'driver' => 'eloquent',
-            'model' => App\Models\Affiliate::class,
+            'model' => Affiliate::class,
         ],
     ],
 

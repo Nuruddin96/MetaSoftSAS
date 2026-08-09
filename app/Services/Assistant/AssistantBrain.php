@@ -34,16 +34,16 @@ class AssistantBrain
 
         // 3. call Groq (free)
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . config('assistant.groq_api_key'),
-            'Content-Type'  => 'application/json',
+            'Authorization' => 'Bearer '.config('assistant.groq_api_key'),
+            'Content-Type' => 'application/json',
         ])->post('https://api.groq.com/openai/v1/chat/completions', [
-            'model'    => config('assistant.groq_model'),
+            'model' => config('assistant.groq_model'),
             'messages' => $messages,
             'max_tokens' => 1024,
         ]);
 
         if ($response->failed()) {
-            return "⚠️ AI সার্ভিসে সংযোগ করা যায়নি। একটু পর আবার চেষ্টা করুন।\n\n(টেকনিক্যাল: " . $response->status() . ' — ' . $response->json('error.message') . ')';
+            return "⚠️ AI সার্ভিসে সংযোগ করা যায়নি। একটু পর আবার চেষ্টা করুন।\n\n(টেকনিক্যাল: ".$response->status().' — '.$response->json('error.message').')';
         }
 
         $reply = $response->json('choices.0.message.content') ?? 'দুঃখিত, উত্তর তৈরি করা যায়নি।';

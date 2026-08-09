@@ -13,6 +13,6 @@ class CourierSetting extends Model
 
     protected $casts = [
         'credentials' => 'encrypted:array',
-        'is_active'   => 'boolean',
+        'is_active' => 'boolean',
     ];
 }

@@ -8,7 +8,9 @@ use Illuminate\Support\Str;
 class Affiliate extends Authenticatable
 {
     protected $guarded = [];
+
     protected $hidden = ['password', 'remember_token'];
+
     protected $casts = ['password' => 'hashed'];
 
     protected static function booted(): void
@@ -16,7 +18,7 @@ class Affiliate extends Authenticatable
         static::creating(function (Affiliate $a) {
             if (empty($a->referral_code)) {
                 do {
-                    $code = 'AFF' . strtoupper(Str::random(6));
+                    $code = 'AFF'.strtoupper(Str::random(6));
                 } while (self::where('referral_code', $code)->exists());
                 $a->referral_code = $code;
             }

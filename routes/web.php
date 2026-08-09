@@ -4,38 +4,47 @@ use App\Http\Controllers\Affiliate\AuthController as AffiliateAuthController;
 use App\Http\Controllers\Affiliate\DashboardController as AffiliateDashboardController;
 use App\Http\Controllers\CentralAuth\CentralLoginController;
 use App\Http\Controllers\CentralAuth\RegisterController;
-use App\Http\Controllers\ServicesController;
-use App\Http\Controllers\SuperAdmin\AffiliateController as SuperAffiliateController;
-use App\Http\Controllers\SuperAdmin\ClientController;
-use App\Http\Controllers\SuperAdmin\ClientPaymentController;
-use App\Http\Controllers\Tenant\ProductSourceController;
-use App\Http\Controllers\SuperAdmin\SourceProductController;
-use App\Http\Controllers\SuperAdmin\SourceOrderController;
+use App\Http\Controllers\FacebookOAuthCallbackController;
 use App\Http\Controllers\LandingController;
+use App\Http\Controllers\MessengerWebhookController;
+use App\Http\Controllers\ServicesController;
 use App\Http\Controllers\Storefront\CartController;
 use App\Http\Controllers\Storefront\CheckoutController;
 use App\Http\Controllers\Storefront\HomeController as StorefrontHome;
+use App\Http\Controllers\Storefront\PageController as StorefrontPage;
 use App\Http\Controllers\Storefront\ProductController as StorefrontProduct;
+use App\Http\Controllers\SuperAdmin\AffiliateController as SuperAffiliateController;
+use App\Http\Controllers\SuperAdmin\AuthController;
+use App\Http\Controllers\SuperAdmin\ClientController;
+use App\Http\Controllers\SuperAdmin\ClientPaymentController;
+use App\Http\Controllers\SuperAdmin\PaymentController;
+use App\Http\Controllers\SuperAdmin\PlanController;
+use App\Http\Controllers\SuperAdmin\SourceOrderController;
+use App\Http\Controllers\SuperAdmin\SourceProductController;
+use App\Http\Controllers\SuperAdmin\TenantController;
+use App\Http\Controllers\TelegramController;
 use App\Http\Controllers\Tenant\BarcodeController;
 use App\Http\Controllers\Tenant\BillingController;
 use App\Http\Controllers\Tenant\CategoryController;
 use App\Http\Controllers\Tenant\CourierController;
-use App\Http\Controllers\Tenant\ExpenseController;
-use App\Http\Controllers\Tenant\IncompleteOrderController;
-use App\Http\Controllers\Tenant\MessengerInboxController;
-use App\Http\Controllers\Tenant\ProductImportController;
-use App\Http\Controllers\Tenant\ReportController;
-use App\Http\Controllers\Tenant\WebsiteController;
-use App\Http\Controllers\Storefront\PageController as StorefrontPage;
 use App\Http\Controllers\Tenant\CustomerController;
-use App\Http\Controllers\Tenant\FraudCheckController;
-use App\Http\Controllers\Tenant\PosController;
-use App\Http\Controllers\Tenant\SettingController;
 use App\Http\Controllers\Tenant\DashboardController;
+use App\Http\Controllers\Tenant\ExpenseController;
+use App\Http\Controllers\Tenant\FacebookConnectController;
+use App\Http\Controllers\Tenant\FraudCheckController;
+use App\Http\Controllers\Tenant\IncompleteOrderController;
 use App\Http\Controllers\Tenant\InventoryController;
+use App\Http\Controllers\Tenant\MessengerInboxController;
 use App\Http\Controllers\Tenant\OrderController;
+use App\Http\Controllers\Tenant\PosController;
 use App\Http\Controllers\Tenant\ProductController;
+use App\Http\Controllers\Tenant\ProductImportController;
+use App\Http\Controllers\Tenant\ProductSourceController;
+use App\Http\Controllers\Tenant\ReportController;
+use App\Http\Controllers\Tenant\SettingController;
+use App\Http\Controllers\Tenant\WebsiteController;
 use App\Http\Controllers\TenantAuth\LoginController;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -76,27 +85,27 @@ Route::domain(config('app.central_domain'))->group(function () {
 
     /* ---------------- SUPER ADMIN ---------------- */
     Route::prefix('super-admin')->name('super.')->group(function () {
-        Route::get('login', [\App\Http\Controllers\SuperAdmin\AuthController::class, 'show'])->name('login');
-        Route::post('login', [\App\Http\Controllers\SuperAdmin\AuthController::class, 'login'])->name('login.attempt');
-        Route::post('logout', [\App\Http\Controllers\SuperAdmin\AuthController::class, 'logout'])->name('logout');
+        Route::get('login', [AuthController::class, 'show'])->name('login');
+        Route::post('login', [AuthController::class, 'login'])->name('login.attempt');
+        Route::post('logout', [AuthController::class, 'logout'])->name('logout');
 
         Route::middleware('auth:super_admin')->group(function () {
-            Route::get('/', [\App\Http\Controllers\SuperAdmin\DashboardController::class, 'index'])->name('dashboard');
+            Route::get('/', [App\Http\Controllers\SuperAdmin\DashboardController::class, 'index'])->name('dashboard');
 
-            Route::get('tenants', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'index'])->name('tenants');
-            Route::get('tenants/{tenant}', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'show'])->name('tenants.show');
-            Route::get('tenants/{tenant}/edit', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'edit'])->name('tenants.edit');
-            Route::put('tenants/{tenant}', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'update'])->name('tenants.update');
-            Route::post('tenants/{tenant}/reset-password', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'resetPassword'])->name('tenants.password.reset');
-            Route::delete('tenants/{tenant}', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'destroy'])->name('tenants.destroy');
-            Route::post('tenants/{tenant}/suspend', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'suspend'])->name('tenants.suspend');
-            Route::post('tenants/{tenant}/activate', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'activate'])->name('tenants.activate');
-            Route::post('tenants/{tenant}/extend', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'extend'])->name('tenants.extend');
-            Route::post('tenants/{tenant}/domain/verify', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'verifyDomainDns'])->name('tenants.domain.verify');
-            Route::post('tenants/{tenant}/domain/approve', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'approveDomain'])->name('tenants.domain.approve');
-            Route::post('tenants/{tenant}/domain/reject', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'rejectDomain'])->name('tenants.domain.reject');
+            Route::get('tenants', [TenantController::class, 'index'])->name('tenants');
+            Route::get('tenants/{tenant}', [TenantController::class, 'show'])->name('tenants.show');
+            Route::get('tenants/{tenant}/edit', [TenantController::class, 'edit'])->name('tenants.edit');
+            Route::put('tenants/{tenant}', [TenantController::class, 'update'])->name('tenants.update');
+            Route::post('tenants/{tenant}/reset-password', [TenantController::class, 'resetPassword'])->name('tenants.password.reset');
+            Route::delete('tenants/{tenant}', [TenantController::class, 'destroy'])->name('tenants.destroy');
+            Route::post('tenants/{tenant}/suspend', [TenantController::class, 'suspend'])->name('tenants.suspend');
+            Route::post('tenants/{tenant}/activate', [TenantController::class, 'activate'])->name('tenants.activate');
+            Route::post('tenants/{tenant}/extend', [TenantController::class, 'extend'])->name('tenants.extend');
+            Route::post('tenants/{tenant}/domain/verify', [TenantController::class, 'verifyDomainDns'])->name('tenants.domain.verify');
+            Route::post('tenants/{tenant}/domain/approve', [TenantController::class, 'approveDomain'])->name('tenants.domain.approve');
+            Route::post('tenants/{tenant}/domain/reject', [TenantController::class, 'rejectDomain'])->name('tenants.domain.reject');
 
-            Route::get('payments', [\App\Http\Controllers\SuperAdmin\PaymentController::class, 'index'])->name('payments');
+            Route::get('payments', [PaymentController::class, 'index'])->name('payments');
 
             // Regular Client Payment (agency clients — sub-module of Payments)
             Route::get('clients', [ClientController::class, 'index'])->name('clients.index');
@@ -111,8 +120,8 @@ Route::domain(config('app.central_domain'))->group(function () {
             Route::post('clients/{client}/payments', [ClientPaymentController::class, 'store'])->name('clients.payments.store');
             Route::delete('client-payments/{payment}', [ClientPaymentController::class, 'destroy'])->name('clients.payments.destroy');
 
-            Route::get('plans', [\App\Http\Controllers\SuperAdmin\PlanController::class, 'index'])->name('plans');
-            Route::put('plans/{plan}', [\App\Http\Controllers\SuperAdmin\PlanController::class, 'update'])->name('plans.update');
+            Route::get('plans', [PlanController::class, 'index'])->name('plans');
+            Route::put('plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
 
             Route::get('source/products', [SourceProductController::class, 'index'])->name('source.products');
             Route::get('source/products/create', [SourceProductController::class, 'create'])->name('source.products.create');
@@ -156,7 +165,7 @@ $tenantRoutes = function () {
 
         // Payment gateway redirects back here (GET + POST, no auth/session guaranteed)
         Route::match(['get', 'post'], 'billing/callback/{gateway}', [BillingController::class, 'callback'])
-            ->name('billing.callback')->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class]);
+            ->name('billing.callback')->withoutMiddleware([ValidateCsrfToken::class]);
 
         Route::middleware(['auth:tenant', 'check.subscription'])->group(function () {
 
@@ -264,6 +273,15 @@ $tenantRoutes = function () {
             Route::post('settings/messenger', [SettingController::class, 'messenger'])->name('settings.messenger');
             Route::post('settings/courier', [SettingController::class, 'courier'])->name('settings.courier');
             Route::post('settings/store', [SettingController::class, 'store'])->name('settings.store');
+
+            // Facebook OAuth "Connect Facebook" (Phase 1). The callback these
+            // redirect out to is registered separately, outside this tenant
+            // group — see the facebook.callback route below, and
+            // FacebookOAuthCallbackController's docblock for why.
+            Route::get('facebook/connect', [FacebookConnectController::class, 'redirect'])->name('facebook.connect');
+            Route::get('facebook/pages', [FacebookConnectController::class, 'pages'])->name('facebook.pages');
+            Route::post('facebook/pages/{pageId}/connect', [FacebookConnectController::class, 'connect'])->name('facebook.pages.connect');
+            Route::post('facebook/pages/{page}/disconnect', [FacebookConnectController::class, 'disconnect'])->name('facebook.pages.disconnect');
         });
     });
 
@@ -296,10 +314,10 @@ $tenantRoutes = function () {
 | still needs to win the match for any www.{central} request before the
 | tenant group's URI-only prefix match gets a chance to.
 */
-Route::domain('www.' . config('app.central_domain'))->group(function () {
+Route::domain('www.'.config('app.central_domain'))->group(function () {
     Route::any('/{any?}', function () {
         return redirect()->away(
-            'https://' . config('app.central_domain') . request()->getRequestUri()
+            'https://'.config('app.central_domain').request()->getRequestUri()
         );
     })->where('any', '.*');
 });
@@ -326,12 +344,12 @@ if (config('app.tenancy_mode', 'subdomain') === 'path') {
 | PERSONAL TELEGRAM AI ASSISTANT (owner-only, not tied to any tenant/domain)
 |--------------------------------------------------------------------------
 */
-Route::post('/telegram/webhook/{secret}', [\App\Http\Controllers\TelegramController::class, 'webhook'])
-    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])
+Route::post('/telegram/webhook/{secret}', [TelegramController::class, 'webhook'])
+    ->withoutMiddleware([ValidateCsrfToken::class])
     ->name('telegram.webhook');
 
-Route::get('/telegram/setup', [\App\Http\Controllers\TelegramController::class, 'setup'])->name('telegram.setup');
-Route::get('/telegram/status', [\App\Http\Controllers\TelegramController::class, 'status'])->name('telegram.status');
+Route::get('/telegram/setup', [TelegramController::class, 'setup'])->name('telegram.setup');
+Route::get('/telegram/status', [TelegramController::class, 'status'])->name('telegram.status');
 
 /*
 |--------------------------------------------------------------------------
@@ -339,7 +357,17 @@ Route::get('/telegram/status', [\App\Http\Controllers\TelegramController::class,
 | we look up the owning tenant per-page inside the controller)
 |--------------------------------------------------------------------------
 */
-Route::get('/webhook/messenger', [\App\Http\Controllers\MessengerWebhookController::class, 'verify'])->name('messenger.webhook.verify');
-Route::post('/webhook/messenger', [\App\Http\Controllers\MessengerWebhookController::class, 'receive'])
-    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])
+Route::get('/webhook/messenger', [MessengerWebhookController::class, 'verify'])->name('messenger.webhook.verify');
+Route::post('/webhook/messenger', [MessengerWebhookController::class, 'receive'])
+    ->withoutMiddleware([ValidateCsrfToken::class])
     ->name('messenger.webhook.receive');
+
+/*
+|--------------------------------------------------------------------------
+| FACEBOOK OAUTH CALLBACK (single fixed URL registered in the Meta App
+| dashboard — cannot be tenant-prefixed, Meta doesn't support templated
+| redirect URIs; see FacebookOAuthCallbackController's docblock). A plain
+| GET route — no CSRF exemption, ValidateCsrfToken never guards GET.
+|--------------------------------------------------------------------------
+*/
+Route::get('/panel/facebook/callback', [FacebookOAuthCallbackController::class, 'handle'])->name('facebook.callback');

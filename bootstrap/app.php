@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Middleware\CheckSubscription;
+use App\Http\Middleware\ResolveCustomDomain;
+use App\Http\Middleware\ResolveTenant;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,14 +15,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'resolve.tenant'     => \App\Http\Middleware\ResolveTenant::class,
-            'check.subscription' => \App\Http\Middleware\CheckSubscription::class,
+            'resolve.tenant' => ResolveTenant::class,
+            'check.subscription' => CheckSubscription::class,
         ]);
 
         // Must run before routing (not a route middleware) so a verified
         // custom-domain request can be rewritten to the existing /shop/{slug}
         // shape before the router ever tries to match it.
-        $middleware->prepend(\App\Http\Middleware\ResolveCustomDomain::class);
+        $middleware->prepend(ResolveCustomDomain::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

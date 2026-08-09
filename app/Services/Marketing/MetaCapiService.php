@@ -18,36 +18,40 @@ use Illuminate\Support\Facades\Http;
  */
 class MetaCapiService
 {
+    protected string $base;
+
     public function __construct(
         protected string $pixelId,
         protected string $accessToken,
         protected ?string $testEventCode = null,
-    ) {}
+    ) {
+        $this->base = 'https://graph.facebook.com/'.config('facebook.graph_version');
+    }
 
     public function sendPurchase(Order $order, ?string $clientIp = null, ?string $userAgent = null, ?string $fbp = null, ?string $fbc = null): array
     {
         $payload = [
             'data' => [[
-                'event_name'       => 'Purchase',
-                'event_time'       => now()->timestamp,
-                'event_id'         => $order->fb_event_id,          // dedup with browser pixel
-                'action_source'    => 'website',
+                'event_name' => 'Purchase',
+                'event_time' => now()->timestamp,
+                'event_id' => $order->fb_event_id,          // dedup with browser pixel
+                'action_source' => 'website',
                 'event_source_url' => app('currentTenant')->url(),
-                'user_data'        => array_filter([
-                    'ph'                => [hash('sha256', $this->normalizePhone($order->customer_phone))],
-                    'fn'                => [hash('sha256', mb_strtolower(trim($order->customer_name)))],
+                'user_data' => array_filter([
+                    'ph' => [hash('sha256', $this->normalizePhone($order->customer_phone))],
+                    'fn' => [hash('sha256', mb_strtolower(trim($order->customer_name)))],
                     'client_ip_address' => $clientIp,
                     'client_user_agent' => $userAgent,
-                    'fbp'               => $fbp,
-                    'fbc'               => $fbc,
+                    'fbp' => $fbp,
+                    'fbc' => $fbc,
                 ]),
                 'custom_data' => [
-                    'currency'  => 'BDT',
-                    'value'     => (float) $order->total,
-                    'order_id'  => $order->order_number,
-                    'contents'  => $order->items->map(fn ($i) => [
-                        'id'         => $i->sku,
-                        'quantity'   => $i->quantity,
+                    'currency' => 'BDT',
+                    'value' => (float) $order->total,
+                    'order_id' => $order->order_number,
+                    'contents' => $order->items->map(fn ($i) => [
+                        'id' => $i->sku,
+                        'quantity' => $i->quantity,
                         'item_price' => (float) $i->unit_price,
                     ])->all(),
                     'content_type' => 'product',
@@ -60,7 +64,7 @@ class MetaCapiService
         }
 
         return Http::post(
-            "https://graph.facebook.com/v19.0/{$this->pixelId}/events?access_token={$this->accessToken}",
+            "{$this->base}/{$this->pixelId}/events?access_token={$this->accessToken}",
             $payload
         )->json();
     }
@@ -71,7 +75,7 @@ class MetaCapiService
 
         // 01712345678 -> 8801712345678
         if (str_starts_with($digits, '01')) {
-            $digits = '88' . $digits;
+            $digits = '88'.$digits;
         }
 
         return $digits;

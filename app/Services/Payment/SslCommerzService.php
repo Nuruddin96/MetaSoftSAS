@@ -27,14 +27,14 @@ class SslCommerzService
     /** Create a payment session. Returns GatewayPageURL to redirect the user to. */
     public function createSession(array $payload): array
     {
-        $response = Http::asForm()->post($this->baseUrl . '/gwprocess/v4/api.php', array_merge([
-            'store_id'     => config('payment.sslcommerz.store_id'),
+        $response = Http::asForm()->post($this->baseUrl.'/gwprocess/v4/api.php', array_merge([
+            'store_id' => config('payment.sslcommerz.store_id'),
             'store_passwd' => config('payment.sslcommerz.store_password'),
-            'currency'     => 'BDT',
+            'currency' => 'BDT',
             'shipping_method' => 'NO',
             'product_category' => 'Subscription',
-            'product_profile'  => 'non-physical-goods',
-            'cus_country'  => 'Bangladesh',
+            'product_profile' => 'non-physical-goods',
+            'cus_country' => 'Bangladesh',
         ], $payload))->json();
 
         return $response ?? [];
@@ -43,11 +43,11 @@ class SslCommerzService
     /** Server-side validation of a completed transaction. */
     public function validate(string $valId): array
     {
-        $response = Http::get($this->baseUrl . '/validator/api/validationserverAPI.php', [
-            'val_id'       => $valId,
-            'store_id'     => config('payment.sslcommerz.store_id'),
+        $response = Http::get($this->baseUrl.'/validator/api/validationserverAPI.php', [
+            'val_id' => $valId,
+            'store_id' => config('payment.sslcommerz.store_id'),
             'store_passwd' => config('payment.sslcommerz.store_password'),
-            'format'       => 'json',
+            'format' => 'json',
         ])->json();
 
         return $response ?? [];

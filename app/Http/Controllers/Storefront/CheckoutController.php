@@ -6,13 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\IncompleteOrder;
 use App\Models\Inventory;
+use App\Models\MarketingSetting;
 use App\Models\Order;
 use App\Models\ProductVariant;
 use App\Models\StockMovement;
-use App\Models\MarketingSetting;
 use App\Models\StoreSetting;
-use App\Services\Marketing\MetaCapiService;
 use App\Models\Warehouse;
+use App\Services\Marketing\MetaCapiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,7 +21,7 @@ class CheckoutController extends Controller
 {
     protected function cartKey(): string
     {
-        return 'cart_' . app('currentTenant')->id;
+        return 'cart_'.app('currentTenant')->id;
     }
 
     public function show()
@@ -40,12 +40,12 @@ class CheckoutController extends Controller
             ->pluck('value', 'key');
 
         return view('storefront.checkout', [
-            'tenant'    => app('currentTenant'),
-            'items'     => $items,
-            'subtotal'  => $items->sum('total'),
+            'tenant' => app('currentTenant'),
+            'items' => $items,
+            'subtotal' => $items->sum('total'),
             'divisions' => DB::table('bd_divisions')->orderBy('id')->get(),
             'districts' => DB::table('bd_districts')->orderBy('name')->get(),
-            'chargeInside'  => (float) ($charges['delivery_charge_inside_dhaka'] ?? 60),
+            'chargeInside' => (float) ($charges['delivery_charge_inside_dhaka'] ?? 60),
             'chargeOutside' => (float) ($charges['delivery_charge_outside_dhaka'] ?? 120),
         ]);
     }
@@ -68,20 +68,20 @@ class CheckoutController extends Controller
 
         if ($recent) {
             $recent->update([
-                'customer_name'    => $request->input('customer_name'),
+                'customer_name' => $request->input('customer_name'),
                 'customer_address' => $request->input('customer_address'),
-                'cart_json'        => $cart,
+                'cart_json' => $cart,
                 'last_activity_at' => now(),
             ]);
         } else {
             IncompleteOrder::create([
-                'session_key'      => session()->getId(),
-                'customer_name'    => $request->input('customer_name'),
-                'customer_phone'   => $request->input('customer_phone'),
+                'session_key' => session()->getId(),
+                'customer_name' => $request->input('customer_name'),
+                'customer_phone' => $request->input('customer_phone'),
                 'customer_address' => $request->input('customer_address'),
-                'cart_json'        => $cart,
-                'total'            => 0,
-                'status'           => 'abandoned',
+                'cart_json' => $cart,
+                'total' => 0,
+                'status' => 'abandoned',
                 'last_activity_at' => now(),
             ]);
         }
@@ -92,12 +92,12 @@ class CheckoutController extends Controller
     public function place(Request $request)
     {
         $data = $request->validate([
-            'customer_name'    => 'required|string|max:150',
-            'customer_phone'   => 'required|regex:/^01[3-9][0-9]{8}$/',
+            'customer_name' => 'required|string|max:150',
+            'customer_phone' => 'required|regex:/^01[3-9][0-9]{8}$/',
             'customer_address' => 'required|string|max:1000',
-            'division_id'      => 'required|integer|exists:bd_divisions,id',
-            'district_id'      => 'required|integer|exists:bd_districts,id',
-            'note'             => 'nullable|string|max:500',
+            'division_id' => 'required|integer|exists:bd_divisions,id',
+            'district_id' => 'required|integer|exists:bd_districts,id',
+            'note' => 'nullable|string|max:500',
         ], [
             'customer_phone.regex' => 'সঠিক মোবাইল নাম্বার দিন (01XXXXXXXXX)।',
         ]);
@@ -118,26 +118,26 @@ class CheckoutController extends Controller
             $customer = Customer::firstOrCreate(
                 ['phone' => $data['customer_phone']],
                 ['name' => $data['customer_name'], 'address' => $data['customer_address'],
-                 'division_id' => $data['division_id'], 'district_id' => $data['district_id']]
+                    'division_id' => $data['division_id'], 'district_id' => $data['district_id']]
             );
 
             $subtotal = $variants->sum(fn ($v) => $v->selling_price * $cart[$v->id]);
 
             $order = Order::create([
-                'source'           => 'web',
-                'customer_id'      => $customer->id,
-                'customer_name'    => $data['customer_name'],
-                'customer_phone'   => $data['customer_phone'],
+                'source' => 'web',
+                'customer_id' => $customer->id,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'],
                 'customer_address' => $data['customer_address'],
-                'division_id'      => $data['division_id'],
-                'district_id'      => $data['district_id'],
-                'subtotal'         => $subtotal,
-                'delivery_charge'  => $deliveryCharge,
-                'total'            => $subtotal + $deliveryCharge,
-                'payment_method'   => 'cod',
-                'status'           => 'pending',
-                'note'             => $data['note'] ?? null,
-                'fb_event_id'      => (string) Str::uuid(),
+                'division_id' => $data['division_id'],
+                'district_id' => $data['district_id'],
+                'subtotal' => $subtotal,
+                'delivery_charge' => $deliveryCharge,
+                'total' => $subtotal + $deliveryCharge,
+                'payment_method' => 'cod',
+                'status' => 'pending',
+                'note' => $data['note'] ?? null,
+                'fb_event_id' => (string) Str::uuid(),
             ]);
 
             $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
@@ -146,15 +146,15 @@ class CheckoutController extends Controller
                 $qty = $cart[$v->id];
 
                 $order->items()->create([
-                    'tenant_id'      => $order->tenant_id,
-                    'variant_id'     => $v->id,
-                    'product_name'   => $v->product->name,
-                    'variant_name'   => $v->variant_name,
-                    'sku'            => $v->sku,
-                    'unit_price'     => $v->selling_price,
+                    'tenant_id' => $order->tenant_id,
+                    'variant_id' => $v->id,
+                    'product_name' => $v->product->name,
+                    'variant_name' => $v->variant_name,
+                    'sku' => $v->sku,
+                    'unit_price' => $v->selling_price,
                     'purchase_price' => $v->purchase_price,
-                    'quantity'       => $qty,
-                    'line_total'     => $v->selling_price * $qty,
+                    'quantity' => $qty,
+                    'line_total' => $v->selling_price * $qty,
                 ]);
 
                 if ($warehouse) {
@@ -163,12 +163,12 @@ class CheckoutController extends Controller
                         ->decrement('quantity', $qty);
 
                     StockMovement::create([
-                        'variant_id'     => $v->id,
-                        'warehouse_id'   => $warehouse->id,
-                        'type'           => 'sale',
-                        'quantity'       => -$qty,
+                        'variant_id' => $v->id,
+                        'warehouse_id' => $warehouse->id,
+                        'type' => 'sale',
+                        'quantity' => -$qty,
                         'reference_type' => 'order',
-                        'reference_id'   => $order->id,
+                        'reference_id' => $order->id,
                     ]);
                 }
             }
@@ -221,7 +221,7 @@ class CheckoutController extends Controller
 
         return view('storefront.success', [
             'tenant' => app('currentTenant'),
-            'order'  => $order,
+            'order' => $order,
         ]);
     }
 }

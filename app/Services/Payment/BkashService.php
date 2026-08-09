@@ -39,12 +39,12 @@ class BkashService
     {
         return Cache::remember('bkash_token', 3000, function () {
             $response = Http::withHeaders([
-                'username'     => config('payment.bkash.username'),
-                'password'     => config('payment.bkash.password'),
+                'username' => config('payment.bkash.username'),
+                'password' => config('payment.bkash.password'),
                 'Content-Type' => 'application/json',
-                'Accept'       => 'application/json',
-            ])->post($this->baseUrl . '/token/grant', [
-                'app_key'    => config('payment.bkash.app_key'),
+                'Accept' => 'application/json',
+            ])->post($this->baseUrl.'/token/grant', [
+                'app_key' => config('payment.bkash.app_key'),
                 'app_secret' => config('payment.bkash.app_secret'),
             ])->json();
 
@@ -56,9 +56,9 @@ class BkashService
     {
         return [
             'Authorization' => $this->token(),
-            'X-App-Key'     => config('payment.bkash.app_key'),
-            'Content-Type'  => 'application/json',
-            'Accept'        => 'application/json',
+            'X-App-Key' => config('payment.bkash.app_key'),
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
         ];
     }
 
@@ -66,13 +66,13 @@ class BkashService
     public function createPayment(float $amount, string $invoice, string $payerPhone, string $callbackUrl): array
     {
         return Http::withHeaders($this->headers())
-            ->post($this->baseUrl . '/create', [
-                'mode'                  => '0011',
-                'payerReference'        => $payerPhone,
-                'callbackURL'           => $callbackUrl,
-                'amount'                => number_format($amount, 2, '.', ''),
-                'currency'              => 'BDT',
-                'intent'                => 'sale',
+            ->post($this->baseUrl.'/create', [
+                'mode' => '0011',
+                'payerReference' => $payerPhone,
+                'callbackURL' => $callbackUrl,
+                'amount' => number_format($amount, 2, '.', ''),
+                'currency' => 'BDT',
+                'intent' => 'sale',
                 'merchantInvoiceNumber' => $invoice,
             ])->json() ?? [];
     }
@@ -81,7 +81,7 @@ class BkashService
     public function executePayment(string $paymentId): array
     {
         return Http::withHeaders($this->headers())
-            ->post($this->baseUrl . '/execute', ['paymentID' => $paymentId])
+            ->post($this->baseUrl.'/execute', ['paymentID' => $paymentId])
             ->json() ?? [];
     }
 
@@ -89,7 +89,7 @@ class BkashService
     public function queryPayment(string $paymentId): array
     {
         return Http::withHeaders($this->headers())
-            ->post($this->baseUrl . '/payment/status', ['paymentID' => $paymentId])
+            ->post($this->baseUrl.'/payment/status', ['paymentID' => $paymentId])
             ->json() ?? [];
     }
 }

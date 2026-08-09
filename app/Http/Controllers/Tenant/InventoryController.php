@@ -15,12 +15,14 @@ class InventoryController extends Controller
     {
         $variants = ProductVariant::with(['product', 'inventory.warehouse'])
             ->whereHas('product', function ($q) use ($request) {
-                if ($request->q) $q->where('name', 'like', '%' . $request->q . '%');
+                if ($request->q) {
+                    $q->where('name', 'like', '%'.$request->q.'%');
+                }
             })
             ->paginate(30)->withQueryString();
 
         return view('tenant.inventory', [
-            'variants'   => $variants,
+            'variants' => $variants,
             'warehouses' => Warehouse::all(),
         ]);
     }
@@ -37,10 +39,10 @@ class InventoryController extends Controller
     public function adjust(Request $request)
     {
         $data = $request->validate([
-            'variant_id'   => 'required|exists:product_variants,id',
+            'variant_id' => 'required|exists:product_variants,id',
             'warehouse_id' => 'required|exists:warehouses,id',
-            'quantity'     => 'required|integer',
-            'note'         => 'nullable|string|max:255',
+            'quantity' => 'required|integer',
+            'note' => 'nullable|string|max:255',
         ]);
 
         $inv = Inventory::firstOrCreate(
@@ -51,12 +53,12 @@ class InventoryController extends Controller
         $inv->increment('quantity', $data['quantity']);
 
         StockMovement::create([
-            'variant_id'   => $data['variant_id'],
+            'variant_id' => $data['variant_id'],
             'warehouse_id' => $data['warehouse_id'],
-            'type'         => 'adjustment',
-            'quantity'     => $data['quantity'],
-            'note'         => $data['note'] ?? null,
-            'user_id'      => auth('tenant')->id(),
+            'type' => 'adjustment',
+            'quantity' => $data['quantity'],
+            'note' => $data['note'] ?? null,
+            'user_id' => auth('tenant')->id(),
         ]);
 
         return back()->with('success', 'স্টক আপডেট হয়েছে।');

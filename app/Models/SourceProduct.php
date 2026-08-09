@@ -12,7 +12,7 @@ class SourceProduct extends Model
     protected static function booted(): void
     {
         static::creating(function (SourceProduct $p) {
-            $p->slug = $p->slug ?: Str::slug($p->name) . '-' . Str::lower(Str::random(4));
+            $p->slug = $p->slug ?: Str::slug($p->name).'-'.Str::lower(Str::random(4));
         });
     }
 
@@ -29,7 +29,7 @@ class SourceProduct extends Model
     public function priceLabel(): string
     {
         if ($this->max_price && $this->max_price > $this->unit_price) {
-            return number_format($this->unit_price) . '-' . number_format($this->max_price);
+            return number_format($this->unit_price).'-'.number_format($this->max_price);
         }
 
         return number_format($this->unit_price);

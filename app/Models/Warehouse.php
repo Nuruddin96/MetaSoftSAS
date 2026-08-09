@@ -10,5 +10,6 @@ class Warehouse extends Model
     use BelongsToTenant;
 
     protected $guarded = [];
+
     public $timestamps = true;
 }

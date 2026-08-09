@@ -10,7 +10,9 @@ class User extends Authenticatable
     use BelongsToTenant;
 
     protected $guarded = [];
+
     protected $hidden = ['password', 'remember_token'];
+
     protected $casts = ['password' => 'hashed'];
 
     public function isOwner(): bool

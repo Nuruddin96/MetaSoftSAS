@@ -22,7 +22,7 @@ class CategoryController extends Controller
 
         Category::create([
             'name' => $data['name'],
-            'slug' => Str::slug($data['name']) . '-' . Str::lower(Str::random(3)),
+            'slug' => Str::slug($data['name']).'-'.Str::lower(Str::random(3)),
         ]);
 
         return back()->with('success', 'ক্যাটাগরি যোগ হয়েছে।');
@@ -31,6 +31,7 @@ class CategoryController extends Controller
     public function destroy(Category $category)
     {
         $category->delete();
+
         return back()->with('success', 'ক্যাটাগরি মুছে ফেলা হয়েছে।');
     }
 }

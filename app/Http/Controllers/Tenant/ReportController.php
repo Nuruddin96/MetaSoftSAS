@@ -7,14 +7,13 @@ use App\Models\Expense;
 use App\Models\Order;
 use App\Models\OrderItem;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
     protected function range(Request $request): array
     {
         $from = $request->date('from') ?: now()->startOfMonth();
-        $to   = ($request->date('to') ?: now())->endOfDay();
+        $to = ($request->date('to') ?: now())->endOfDay();
 
         return [$from, $to];
     }
@@ -31,16 +30,16 @@ class ReportController extends Controller
             ->groupBy('d')->orderBy('d')->get();
 
         return view('tenant.reports.sales', [
-            'from'    => $from, 'to' => $to,
-            'daily'   => $daily,
-            'orders'  => (clone $base)->count(),
+            'from' => $from, 'to' => $to,
+            'daily' => $daily,
+            'orders' => (clone $base)->count(),
             'revenue' => (float) (clone $base)->sum('total'),
-            'avg'     => (float) (clone $base)->avg('total'),
+            'avg' => (float) (clone $base)->avg('total'),
             'byStatus' => Order::whereBetween('created_at', [$from, $to])
-                            ->selectRaw('status, COUNT(*) as c, SUM(total) as t')
-                            ->groupBy('status')->get(),
+                ->selectRaw('status, COUNT(*) as c, SUM(total) as t')
+                ->groupBy('status')->get(),
             'bySource' => (clone $base)->selectRaw('source, COUNT(*) as c, SUM(total) as t')
-                            ->groupBy('source')->get(),
+                ->groupBy('source')->get(),
         ]);
     }
 
@@ -65,7 +64,7 @@ class ReportController extends Controller
             ->groupBy('expense_category_id')->with('category')->get();
 
         $grossProfit = $revenue - $shipping - $cogs;
-        $netProfit   = $grossProfit - $expenses;
+        $netProfit = $grossProfit - $expenses;
 
         return view('tenant.reports.profit-loss', compact(
             'from', 'to', 'revenue', 'shipping', 'cogs', 'expenses', 'expenseBreakdown', 'grossProfit', 'netProfit'
@@ -98,8 +97,8 @@ class ReportController extends Controller
         [$from, $to] = $this->range($request);
 
         $top = OrderItem::whereHas('order', fn ($q) => $q
-                ->whereBetween('created_at', [$from, $to])
-                ->whereNotIn('status', ['cancelled', 'returned']))
+            ->whereBetween('created_at', [$from, $to])
+            ->whereNotIn('status', ['cancelled', 'returned']))
             ->selectRaw('product_name, variant_name, SUM(quantity) as qty, SUM(line_total) as revenue,
                          SUM((unit_price - purchase_price) * quantity) as profit')
             ->groupBy('product_name', 'variant_name')

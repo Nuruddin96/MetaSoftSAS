@@ -10,6 +10,6 @@ class SubscriptionPayment extends Model
 
     protected $casts = [
         'gateway_response' => 'array',
-        'paid_at'          => 'datetime',
+        'paid_at' => 'datetime',
     ];
 }

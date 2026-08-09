@@ -36,10 +36,10 @@ class ResolveCustomDomain
             return $next($request);
         }
 
-        $host    = strtolower($request->getHost());
+        $host = strtolower($request->getHost());
         $central = config('app.central_domain');
 
-        if ($host === $central || $host === 'www.' . $central) {
+        if ($host === $central || $host === 'www.'.$central) {
             return $next($request);
         }
 
@@ -62,14 +62,14 @@ class ResolveCustomDomain
         // — config('session.domain') is untouched for them.
         config(['session.domain' => null]);
 
-        $prefixedPath = '/shop/' . $tenant->subdomain . $request->getPathInfo();
-        $queryString  = $request->getQueryString();
-        $requestUri   = $prefixedPath . ($queryString ? '?' . $queryString : '');
+        $prefixedPath = '/shop/'.$tenant->subdomain.$request->getPathInfo();
+        $queryString = $request->getQueryString();
+        $requestUri = $prefixedPath.($queryString ? '?'.$queryString : '');
 
         $rewritten = $request->duplicate(
             server: array_merge($request->server->all(), [
                 'REQUEST_URI' => $requestUri,
-                'PATH_INFO'   => $prefixedPath,
+                'PATH_INFO' => $prefixedPath,
             ])
         );
 

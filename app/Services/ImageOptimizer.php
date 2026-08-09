@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Resizes + re-encodes uploaded product images before storing, using
@@ -12,6 +13,7 @@ use Illuminate\Http\UploadedFile;
 class ImageOptimizer
 {
     protected int $maxDimension;
+
     protected int $quality;
 
     public function __construct(int $maxDimension = 1600, int $quality = 82)
@@ -39,7 +41,7 @@ class ImageOptimizer
             $scale = min(1, $this->maxDimension / max($width, $height));
 
             if ($scale < 1) {
-                $newWidth  = (int) round($width * $scale);
+                $newWidth = (int) round($width * $scale);
                 $newHeight = (int) round($height * $scale);
 
                 $resized = imagecreatetruecolor($newWidth, $newHeight);
@@ -55,9 +57,9 @@ class ImageOptimizer
             imagedestroy($source);
         }
 
-        $path = trim($directory, '/') . '/' . uniqid('', true) . '.jpg';
+        $path = trim($directory, '/').'/'.uniqid('', true).'.jpg';
 
-        \Illuminate\Support\Facades\Storage::disk($disk)->put($path, $contents);
+        Storage::disk($disk)->put($path, $contents);
 
         return $path;
     }
@@ -67,10 +69,10 @@ class ImageOptimizer
     {
         return match (strtolower($extension)) {
             'jpg', 'jpeg' => @imagecreatefromjpeg($path) ?: null,
-            'png'         => @imagecreatefrompng($path) ?: null,
-            'webp'        => function_exists('imagecreatefromwebp') ? (@imagecreatefromwebp($path) ?: null) : null,
-            'gif'         => @imagecreatefromgif($path) ?: null,
-            default       => null,
+            'png' => @imagecreatefrompng($path) ?: null,
+            'webp' => function_exists('imagecreatefromwebp') ? (@imagecreatefromwebp($path) ?: null) : null,
+            'gif' => @imagecreatefromgif($path) ?: null,
+            default => null,
         };
     }
 }

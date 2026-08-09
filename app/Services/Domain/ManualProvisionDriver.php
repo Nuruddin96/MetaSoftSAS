@@ -18,7 +18,7 @@ class ManualProvisionDriver implements DomainDriver
         }
 
         $expected = DomainManager::expectedTxtValue($tenant->custom_domain_verification_token);
-        $records  = @dns_get_record($tenant->custom_domain_requested, DNS_TXT) ?: [];
+        $records = @dns_get_record($tenant->custom_domain_requested, DNS_TXT) ?: [];
 
         foreach ($records as $record) {
             if (($record['txt'] ?? null) === $expected) {
@@ -32,7 +32,7 @@ class ManualProvisionDriver implements DomainDriver
     public function activationInstructions(Tenant $tenant): string
     {
         return "1. Add {$tenant->custom_domain_requested} as an Addon/Parked Domain in cPanel, pointing at the same document root as the main app.\n"
-             . "2. Confirm HTTPS is issued (Hostinger AutoSSL, if enabled, usually picks this up automatically once the addon domain is added).\n"
-             . '3. Once the domain loads the app, click Activate to start serving this tenant on it.';
+             ."2. Confirm HTTPS is issued (Hostinger AutoSSL, if enabled, usually picks this up automatically once the addon domain is added).\n"
+             .'3. Once the domain loads the app, click Activate to start serving this tenant on it.';
     }
 }

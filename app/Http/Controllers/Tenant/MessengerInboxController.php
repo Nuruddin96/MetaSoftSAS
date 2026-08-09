@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
+use App\Models\FacebookPage;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Services\Messenger\MessengerApi;
@@ -22,7 +23,8 @@ class MessengerInboxController extends Controller
 
         return view('tenant.messenger.index', [
             'conversations' => $conversations,
-            'connected'     => MessengerSetting::exists(),
+            'connected' => MessengerSetting::exists()
+                || (FacebookPage::tablesReady() && FacebookPage::where('is_active', 1)->exists()),
         ]);
     }
 
@@ -34,7 +36,7 @@ class MessengerInboxController extends Controller
         abort_if($messages->isEmpty(), 404);
 
         return view('tenant.messenger.show', [
-            'psid'     => $psid,
+            'psid' => $psid,
             'messages' => $messages,
             'customer' => $messages->last(),
         ]);
@@ -44,29 +46,82 @@ class MessengerInboxController extends Controller
     {
         $data = $request->validate(['message' => 'required|string|max:1000']);
 
-        $setting = MessengerSetting::where('is_active', 1)->first();
+        $token = $this->resolveReplyToken($psid);
 
-        if (! $setting) {
+        if ($token === false) {
+            // This conversation is tied to a specific connected Page that is
+            // now disconnected/inactive — fail safely. Never fall back to a
+            // different Page's token for the same conversation.
+            return back()->with('error', 'এই কনভারসেশনের Facebook Page বর্তমানে ডিসকানেক্টেড — রিপ্লাই পাঠানো যায়নি, Page-টি আবার কানেক্ট করুন।');
+        }
+
+        if (! $token) {
             return back()->with('error', 'মেসেঞ্জার পেজ কানেক্ট করা নেই।');
         }
 
         try {
-            $api->sendMessage($psid, $data['message'], $setting->page_access_token);
+            $api->sendMessage($psid, $data['message'], $token);
         } catch (\Throwable $e) {
-            return back()->with('error', 'মেসেজ পাঠানো যায়নি: ' . $e->getMessage());
+            return back()->with('error', 'মেসেজ পাঠানো যায়নি: '.$e->getMessage());
         }
 
         MessengerMessage::create([
-            'sender_psid'   => $psid,
-            'message_text'  => $data['message'],
-            'direction'     => 'out',
-            'status'        => 'contacted',
+            'sender_psid' => $psid,
+            'message_text' => $data['message'],
+            'direction' => 'out',
+            'status' => 'contacted',
         ]);
 
         // mark the conversation as contacted
         MessengerMessage::where('sender_psid', $psid)->where('status', 'new')->update(['status' => 'contacted']);
 
         return back()->with('success', 'রিপ্লাই পাঠানো হয়েছে।');
+    }
+
+    /**
+     * Resolves the Page Access Token to reply with for one specific
+     * conversation — never an arbitrary "first active" connected Page.
+     * A conversation's Page is read from the most recent message on record
+     * for this psid that carries a facebook_page_id (set by
+     * MessengerWebhookController::resolvePageOwner() when the message
+     * arrived) — never guessed.
+     *
+     * Returns:
+     *  - string  the Page Access Token to send with.
+     *  - false   the conversation IS tied to a specific Page, but that Page
+     *            is disconnected/inactive/gone — caller must fail safely,
+     *            never substitute a different Page's token.
+     *  - null    no Page is on record for this conversation at all (a
+     *            legacy messenger_settings-era conversation, or it predates
+     *            the facebook_page_id column) — falls back to the single
+     *            legacy connection, never to an unrelated OAuth-connected
+     *            Page.
+     *
+     * FacebookPage::where('id', ...) is still tenant-scoped by
+     * BelongsToTenant's global scope even though facebook_page_id already
+     * only ever points at this tenant's own rows by construction — this is
+     * the defense-in-depth layer that makes a cross-tenant token leak
+     * structurally impossible here, not just "shouldn't happen."
+     */
+    protected function resolveReplyToken(string $psid): string|false|null
+    {
+        $facebookPageId = FacebookPage::tablesReady()
+            ? MessengerMessage::where('sender_psid', $psid)
+                ->whereNotNull('facebook_page_id')
+                ->orderByDesc('id')
+                ->value('facebook_page_id')
+            : null;
+
+        if ($facebookPageId) {
+            $page = FacebookPage::where('id', $facebookPageId)
+                ->where('is_active', 1)
+                ->where('status', 'active')
+                ->first();
+
+            return $page ? $page->page_access_token : false;
+        }
+
+        return optional(MessengerSetting::where('is_active', 1)->first())->page_access_token;
     }
 
     public function updateStatus(Request $request, string $psid)

@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
 use App\Models\CourierSetting;
+use App\Models\FacebookConnection;
+use App\Models\FacebookPage;
 use App\Models\MarketingSetting;
 use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
 use App\Services\Domain\DomainManager;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
 class SettingController extends Controller
@@ -16,12 +19,20 @@ class SettingController extends Controller
     {
         $tenant = app('currentTenant');
 
+        // Facebook OAuth tables are additive (database/sql/chunk23.sql) —
+        // don't query them at all if they haven't been imported yet, so the
+        // rest of this page (courier/marketing/domain, the manual Messenger
+        // card) keeps working exactly as before rather than 500ing.
+        $facebookReady = FacebookPage::tablesReady();
+
         return view('tenant.settings', [
             'messenger' => MessengerSetting::first(),
-            'tenant'   => $tenant,
+            'facebookConnection' => $facebookReady ? FacebookConnection::first() : null,
+            'facebookPages' => $facebookReady ? FacebookPage::orderByDesc('id')->get() : collect(),
+            'tenant' => $tenant,
             'couriers' => CourierSetting::get()->keyBy('provider'),
             'marketing' => MarketingSetting::firstOrNew(['tenant_id' => app('currentTenant')->id]),
-            'store'    => StoreSetting::pluck('value', 'key'),
+            'store' => StoreSetting::pluck('value', 'key'),
             'domainTxtValue' => $tenant->custom_domain_verification_token
                 ? DomainManager::expectedTxtValue($tenant->custom_domain_verification_token)
                 : null,
@@ -31,9 +42,9 @@ class SettingController extends Controller
     public function courier(Request $request)
     {
         $data = $request->validate([
-            'provider'    => 'required|in:steadfast,pathao',
+            'provider' => 'required|in:steadfast,pathao',
             'credentials' => 'required|array',
-            'is_active'   => 'nullable|boolean',
+            'is_active' => 'nullable|boolean',
         ]);
 
         // drop empty fields so we don't overwrite saved secrets with blanks
@@ -41,18 +52,18 @@ class SettingController extends Controller
 
         $setting = CourierSetting::firstOrNew(['provider' => $data['provider']]);
         $setting->credentials = array_merge($setting->credentials ?? [], $credentials);
-        $setting->is_active   = $request->boolean('is_active');
+        $setting->is_active = $request->boolean('is_active');
         $setting->save();
 
-        return back()->with('success', ucfirst($data['provider']) . ' সেটিংস সেভ হয়েছে।');
+        return back()->with('success', ucfirst($data['provider']).' সেটিংস সেভ হয়েছে।');
     }
 
     public function messenger(Request $request)
     {
         $data = $request->validate([
-            'page_id'            => 'required|string|max:50',
-            'page_access_token'  => 'nullable|string',
-            'page_name'          => 'nullable|string|max:150',
+            'page_id' => 'required|string|max:50',
+            'page_access_token' => 'nullable|string',
+            'page_name' => 'nullable|string|max:150',
         ]);
 
         $tenant = app('currentTenant');
@@ -74,19 +85,19 @@ class SettingController extends Controller
         }
 
         $setting = MessengerSetting::firstOrNew([]);
-        $setting->page_id   = $data['page_id'];
+        $setting->page_id = $data['page_id'];
         $setting->page_name = $data['page_name'] ?? null;
 
         if (! empty($data['page_access_token'])) {
             $setting->page_access_token = $data['page_access_token'];
         }
 
-        $setting->tenant_id  = $tenant->id;
-        $setting->is_active  = $request->boolean('is_active', true);
+        $setting->tenant_id = $tenant->id;
+        $setting->is_active = $request->boolean('is_active', true);
 
         try {
             $setting->save();
-        } catch (\Illuminate\Database\QueryException $e) {
+        } catch (QueryException $e) {
             // Race condition: another tenant claimed this exact page_id between
             // the check above and this save. The DB's unique constraint on
             // page_id (chunk21.sql) is the real guarantee; this just turns the
@@ -107,14 +118,14 @@ class SettingController extends Controller
     public function marketing(Request $request)
     {
         $data = $request->validate([
-            'fb_pixel_id'         => 'nullable|string|max:50',
-            'fb_capi_token'       => 'nullable|string',
-            'fb_test_event_code'  => 'nullable|string|max:50',
-            'gtm_container_id'    => 'nullable|string|max:20',
-            'meta_app_id'         => 'nullable|string|max:50',
-            'meta_app_secret'     => 'nullable|string',
-            'meta_access_token'   => 'nullable|string',
-            'meta_ad_account_id'  => 'nullable|string|max:50',
+            'fb_pixel_id' => 'nullable|string|max:50',
+            'fb_capi_token' => 'nullable|string',
+            'fb_test_event_code' => 'nullable|string|max:50',
+            'gtm_container_id' => 'nullable|string|max:20',
+            'meta_app_id' => 'nullable|string|max:50',
+            'meta_app_secret' => 'nullable|string',
+            'meta_access_token' => 'nullable|string',
+            'meta_ad_account_id' => 'nullable|string|max:50',
         ]);
 
         $setting = MarketingSetting::firstOrNew(['tenant_id' => app('currentTenant')->id]);
@@ -137,7 +148,7 @@ class SettingController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'delivery_charge_inside_dhaka'  => 'required|numeric|min:0',
+            'delivery_charge_inside_dhaka' => 'required|numeric|min:0',
             'delivery_charge_outside_dhaka' => 'required|numeric|min:0',
         ]);
 
@@ -164,10 +175,10 @@ class SettingController extends Controller
         ]);
 
         $tenant->update([
-            'custom_domain_requested'          => strtolower($data['custom_domain_requested']),
-            'custom_domain_request_status'     => 'pending',
+            'custom_domain_requested' => strtolower($data['custom_domain_requested']),
+            'custom_domain_request_status' => 'pending',
             'custom_domain_verification_token' => DomainManager::generateVerificationToken(),
-            'custom_domain_dns_verified_at'     => null,
+            'custom_domain_dns_verified_at' => null,
         ]);
 
         return back()->with('success', 'ডোমেইন রিকোয়েস্ট পাঠানো হয়েছে — DNS TXT রেকর্ড যোগ করুন, আমাদের টিম যাচাই করে চালু করে দেবে।');

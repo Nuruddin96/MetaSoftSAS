@@ -38,10 +38,25 @@ class Tenant extends Model
         });
     }
 
-    public function plan()          { return $this->belongsTo(Plan::class); }
-    public function subscriptions() { return $this->hasMany(Subscription::class); }
-    public function warehouses()    { return $this->hasMany(Warehouse::class); }
-    public function storeSettings() { return $this->hasMany(StoreSetting::class); }
+    public function plan()
+    {
+        return $this->belongsTo(Plan::class);
+    }
+
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class);
+    }
+
+    public function warehouses()
+    {
+        return $this->hasMany(Warehouse::class);
+    }
+
+    public function storeSettings()
+    {
+        return $this->hasMany(StoreSetting::class);
+    }
 
     /** Plan limit check, e.g. isWithinLimit('max_products', $count) */
     public function isWithinLimit(string $limit, int $currentCount): bool
@@ -54,13 +69,13 @@ class Tenant extends Model
     public function url(): string
     {
         if (config('app.tenancy_mode', 'subdomain') === 'path') {
-            return 'https://' . config('app.central_domain') . '/shop/' . $this->subdomain;
+            return 'https://'.config('app.central_domain').'/shop/'.$this->subdomain;
         }
 
         $domain = ($this->custom_domain_verified && $this->custom_domain)
             ? $this->custom_domain
-            : $this->subdomain . '.' . config('app.central_domain');
+            : $this->subdomain.'.'.config('app.central_domain');
 
-        return 'https://' . $domain;
+        return 'https://'.$domain;
     }
 }
