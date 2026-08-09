@@ -165,6 +165,47 @@ trait InteractsWithFacebookSchema
             });
         }
 
+        // Unrelated to Facebook, but layouts/panel.blade.php (rendered by
+        // every real panel page, including Settings) unconditionally queries
+        // all four for the notification-bell badge count — needed so a full
+        // HTTP-level render of a panel page doesn't fail on a missing table.
+        if (! Schema::hasTable('orders')) {
+            Schema::create('orders', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('status', 20)->default('pending');
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('product_variants')) {
+            Schema::create('product_variants', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->integer('low_stock_threshold')->default(5);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('inventory')) {
+            Schema::create('inventory', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('variant_id');
+                $table->integer('quantity')->default(0);
+                $table->timestamp('updated_at')->nullable();
+            });
+        }
+
+        if (! Schema::hasTable('incomplete_orders')) {
+            Schema::create('incomplete_orders', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('status', 20)->default('abandoned');
+                $table->timestamps();
+            });
+        }
+
         if (! Schema::hasTable('messenger_messages')) {
             Schema::create('messenger_messages', function (Blueprint $table) use ($includeFacebookPageIdColumn) {
                 $table->id();

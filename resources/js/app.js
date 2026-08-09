@@ -36,6 +36,11 @@ window.showToast = function showToast(message, type = 'success') {
     }, 4000);
 };
 
+// Flash messages queued by layouts/panel.blade.php (window.__flashMessages)
+// before this module had loaded — drained here, right after showToast is
+// defined, so they always fire regardless of module-load timing.
+(window.__flashMessages || []).forEach(({ message, type }) => window.showToast(message, type));
+
 // ---- button loading state on form submit (layouts/panel.blade.php) ----
 document.querySelectorAll('form').forEach((form) => {
     form.addEventListener('submit', function () {

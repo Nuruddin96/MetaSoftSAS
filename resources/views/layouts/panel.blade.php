@@ -191,21 +191,25 @@
 {{-- toast notifications --}}
 <div id="toastStack"></div>
 
+@php
+    $flashMessages = array_filter([
+        session('success') ? ['message' => session('success'), 'type' => 'success'] : null,
+        session('error') ? ['message' => session('error'), 'type' => 'error'] : null,
+        session('warning') ? ['message' => session('warning'), 'type' => 'error'] : null,
+        $errors->any() ? ['message' => $errors->first(), 'type' => 'error'] : null,
+    ]);
+@endphp
+
 <script>
     lucide.createIcons();
 
-    @if (session('success'))
-        showToast(@json(session('success')), 'success');
-    @endif
-    @if (session('error'))
-        showToast(@json(session('error')), 'error');
-    @endif
-    @if (session('warning'))
-        showToast(@json(session('warning')), 'error');
-    @endif
-    @if ($errors->any())
-        showToast(@json($errors->first()), 'error');
-    @endif
+    {{-- showToast() lives in the bundled resources/js/app.js module, which
+    loads deferred and therefore always executes AFTER this synchronous
+    inline script — calling showToast() directly here would throw
+    "showToast is not defined". Queuing the data instead (a plain
+    assignment, no function call) sidesteps the ordering issue entirely:
+    app.js drains this queue itself right after it defines showToast. --}}
+    window.__flashMessages = @js(array_values($flashMessages));
 </script>
 @stack('scripts')
 </body>
