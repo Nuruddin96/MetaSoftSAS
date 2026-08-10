@@ -8,21 +8,24 @@
     <x-ui.button href="{{ route('tenant.orders.create') }}" variant="accent" size="sm">+ নতুন অর্ডার</x-ui.button>
 </div>
 
-<form class="flex flex-wrap gap-3 mb-4">
+<form class="flex flex-col sm:flex-row sm:flex-wrap gap-3 mb-4">
     <input name="q" value="{{ request('q') }}" placeholder="অর্ডার নং / ফোন / নাম..."
-           class="rounded-btn border border-ink/15 px-3 py-2.5 text-sm w-full md:w-64 focus:ring-2 focus:ring-leaf outline-none">
-    <select name="status" onchange="this.form.submit()" class="rounded-btn border border-ink/15 px-3 py-2.5 text-sm bg-white">
+           class="rounded-btn border border-ink/15 px-3 py-3 sm:py-2.5 text-sm w-full sm:w-auto md:w-64 focus:ring-2 focus:ring-leaf outline-none">
+    <select name="status" onchange="this.form.submit()" class="rounded-btn border border-ink/15 px-3 py-3 sm:py-2.5 text-sm bg-white w-full sm:w-auto">
         <option value="">সব স্ট্যাটাস</option>
         @foreach (['pending' => 'পেন্ডিং', 'confirmed' => 'কনফার্মড', 'processing' => 'প্রসেসিং', 'shipped' => 'শিপড', 'delivered' => 'ডেলিভারড', 'cancelled' => 'ক্যান্সেলড', 'returned' => 'রিটার্নড'] as $key => $label)
             <option value="{{ $key }}" @selected(request('status') === $key)>{{ $label }}</option>
         @endforeach
     </select>
-    <select name="channel" onchange="this.form.submit()" class="rounded-btn border border-ink/15 px-3 py-2.5 text-sm bg-white">
+    <select name="channel" onchange="this.form.submit()" class="rounded-btn border border-ink/15 px-3 py-3 sm:py-2.5 text-sm bg-white w-full sm:w-auto">
         <option value="">সব উৎস</option>
         @foreach (['website' => '🌐 ওয়েবসাইট', 'facebook' => '📘 ফেসবুক', 'whatsapp' => '💬 হোয়াটসঅ্যাপ', 'instagram' => '📷 ইনস্টাগ্রাম', 'call' => '📞 কল', 'others' => '📦 অন্যান্য'] as $key => $label)
             <option value="{{ $key }}" @selected(request('channel') === $key)>{{ $label }}</option>
         @endforeach
     </select>
+    @if (request('q') || request('status') || request('channel'))
+        <a href="{{ route('tenant.orders.index') }}" class="text-sm text-mute hover:text-ink self-start sm:self-center underline sm:no-underline">রিসেট</a>
+    @endif
 </form>
 
 {{-- bulk action bar --}}
@@ -50,7 +53,67 @@
     </form>
 </div>
 
-<x-ui.card padding="none" class="overflow-x-auto">
+@php
+    $statusMeta = [
+        'pending'    => ['পেন্ডিং', 'bg-amber/15 text-ink'],
+        'confirmed'  => ['কনফার্মড', 'bg-leaf/10 text-leafdk'],
+        'processing' => ['প্রসেসিং', 'bg-blue-50 text-blue-700'],
+        'shipped'    => ['শিপড', 'bg-blue-50 text-blue-700'],
+        'delivered'  => ['ডেলিভার্ড', 'bg-leaf/10 text-leafdk'],
+        'cancelled'  => ['বাতিল', 'bg-red-50 text-red-700'],
+        'returned'   => ['ফেরত', 'bg-red-50 text-red-700'],
+    ];
+    $channelLabels = ['website' => 'ওয়েবসাইট', 'facebook' => 'ফেসবুক', 'whatsapp' => 'হোয়াটসঅ্যাপ', 'instagram' => 'ইনস্টাগ্রাম', 'call' => 'কল', 'others' => 'অন্যান্য'];
+    $channelColors = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'others' => 'text-mute'];
+@endphp
+
+{{-- mobile: order cards --}}
+<div class="lg:hidden space-y-3">
+    @forelse ($orders as $order)
+        @php [$statusLabel, $statusClass] = $statusMeta[$order->status] ?? [$order->status, 'bg-ink/5 text-ink']; @endphp
+        <a href="{{ route('tenant.orders.show', $order) }}"
+           class="block bg-white rounded-card border border-ink/5 px-4 py-4 hover:border-leaf/30 active:bg-paper/60 transition min-w-0">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="font-semibold text-sm text-leaf break-words">{{ $order->order_number }}</p>
+                    <p class="text-xs text-mute mt-0.5">{{ $order->created_at->format('d M, h:i A') }}</p>
+                </div>
+                <span class="shrink-0 px-2.5 py-1 rounded-pill text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span>
+            </div>
+
+            <div class="mt-2.5 min-w-0">
+                <p class="text-sm font-medium break-words">{{ $order->customer_name }}</p>
+                <p class="text-xs text-mute break-words">{{ $order->customer_phone }}</p>
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-pill text-xs bg-ink/5 {{ $channelColors[$order->channel] ?? 'text-mute' }}">
+                    @include('partials.icon', ['platform' => $order->channel, 'class' => 'w-3.5 h-3.5'])
+                    <span class="text-ink">{{ $channelLabels[$order->channel] ?? $order->channel }}</span>
+                </span>
+                @if ($order->messenger_psid)
+                    <span class="text-xs px-2 py-0.5 rounded-pill bg-amber/15 text-ink">📩 Messenger</span>
+                @endif
+                @if ($order->courier_consignment_id)
+                    <span class="text-xs px-2 py-0.5 rounded-pill bg-ink/5 text-ink">🚚 {{ ucfirst($order->courier_provider) }}</span>
+                @endif
+            </div>
+
+            <div class="mt-3 pt-3 border-t border-ink/5 flex items-center justify-between gap-3">
+                <p class="text-xs text-mute">{{ $order->items->count() }}টি প্রোডাক্ট</p>
+                <p class="font-semibold text-sm shrink-0">{{ number_format($order->total) }}৳</p>
+            </div>
+        </a>
+    @empty
+        <div class="bg-white rounded-card border border-ink/5 px-4 py-14 text-center text-mute">
+            <i data-lucide="receipt" class="w-8 h-8 mx-auto mb-3 text-mute/40"></i>
+            কোনো অর্ডার নেই।
+        </div>
+    @endforelse
+</div>
+
+{{-- desktop: table --}}
+<x-ui.card padding="none" class="hidden lg:block overflow-x-auto">
     <table class="w-full text-sm">
         <thead class="text-left text-mute"><tr class="border-b border-ink/5">
             <th class="px-3 py-3"><input type="checkbox" id="selectAll"></th>
@@ -59,17 +122,6 @@
             <th class="px-4 py-3">স্ট্যাটাস</th><th class="px-4 py-3">সময়</th><th class="px-4 py-3"></th>
         </tr></thead>
         <tbody>
-        @php
-            $statusMeta = [
-                'pending'    => ['পেন্ডিং', 'bg-amber/15 text-ink'],
-                'confirmed'  => ['কনফার্মড', 'bg-leaf/10 text-leafdk'],
-                'processing' => ['প্রসেসিং', 'bg-blue-50 text-blue-700'],
-                'shipped'    => ['শিপড', 'bg-blue-50 text-blue-700'],
-                'delivered'  => ['ডেলিভার্ড', 'bg-leaf/10 text-leafdk'],
-                'cancelled'  => ['বাতিল', 'bg-red-50 text-red-700'],
-                'returned'   => ['ফেরত', 'bg-red-50 text-red-700'],
-            ];
-        @endphp
         @forelse ($orders as $order)
             @php [$statusLabel, $statusClass] = $statusMeta[$order->status] ?? [$order->status, 'bg-ink/5 text-ink']; @endphp
             <tr class="border-b border-ink/5 last:border-0 hover:bg-paper/60">
@@ -82,13 +134,9 @@
                 </td>
                 <td class="px-4 py-3">{{ $order->customer_name }}<br><span class="text-xs text-mute">{{ $order->customer_phone }}</span></td>
                 <td class="px-4 py-3">
-                    @php
-                        $chLabel = ['website' => 'ওয়েবসাইট', 'facebook' => 'ফেসবুক', 'whatsapp' => 'হোয়াটসঅ্যাপ', 'instagram' => 'ইনস্টাগ্রাম', 'call' => 'কল', 'others' => 'অন্যান্য'][$order->channel] ?? $order->channel;
-                        $chColor = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'others' => 'text-mute'][$order->channel] ?? 'text-mute';
-                    @endphp
-                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-pill text-xs bg-ink/5 {{ $chColor }}">
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-pill text-xs bg-ink/5 {{ $channelColors[$order->channel] ?? 'text-mute' }}">
                         @include('partials.icon', ['platform' => $order->channel, 'class' => 'w-3.5 h-3.5'])
-                        <span class="text-ink">{{ $chLabel }}</span>
+                        <span class="text-ink">{{ $channelLabels[$order->channel] ?? $order->channel }}</span>
                     </span>
                 </td>
                 <td class="px-4 py-3 font-semibold">{{ number_format($order->total) }}৳</td>
