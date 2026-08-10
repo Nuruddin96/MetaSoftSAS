@@ -41,6 +41,7 @@ use App\Http\Controllers\Tenant\PosController;
 use App\Http\Controllers\Tenant\ProductController;
 use App\Http\Controllers\Tenant\ProductImportController;
 use App\Http\Controllers\Tenant\ProductSourceController;
+use App\Http\Controllers\Tenant\PwaController;
 use App\Http\Controllers\Tenant\ReportController;
 use App\Http\Controllers\Tenant\SettingController;
 use App\Http\Controllers\Tenant\WebsiteController;
@@ -171,6 +172,12 @@ $tenantRoutes = function () {
         Route::middleware(['auth:tenant', 'check.subscription'])->group(function () {
 
             Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+            // PWA manifest — dynamic per-tenant (see PwaController docblock
+            // for why this can't be a static public/manifest.json under
+            // path tenancy).
+            Route::get('manifest.json', [PwaController::class, 'manifest'])->name('pwa.manifest');
+            Route::get('sw.js', [PwaController::class, 'serviceWorker'])->name('pwa.sw');
 
             // Notification bell "mark seen" beacon (session-based, see NotificationController)
             Route::post('notifications/seen', [NotificationController::class, 'markSeen'])->name('notifications.seen');

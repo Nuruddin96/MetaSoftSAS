@@ -56,19 +56,36 @@
         $newIncomplete > 0 ? ['অসম্পূর্ণ অর্ডারে কল করুন', $newIncomplete, route('tenant.incomplete'), 'phone-missed', 'text-mute', 'bg-ink/5'] : null,
     ]);
 @endphp
+{{-- This is this app's actual existing "quick action" surface — a
+     dynamic shortlist of things to do now, each already an existing
+     route/label/count. No section literally named "Quick Actions" exists
+     elsewhere in the app, so the reference's centered-tile treatment is
+     applied here rather than inventing a new section. Every label/count/
+     route below is untouched; only the tile's visual structure changes,
+     and only below the lg: breakpoint — the inner icon+label wrapper and
+     trailing count pill reproduce the pre-redesign desktop markup exactly
+     (same classes, same nesting), just gated behind lg: instead of being
+     unconditional, so desktop is pixel-for-pixel unchanged. The mobile
+     view keeps the same count information as a small corner badge on the
+     icon instead of a trailing pill, since content is now centered. --}}
 @if (count($todoItems))
     <x-ui.card class="mb-6">
         <p class="font-bold text-sm mb-3 flex items-center gap-2">
             <i data-lucide="clipboard-list" class="w-4 h-4 text-leafdk"></i> আজকে যা করতে হবে
         </p>
-        <div class="grid sm:grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-2 gap-2.5">
             @foreach ($todoItems as [$label, $count, $link, $icon, $textColor, $bgColor])
-                <a href="{{ $link }}" class="flex items-center justify-between gap-3 px-4 py-3 rounded-btn border border-ink/5 hover:border-leaf/30 hover:bg-paper/60 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
-                    <span class="flex items-center gap-2.5 text-sm">
-                        <i data-lucide="{{ $icon }}" class="w-4 h-4 {{ $textColor }}"></i>
-                        {{ $label }}
+                <a href="{{ $link }}"
+                   class="flex flex-col items-center text-center gap-1.5 px-3 py-4 rounded-[11px] border border-ink/5 hover:border-leaf/30 hover:bg-paper/60 active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2
+                          lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:text-left lg:px-4 lg:py-3 lg:rounded-btn">
+                    <span class="flex flex-col items-center gap-1.5 lg:flex-row lg:items-center lg:gap-2.5 lg:text-sm">
+                        <span class="relative w-9 h-9 rounded-[9px] {{ $bgColor }} grid place-items-center lg:w-auto lg:h-auto lg:rounded-none lg:bg-transparent">
+                            <i data-lucide="{{ $icon }}" class="w-5 h-5 {{ $textColor }} lg:w-4 lg:h-4"></i>
+                            <span class="lg:hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-pill {{ $bgColor }} {{ $textColor }} text-[10px] font-bold grid place-items-center border-2 border-white">{{ $count }}</span>
+                        </span>
+                        <span class="text-[15px] font-medium leading-tight lg:text-sm lg:font-normal">{{ $label }}</span>
                     </span>
-                    <span class="w-6 h-6 rounded-pill {{ $bgColor }} grid place-items-center text-xs font-bold {{ $textColor }}">{{ $count }}</span>
+                    <span class="hidden lg:grid w-6 h-6 rounded-pill {{ $bgColor }} place-items-center text-xs font-bold {{ $textColor }}">{{ $count }}</span>
                 </a>
             @endforeach
         </div>
@@ -80,30 +97,46 @@
      doesn't compute a vs-yesterday comparison, so nothing is shown rather
      than fabricating one.
 
-     Mobile sizing/coloring (base/sm: classes) is intentionally denser and
-     uses a per-category pastel icon tone, app-tile-like; every lg: class
-     below reproduces the pre-redesign desktop values exactly (p-6 / w-9 h-9
-     / rounded-lg / 18px icon / text-3xl / bg-paper text-mute or the
-     existing leaf accent on the revenue tile), so desktop is pixel-for-
-     pixel unchanged — only the mobile breakpoint gets the new look. --}}
-<div class="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
+     Mobile sizing/coloring (base classes) is intentionally denser and uses
+     a per-category pastel icon tone, app-tile-like; every lg: class below
+     reproduces the pre-redesign desktop values exactly (p-6 / w-9 h-9 /
+     rounded-lg / 18px icon / text-3xl / bg-paper text-mute or the existing
+     leaf accent on the revenue tile), so desktop is pixel-for-pixel
+     unchanged — only the mobile breakpoint gets the new look.
+
+     Sizing follows the reference-UI analysis spec precisely: 32px icon box
+     (8-10px radius), 18-20px icon, 11px card radius, 12-14px padding,
+     20-22px bold number, 15px label — icon-then-NUMBER-then-label order
+     (a flex-column with per-item `order-*`, not a DOM reorder, so desktop
+     can keep its original label-then-number visual order via lg:order-*
+     without any duplicated markup). Every lg: class below reproduces the
+     pre-redesign desktop values exactly (p-6 / w-9 h-9 / rounded-lg /
+     rounded-card / 18px icon / text-3xl / label-before-number / bg-paper
+     text-mute or the existing leaf accent on the revenue tile) — desktop
+     is pixel-for-pixel unchanged. Each tile links to the existing list
+     page it summarizes, using the exact same routes/params already used
+     elsewhere on this page (e.g. the pending-orders link matches the
+     "today's to-do" list below verbatim) — no new routes. --}}
+<div class="grid grid-cols-2 lg:grid-cols-5 gap-2.5 lg:gap-4">
     @php
         $stats = [
-            ['আজকের অর্ডার', $todayOrders, 'receipt', false, 'bg-amber-50 text-amber-600 lg:bg-paper lg:text-mute'],
-            ['আজকের বিক্রি', number_format($todaySales) . '৳', 'trending-up', true, 'bg-leaf/10 text-leafdk'],
-            ['পেন্ডিং অর্ডার', $pendingOrders, 'clock', false, 'bg-blue-50 text-blue-600 lg:bg-paper lg:text-mute'],
-            ['মোট প্রোডাক্ট', $totalProducts, 'package', false, 'bg-purple-50 text-purple-600 lg:bg-paper lg:text-mute'],
-            ['মোট কাস্টমার', $totalCustomers, 'users', false, 'bg-pink-50 text-pink-600 lg:bg-paper lg:text-mute'],
+            ['আজকের অর্ডার', $todayOrders, 'receipt', false, 'bg-amber-50 text-amber-600 lg:bg-paper lg:text-mute', route('tenant.orders.index')],
+            ['আজকের বিক্রি', number_format($todaySales) . '৳', 'trending-up', true, 'bg-leaf/10 text-leafdk', route('tenant.reports.sales')],
+            ['পেন্ডিং অর্ডার', $pendingOrders, 'clock', false, 'bg-blue-50 text-blue-600 lg:bg-paper lg:text-mute', route('tenant.orders.index', ['status' => 'pending'])],
+            ['মোট প্রোডাক্ট', $totalProducts, 'package', false, 'bg-purple-50 text-purple-600 lg:bg-paper lg:text-mute', route('tenant.products.index')],
+            ['মোট কাস্টমার', $totalCustomers, 'users', false, 'bg-pink-50 text-pink-600 lg:bg-paper lg:text-mute', route('tenant.customers.index')],
         ];
     @endphp
-    @foreach ($stats as [$label, $value, $icon, $isRevenue, $iconTone])
-        <x-ui.card hoverable padding="none" class="p-3.5 sm:p-4 lg:p-6 active:scale-[0.97]">
-            <div class="w-10 h-10 lg:w-9 lg:h-9 rounded-xl lg:rounded-lg grid place-items-center {{ $iconTone }}">
-                <i data-lucide="{{ $icon }}" class="w-5 h-5 lg:w-[18px] lg:h-[18px]"></i>
-            </div>
-            <p class="text-mute text-[11px] lg:text-xs mt-2.5 lg:mt-3 leading-tight">{{ $label }}</p>
-            <p class="font-disp font-extrabold text-xl lg:text-3xl mt-1 {{ $isRevenue ? 'text-leafdk' : '' }}">{{ $value }}</p>
-        </x-ui.card>
+    @foreach ($stats as [$label, $value, $icon, $isRevenue, $iconTone, $link])
+        <a href="{{ $link }}" class="block rounded-[11px] lg:rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+            <x-ui.card hoverable padding="none" radius="none" class="flex flex-col rounded-[11px] lg:rounded-card p-3.5 lg:p-6 active:scale-[0.97] h-full">
+                <div class="order-1 w-8 h-8 lg:w-9 lg:h-9 rounded-[9px] lg:rounded-lg grid place-items-center {{ $iconTone }}">
+                    <i data-lucide="{{ $icon }}" class="w-5 h-5 lg:w-[18px] lg:h-[18px]"></i>
+                </div>
+                <p class="order-2 lg:order-3 font-disp font-extrabold text-xl lg:text-3xl mt-2 lg:mt-1 {{ $isRevenue ? 'text-leafdk' : '' }}">{{ $value }}</p>
+                <p class="order-3 lg:order-2 text-mute text-[15px] lg:text-xs font-medium lg:font-normal mt-0.5 lg:mt-3 leading-tight">{{ $label }}</p>
+            </x-ui.card>
+        </a>
     @endforeach
 </div>
 

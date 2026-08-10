@@ -69,3 +69,84 @@ document.querySelectorAll('form').forEach((form) => {
         }
     });
 });
+
+// ---- top progress bar for full-page navigations (layouts/panel.blade.php,
+// #navProgress) ----
+// This app is classic server-rendered Blade (every link is a real page
+// load, not a SPA route change), so this only needs to *start*: the
+// in-flight bar is naturally torn down the instant the browser replaces
+// the document with the next page. Scoped to plain same-origin <a> clicks
+// only — form submits already get the .btn-loading spinner above, and
+// several forms in this app are fetch/AJAX-driven rather than real
+// navigations (e.g. the fraud-check button), where a nav bar that never
+// resolves would just look stuck.
+const navProgress = document.getElementById('navProgress');
+document.addEventListener('click', (e) => {
+    if (!navProgress) return;
+    const link = e.target.closest('a[href]');
+    if (!link || link.target === '_blank' || link.hasAttribute('download')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+    let url;
+    try {
+        url = new URL(link.href, window.location.href);
+    } catch {
+        return;
+    }
+    if (url.origin !== window.location.origin) return;
+    if (url.pathname === window.location.pathname && url.hash) return; // in-page anchor only
+
+    navProgress.classList.remove('is-done');
+    void navProgress.offsetWidth; // restart the width transition if a previous nav had one queued
+    navProgress.classList.add('is-active');
+});
+// Covers a back/forward-cache restore leaving the bar visibly stuck mid-flight.
+window.addEventListener('pageshow', () => navProgress?.classList.remove('is-active'));
+
+// ---- PWA: service worker registration + "new version" prompt ----
+// window.__swUrl is queued by layouts/panel.blade.php the same way
+// __flashMessages is, since this module loads deferred.
+if ('serviceWorker' in navigator && window.__swUrl) {
+    const showUpdatePrompt = (registration) => {
+        const stack = document.getElementById('toastStack');
+        if (!stack || document.getElementById('swUpdateToast')) return; // don't stack duplicates
+
+        const el = document.createElement('div');
+        el.id = 'swUpdateToast';
+        el.className = 'toast bg-white border border-leaf/30 text-ink flex items-center gap-3';
+        el.innerHTML = '<span class="flex-1">নতুন ভার্সন পাওয়া গেছে</span>'
+            + '<button type="button" class="font-semibold text-leafdk shrink-0">রিফ্রেশ করুন</button>';
+        el.querySelector('button').addEventListener('click', () => {
+            registration.waiting?.postMessage('SKIP_WAITING');
+        });
+        stack.appendChild(el);
+        // Deliberately no auto-dismiss timeout (unlike showToast()) — this
+        // is actionable, not informational, and should stay until the user
+        // either updates or the tab is reloaded some other way.
+    };
+
+    navigator.serviceWorker.register(window.__swUrl).then((registration) => {
+        if (registration.waiting) showUpdatePrompt(registration);
+
+        registration.addEventListener('updatefound', () => {
+            const installing = registration.installing;
+            installing?.addEventListener('statechange', () => {
+                if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                    showUpdatePrompt(registration);
+                }
+            });
+        });
+    }).catch(() => {
+        // Registration failing (unsupported browser, blocked, private
+        // mode, etc.) must never break the app — every feature works
+        // identically without it, this only loses the installable/
+        // offline-shell layer.
+    });
+
+    let reloadedForUpdate = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloadedForUpdate) return;
+        reloadedForUpdate = true;
+        window.location.reload();
+    });
+}

@@ -2,13 +2,30 @@
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>@yield('title', 'প্যানেল') — {{ app('currentTenant')->store_name }}</title>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+    {{-- PWA: manifest, icons, theme color. viewport-fit=cover above +
+         env(safe-area-inset-*) in this layout's CSS is what actually lets
+         content extend under a notch/gesture bar safely — this block only
+         declares app identity/icons. --}}
+    <link rel="manifest" href="{{ route('tenant.pwa.manifest') }}">
+    <meta name="theme-color" content="#128155">
+    <meta name="background-color" content="#F4F2EA">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/icons/favicon-32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('images/icons/favicon-16.png') }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/icons/apple-touch-icon.png') }}">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="MetaSoft">
 </head>
 <body class="font-body bg-paper text-ink antialiased">
+<x-ui.splash />
+<div id="navProgress"></div>
 @php
     $notifTenant = app('currentTenant');
 
@@ -192,7 +209,7 @@
 </div>
 
 {{-- mobile bottom tab bar --}}
-<nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10 flex items-center justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] z-30">
+<nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10 flex items-center justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] z-30">
     @php
         // POS stays fully available (desktop sidebar + mobile hamburger menu,
         // routes/controller/permissions untouched) — this bottom bar is only a
@@ -208,10 +225,12 @@
     @endphp
     @foreach ($mobileTabs as [$route, $label, $icon])
         @php $isActive = request()->routeIs(str_replace('.index', '', $route) . '*'); @endphp
-        <a href="{{ route($route) }}" class="flex flex-col items-center gap-0.5 px-2 py-1 rounded-btn transition-colors active:scale-[0.95] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf {{ $isActive ? 'text-leafdk' : 'text-mute' }}">
-            <span class="flex items-center justify-center w-10 h-6 rounded-pill transition-colors {{ $isActive ? 'bg-leaf/15' : '' }}">
-                <i data-lucide="{{ $icon }}" class="w-5 h-5"></i>
-            </span>
+        {{-- Active = colored icon/label only, matching the reference exactly
+             — no pill/background highlight. A light matching fill on the
+             active icon stands in for Lucide's lack of true outline/filled
+             icon pairs, without pulling in a second icon set. --}}
+        <a href="{{ route($route) }}" class="flex flex-col items-center gap-1 px-2 py-1 rounded-btn transition-colors active:scale-[0.95] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf {{ $isActive ? 'text-leafdk' : 'text-mute' }}">
+            <i data-lucide="{{ $icon }}" class="w-5 h-5 {{ $isActive ? 'fill-leaf/20' : '' }}"></i>
             <span class="text-[10px] {{ $isActive ? 'font-semibold' : 'font-medium' }}">{{ $label }}</span>
         </a>
     @endforeach
@@ -239,6 +258,15 @@
     assignment, no function call) sidesteps the ordering issue entirely:
     app.js drains this queue itself right after it defines showToast. --}}
     window.__flashMessages = @js(array_values($flashMessages));
+    window.__swUrl = @js(route('tenant.pwa.sw'));
+
+    {{-- Splash hide: fires the instant this synchronous script runs (right
+    after the DOM above it has parsed), never waiting on the deferred
+    module or a timer — "hide as soon as ready" with no artificial delay.
+    Also a safety net for browsers with JS disabled/blocked: nothing here
+    depends on app.js loading successfully to get the splash out of the way. --}}
+    document.getElementById('appSplash')?.classList.add('is-hidden');
+    setTimeout(() => document.getElementById('appSplash')?.remove(), 300);
 </script>
 @stack('scripts')
 </body>
