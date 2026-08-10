@@ -78,24 +78,31 @@
 {{-- KPI stat tiles — icon + label + value, revenue tile gets a leaf accent to
      stand out from count-based metrics. No trend arrows: the controller
      doesn't compute a vs-yesterday comparison, so nothing is shown rather
-     than fabricating one. --}}
-<div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+     than fabricating one.
+
+     Mobile sizing/coloring (base/sm: classes) is intentionally denser and
+     uses a per-category pastel icon tone, app-tile-like; every lg: class
+     below reproduces the pre-redesign desktop values exactly (p-6 / w-9 h-9
+     / rounded-lg / 18px icon / text-3xl / bg-paper text-mute or the
+     existing leaf accent on the revenue tile), so desktop is pixel-for-
+     pixel unchanged — only the mobile breakpoint gets the new look. --}}
+<div class="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
     @php
         $stats = [
-            ['আজকের অর্ডার', $todayOrders, 'receipt', false],
-            ['আজকের বিক্রি', number_format($todaySales) . '৳', 'trending-up', true],
-            ['পেন্ডিং অর্ডার', $pendingOrders, 'clock', false],
-            ['মোট প্রোডাক্ট', $totalProducts, 'package', false],
-            ['মোট কাস্টমার', $totalCustomers, 'users', false],
+            ['আজকের অর্ডার', $todayOrders, 'receipt', false, 'bg-amber-50 text-amber-600 lg:bg-paper lg:text-mute'],
+            ['আজকের বিক্রি', number_format($todaySales) . '৳', 'trending-up', true, 'bg-leaf/10 text-leafdk'],
+            ['পেন্ডিং অর্ডার', $pendingOrders, 'clock', false, 'bg-blue-50 text-blue-600 lg:bg-paper lg:text-mute'],
+            ['মোট প্রোডাক্ট', $totalProducts, 'package', false, 'bg-purple-50 text-purple-600 lg:bg-paper lg:text-mute'],
+            ['মোট কাস্টমার', $totalCustomers, 'users', false, 'bg-pink-50 text-pink-600 lg:bg-paper lg:text-mute'],
         ];
     @endphp
-    @foreach ($stats as [$label, $value, $icon, $isRevenue])
-        <x-ui.card hoverable>
-            <div class="w-9 h-9 rounded-lg grid place-items-center {{ $isRevenue ? 'bg-leaf/10 text-leafdk' : 'bg-paper text-mute' }}">
-                <i data-lucide="{{ $icon }}" class="w-[18px] h-[18px]"></i>
+    @foreach ($stats as [$label, $value, $icon, $isRevenue, $iconTone])
+        <x-ui.card hoverable padding="none" class="p-3.5 sm:p-4 lg:p-6 active:scale-[0.97]">
+            <div class="w-10 h-10 lg:w-9 lg:h-9 rounded-xl lg:rounded-lg grid place-items-center {{ $iconTone }}">
+                <i data-lucide="{{ $icon }}" class="w-5 h-5 lg:w-[18px] lg:h-[18px]"></i>
             </div>
-            <p class="text-mute text-xs mt-3">{{ $label }}</p>
-            <p class="font-disp font-extrabold text-2xl lg:text-3xl mt-1 {{ $isRevenue ? 'text-leafdk' : '' }}">{{ $value }}</p>
+            <p class="text-mute text-[11px] lg:text-xs mt-2.5 lg:mt-3 leading-tight">{{ $label }}</p>
+            <p class="font-disp font-extrabold text-xl lg:text-3xl mt-1 {{ $isRevenue ? 'text-leafdk' : '' }}">{{ $value }}</p>
         </x-ui.card>
     @endforeach
 </div>

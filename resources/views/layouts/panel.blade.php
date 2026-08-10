@@ -136,7 +136,7 @@
 
     {{-- main column: top bar + page content --}}
     <div class="flex-1 flex flex-col min-w-0">
-        <header class="sticky top-0 z-40 h-16 shrink-0 bg-white/90 backdrop-blur border-b border-ink/5 flex items-center gap-3 px-4 lg:px-8">
+        <header class="sticky top-0 z-40 h-14 lg:h-16 shrink-0 bg-white/90 backdrop-blur border-b border-ink/5 flex items-center gap-3 px-4 lg:px-8">
             <button id="navToggle" class="lg:hidden w-9 h-9 -ml-1.5 grid place-items-center rounded-lg hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
                 <i data-lucide="menu" class="w-5 h-5" id="navToggleOpenIcon"></i>
                 <i data-lucide="x" class="w-5 h-5 hidden" id="navToggleCloseIcon"></i>
@@ -185,14 +185,14 @@
             </div>
         </header>
 
-        <main class="flex-1 p-4 lg:p-8 pb-20 lg:pb-8">
+        <main class="flex-1 p-4 lg:p-8 pb-24 lg:pb-8">
             @yield('content')
         </main>
     </div>
 </div>
 
 {{-- mobile bottom tab bar --}}
-<nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10 flex items-center justify-around py-2 z-30">
+<nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10 flex items-center justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] z-30">
     @php
         // POS stays fully available (desktop sidebar + mobile hamburger menu,
         // routes/controller/permissions untouched) — this bottom bar is only a
@@ -208,9 +208,11 @@
     @endphp
     @foreach ($mobileTabs as [$route, $label, $icon])
         @php $isActive = request()->routeIs(str_replace('.index', '', $route) . '*'); @endphp
-        <a href="{{ route($route) }}" class="flex flex-col items-center gap-0.5 px-3 py-1 rounded-btn transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf {{ $isActive ? 'text-leaf bg-leaf/10' : 'text-mute' }}">
-            <i data-lucide="{{ $icon }}" class="w-5 h-5"></i>
-            <span class="text-[10px]">{{ $label }}</span>
+        <a href="{{ route($route) }}" class="flex flex-col items-center gap-0.5 px-2 py-1 rounded-btn transition-colors active:scale-[0.95] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf {{ $isActive ? 'text-leafdk' : 'text-mute' }}">
+            <span class="flex items-center justify-center w-10 h-6 rounded-pill transition-colors {{ $isActive ? 'bg-leaf/15' : '' }}">
+                <i data-lucide="{{ $icon }}" class="w-5 h-5"></i>
+            </span>
+            <span class="text-[10px] {{ $isActive ? 'font-semibold' : 'font-medium' }}">{{ $label }}</span>
         </a>
     @endforeach
 </nav>
