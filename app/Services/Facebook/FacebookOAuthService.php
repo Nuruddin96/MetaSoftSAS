@@ -199,7 +199,7 @@ class FacebookOAuthService
     public function subscribePageToWebhook(string $pageId, string $pageAccessToken): bool
     {
         $response = Http::asForm()->post("{$this->base}/{$pageId}/subscribed_apps", [
-            'subscribed_fields' => 'messages,messaging_postbacks,message_deliveries,message_reads',
+            'subscribed_fields' => 'messages,messaging_postbacks,message_deliveries,message_reads,message_echoes',
             'access_token' => $pageAccessToken,
         ]);
 

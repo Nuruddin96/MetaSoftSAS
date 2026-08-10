@@ -62,13 +62,20 @@ class MessengerInboxController extends Controller
         }
 
         try {
-            $api->sendMessage($psid, $data['message'], $token);
+            $result = $api->sendMessage($psid, $data['message'], $token);
         } catch (\Throwable $e) {
             return back()->with('error', 'মেসেজ পাঠানো যায়নি: '.$e->getMessage());
         }
 
         MessengerMessage::create([
             'sender_psid' => $psid,
+            // Meta's Send API returns its own id for this message as
+            // message_id. Recording it as our mid now means that when the
+            // matching message_echoes webhook event arrives later, its
+            // mid-based dedup check (see MessengerWebhookController::
+            // handleEvent()) finds this row already exists and skips it —
+            // so a panel reply is never inserted a second time as an echo.
+            'mid' => $result['message_id'] ?? null,
             'message_text' => $data['message'],
             'direction' => 'out',
             'status' => 'contacted',

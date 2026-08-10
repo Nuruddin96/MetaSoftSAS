@@ -113,7 +113,21 @@ class MessengerWebhookController extends Controller
 
     protected function handleEvent(array $event, object $owner, MessengerApi $api): void
     {
-        $psid = $event['sender']['id'] ?? null;
+        // Meta sets message.is_echo=true when a message was sent FROM the
+        // Page — by us via the Send API (MessengerInboxController::reply())
+        // or by a human agent in Meta Business Suite/Inbox. On an echo, Meta
+        // reverses sender/recipient versus a normal inbound event: sender.id
+        // becomes the Page itself and recipient.id is the customer. This
+        // table's sender_psid column always means "the customer's PSID"
+        // (every query elsewhere is keyed on it that way), so the PSID must
+        // be read from the field that actually holds the customer on each
+        // event shape rather than always trusting event.sender.id.
+        $isEcho = (bool) ($event['message']['is_echo'] ?? false);
+
+        $psid = $isEcho
+            ? ($event['recipient']['id'] ?? null)
+            : ($event['sender']['id'] ?? null);
+
         $mid = $event['message']['mid'] ?? null;
         $text = $event['message']['text'] ?? null;
         $attachments = $event['message']['attachments'] ?? [];
@@ -125,26 +139,34 @@ class MessengerWebhookController extends Controller
         // Meta's webhook delivery is at-least-once — the same event can be
         // POSTed again after a timeout or non-2xx response. mid is Meta's own
         // unique ID for this message; if we've already recorded it, this is a
-        // retry of something we already processed, not a new message.
+        // retry of something we already processed, not a new message. This
+        // is also what stops an echo from duplicating a reply this app
+        // already sent: MessengerInboxController::reply() records its own
+        // row with Meta's returned message_id as mid at send time, so the
+        // matching echo event that follows finds it already here.
         if ($mid && MessengerMessage::withoutGlobalScopes()->where('mid', $mid)->exists()) {
             return;
         }
 
-        // resolve customer's display name once, reuse for later messages
-        $existing = MessengerMessage::withoutGlobalScopes()
-            ->where('tenant_id', $owner->tenant_id)
-            ->where('sender_psid', $psid)
-            ->whereNotNull('customer_name')
-            ->first();
+        $name = null;
 
-        $name = $existing?->customer_name;
+        if (! $isEcho) {
+            // resolve customer's display name once, reuse for later messages
+            $existing = MessengerMessage::withoutGlobalScopes()
+                ->where('tenant_id', $owner->tenant_id)
+                ->where('sender_psid', $psid)
+                ->whereNotNull('customer_name')
+                ->first();
 
-        if (! $name) {
-            try {
-                $profile = $api->getProfile($psid, $owner->page_access_token);
-                $name = trim(($profile['first_name'] ?? '').' '.($profile['last_name'] ?? '')) ?: null;
-            } catch (\Throwable $e) {
-                $name = null;
+            $name = $existing?->customer_name;
+
+            if (! $name) {
+                try {
+                    $profile = $api->getProfile($psid, $owner->page_access_token);
+                    $name = trim(($profile['first_name'] ?? '').' '.($profile['last_name'] ?? '')) ?: null;
+                } catch (\Throwable $e) {
+                    $name = null;
+                }
             }
         }
 
@@ -161,8 +183,8 @@ class MessengerWebhookController extends Controller
             'customer_name' => $name,
             'message_text' => $text,
             'attachment_url' => $attachments[0]['payload']['url'] ?? null,
-            'direction' => 'in',
-            'status' => 'new',
+            'direction' => $isEcho ? 'out' : 'in',
+            'status' => $isEcho ? 'contacted' : 'new',
         ];
 
         if (FacebookPage::tablesReady()) {
@@ -178,6 +200,20 @@ class MessengerWebhookController extends Controller
             // Race: a concurrent retry of this same mid won the insert first
             // (between the exists() check above and this create()) — the
             // message is already recorded, nothing else to do.
+        }
+
+        if ($isEcho) {
+            // Same "conversation now contacted" transition
+            // MessengerInboxController::reply() already applies for panel
+            // replies — a Page-side reply sent from Meta Business Suite
+            // should clear the unread/"new" badge for this conversation too.
+            MessengerMessage::withoutGlobalScopes()
+                ->where('tenant_id', $owner->tenant_id)
+                ->where('sender_psid', $psid)
+                ->where('status', 'new')
+                ->update(['status' => 'contacted']);
+
+            return;
         }
 
         try {
