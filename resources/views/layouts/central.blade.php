@@ -8,6 +8,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@600;700;800&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+    {{-- PWA: backs the landing page's "Install App" button. See
+         App\Http\Controllers\PwaController's docblock for why this is a
+         separate manifest/scope from the tenant panel's, but the same
+         underlying service-worker script and icon set. --}}
+    <link rel="manifest" href="{{ route('central.pwa.manifest') }}">
+    <meta name="theme-color" content="#128155">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('images/icons/favicon-32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('images/icons/favicon-16.png') }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/icons/apple-touch-icon.png') }}">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="MetaSoft">
+    <script>window.__swUrl = @js(route('central.pwa.sw'));</script>
     <style>
         html { scroll-behavior: smooth; }
         /* signature: CSS barcode stripe */

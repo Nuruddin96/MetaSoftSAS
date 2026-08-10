@@ -150,3 +150,75 @@ if ('serviceWorker' in navigator && window.__swUrl) {
         window.location.reload();
     });
 }
+
+// ---- "Install App" button (central/landing.blade.php, #pwaInstallBanner) ----
+// Guarded on the button's existence like every other feature block in this
+// file — this only runs on the landing page, a no-op everywhere else.
+(function () {
+    const installBtn = document.getElementById('pwaInstallBtn');
+    if (!installBtn) return;
+
+    const banner = document.getElementById('pwaInstallBanner');
+    const iosModal = document.getElementById('pwaIosModal');
+    const iosModalClose = document.getElementById('pwaIosModalClose');
+
+    const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true; // iOS Safari's own legacy flag, no matchMedia equivalent there
+    const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+    const openIosModal = () => { iosModal?.classList.remove('hidden'); iosModal?.classList.add('flex'); };
+    const closeIosModal = () => { iosModal?.classList.add('hidden'); iosModal?.classList.remove('flex'); };
+
+    // Already running as an installed app — nothing to prompt, and no
+    // banner to show in the first place. Banner's default markup class is
+    // `hidden`; it is only ever revealed here, never flashed on then off.
+    if (isStandalone()) {
+        banner?.classList.add('hidden');
+    } else {
+        banner?.classList.remove('hidden');
+    }
+
+    // Chrome/Edge/Android and other Chromium browsers fire this ahead of
+    // time when the page qualifies as installable; captured and replayed
+    // on click instead of letting the browser show its own mini-infobar,
+    // since the brief calls for the click itself to trigger the prompt.
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredPrompt = null;
+        banner?.classList.add('hidden');
+        window.showToast('MetaSoft BD অ্যাপ ইনস্টল হয়েছে ✓', 'success');
+    });
+
+    installBtn.addEventListener('click', async () => {
+        // 1. Android Chrome / other browsers that support the real prompt.
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            await deferredPrompt.userChoice; // resolves once the user accepts/dismisses the native dialog
+            deferredPrompt = null;
+            return;
+        }
+
+        // 2. iPhone/iPad Safari — no beforeinstallprompt exists there at
+        // all, so a click with no captured prompt on an iOS device means
+        // "show them how to do it manually" rather than "unsupported".
+        if (isIOS()) {
+            openIosModal();
+            return;
+        }
+
+        // 3. Anything else that reaches here genuinely doesn't support
+        // installable-web-app prompting (e.g. desktop Firefox today) —
+        // say so rather than doing nothing on click.
+        window.showToast('এই ব্রাউজারে অ্যাপ ইনস্টল সাপোর্ট নেই। Chrome ব্যবহার করে দেখুন।', 'error');
+    });
+
+    iosModalClose?.addEventListener('click', closeIosModal);
+    iosModal?.addEventListener('click', (e) => {
+        if (e.target === iosModal) closeIosModal(); // backdrop click only, not the card itself
+    });
+})();

@@ -30,6 +30,41 @@
     </div>
 </header>
 
+{{-- ================= PWA INSTALL BANNER ================= --}}
+{{-- Mobile-first and prominent per spec, full-width so it can't be missed
+     without competing for space in the already 2-3-button header row.
+     Starts `hidden` (safe default — no flash before JS can decide) and is
+     only ever revealed by pwa-install.js once it has confirmed the app
+     isn't already running in standalone/installed mode; `md:hidden` keeps
+     it mobile-only even after that reveal. --}}
+<div id="pwaInstallBanner" class="hidden md:hidden bg-leaf/10 border-b border-leaf/20">
+    <div class="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+            <img src="{{ asset('images/icons/icon-192.png') }}" alt="" width="32" height="32" class="w-8 h-8 rounded-lg shrink-0" aria-hidden="true">
+            <p class="text-sm text-ink truncate">MetaSoft BD অ্যাপ হিসেবে ইনস্টল করুন</p>
+        </div>
+        <button type="button" id="pwaInstallBtn"
+                class="shrink-0 flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-btn bg-leaf text-white hover:bg-leafdk active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+            <i data-lucide="download" class="w-4 h-4" aria-hidden="true"></i> Install App
+        </button>
+    </div>
+</div>
+
+{{-- iOS Safari has no beforeinstallprompt — clicking Install App there
+     shows this instruction modal instead. Hidden by default, toggled by
+     pwa-install.js. --}}
+<div id="pwaIosModal" class="hidden fixed inset-0 z-[999] bg-ink/50 backdrop-blur-sm items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="pwaIosModalTitle">
+    <div class="bg-white rounded-card max-w-sm w-full p-6 text-center">
+        <img src="{{ asset('images/icons/icon-192.png') }}" alt="" width="56" height="56" class="w-14 h-14 mx-auto rounded-xl mb-4" aria-hidden="true">
+        <p id="pwaIosModalTitle" class="font-disp font-bold text-lg mb-3">MetaSoft BD ইনস্টল করুন</p>
+        <p class="text-base text-ink leading-relaxed mb-5">Safari-এর Share button চাপুন → Add to Home Screen</p>
+        <button type="button" id="pwaIosModalClose"
+                class="w-full py-2.5 rounded-btn bg-ink text-white font-semibold text-sm hover:bg-ink/90 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+            বুঝেছি
+        </button>
+    </div>
+</div>
+
 {{-- ================= HERO ================= --}}
 <x-ui.section id="main-content" tabindex="-1" tone="transparent" spacing="none" class="relative overflow-hidden outline-none">
     {{-- animated background glow — decorative only, hidden from assistive tech --}}

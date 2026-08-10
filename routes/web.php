@@ -7,6 +7,7 @@ use App\Http\Controllers\CentralAuth\RegisterController;
 use App\Http\Controllers\FacebookOAuthCallbackController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MessengerWebhookController;
+use App\Http\Controllers\PwaController;
 use App\Http\Controllers\ServicesController;
 use App\Http\Controllers\Storefront\CartController;
 use App\Http\Controllers\Storefront\CheckoutController;
@@ -41,7 +42,7 @@ use App\Http\Controllers\Tenant\PosController;
 use App\Http\Controllers\Tenant\ProductController;
 use App\Http\Controllers\Tenant\ProductImportController;
 use App\Http\Controllers\Tenant\ProductSourceController;
-use App\Http\Controllers\Tenant\PwaController;
+use App\Http\Controllers\Tenant\PwaController as TenantPwaController;
 use App\Http\Controllers\Tenant\ReportController;
 use App\Http\Controllers\Tenant\SettingController;
 use App\Http\Controllers\Tenant\WebsiteController;
@@ -57,6 +58,13 @@ use Illuminate\Support\Facades\Route;
 Route::domain(config('app.central_domain'))->group(function () {
 
     Route::get('/', [LandingController::class, 'index'])->name('landing');
+
+    // Backs the landing page's "Install App" button — see PwaController's
+    // docblock for why this can't just reuse Tenant\PwaController's
+    // manifest (different scope), and why it's still not a second PWA
+    // mechanism (same service-worker script, same icon set).
+    Route::get('/manifest.json', [PwaController::class, 'manifest'])->name('central.pwa.manifest');
+    Route::get('/sw.js', [PwaController::class, 'serviceWorker'])->name('central.pwa.sw');
 
     Route::get('/services', [ServicesController::class, 'index'])->name('services');
 
@@ -176,8 +184,8 @@ $tenantRoutes = function () {
             // PWA manifest — dynamic per-tenant (see PwaController docblock
             // for why this can't be a static public/manifest.json under
             // path tenancy).
-            Route::get('manifest.json', [PwaController::class, 'manifest'])->name('pwa.manifest');
-            Route::get('sw.js', [PwaController::class, 'serviceWorker'])->name('pwa.sw');
+            Route::get('manifest.json', [TenantPwaController::class, 'manifest'])->name('pwa.manifest');
+            Route::get('sw.js', [TenantPwaController::class, 'serviceWorker'])->name('pwa.sw');
 
             // Notification bell "mark seen" beacon (session-based, see NotificationController)
             Route::post('notifications/seen', [NotificationController::class, 'markSeen'])->name('notifications.seen');
