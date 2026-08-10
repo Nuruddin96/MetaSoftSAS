@@ -4,6 +4,7 @@ namespace Tests\Feature\Messenger;
 
 use App\Models\Customer;
 use App\Models\Order;
+use Illuminate\Support\Facades\Http;
 use Tests\Concerns\InteractsWithCommerceSchema;
 use Tests\TestCase;
 
@@ -158,5 +159,71 @@ class AutoPendingOrderTest extends TestCase
         $this->assertSame(1, Customer::withoutGlobalScopes()->where('tenant_id', $tenantB->id)->count());
         $this->assertSame(2, Order::withoutGlobalScopes()->count());
         $this->assertSame(2, Customer::withoutGlobalScopes()->count());
+    }
+
+    /**
+     * The real-world case this fix targets: a customer never types
+     * "Name: ..." (why would they — Facebook already knows who they are),
+     * just their phone number. Before this fix, the customer/order name
+     * fell straight through to the DEFAULT_CUSTOMER_NAME placeholder
+     * ("Messenger Customer") even though handleEvent() had already resolved
+     * and cached the real Facebook name via getProfile() on this psid's
+     * earlier message.
+     */
+    public function test_order_uses_the_cached_facebook_profile_name_when_no_name_was_typed(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*' => Http::response(['first_name' => 'Apo', 'last_name' => 'Rahman']),
+        ]);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-1');
+
+        // First message: no phone, no explicit name — but getProfile()
+        // resolves and caches "Apo Rahman" onto this message row.
+        $this->postWebhook($this->payload('page-1', 'mid-1', 'psid-1', 'দাম কত?'))->assertOk();
+        $this->assertSame(0, Order::withoutGlobalScopes()->count());
+
+        // Second message: just the phone number, still no typed name.
+        $this->postWebhook($this->payload('page-1', 'mid-2', 'psid-1', '01712345678'))->assertOk();
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertNotNull($order);
+        $this->assertSame('Apo Rahman', $order->customer_name, 'must use the cached Facebook profile name, not the DEFAULT_CUSTOMER_NAME placeholder');
+        $this->assertNotSame('Messenger Customer', $order->customer_name);
+
+        $customer = Customer::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('Apo Rahman', $customer->name);
+    }
+
+    public function test_explicitly_typed_name_still_wins_over_the_facebook_profile_name(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*' => Http::response(['first_name' => 'Apo', 'last_name' => 'Rahman']),
+        ]);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-1');
+
+        $this->postWebhook($this->payload('page-1', 'mid-1', 'psid-1', 'নাম: Karim, 01712345678'))->assertOk();
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('Karim', $order->customer_name, 'an explicitly typed name is a deliberate correction and must still take priority');
+    }
+
+    public function test_order_falls_back_to_the_placeholder_when_facebook_profile_lookup_also_fails(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*' => Http::response(['error' => ['message' => 'no access']], 400),
+        ]);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-1');
+
+        $this->postWebhook($this->payload('page-1', 'mid-1', 'psid-1', '01712345678'))->assertOk();
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertNotNull($order, 'order creation must never be blocked by a failed profile lookup');
+        $this->assertSame('Messenger Customer', $order->customer_name);
     }
 }

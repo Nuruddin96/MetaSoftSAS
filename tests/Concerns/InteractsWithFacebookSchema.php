@@ -36,10 +36,15 @@ trait InteractsWithFacebookSchema
      *   ...` statement in that same file did not run. Independent of
      *   $includeFacebookOauthTables so both failure modes can be tested on
      *   their own.
+     * @param  bool  $includeAttachmentColumns  Pass false to simulate
+     *   database/sql/chunk25.sql not having been imported yet — the
+     *   attachment_type/attachment_name columns are absent, exactly as
+     *   MessengerMessage::attachmentColumnsReady() is meant to detect.
      */
     protected function setUpFacebookSchema(
         bool $includeFacebookOauthTables = true,
         bool $includeFacebookPageIdColumn = true,
+        bool $includeAttachmentColumns = true,
     ): void {
         if (! Schema::hasTable('tenants')) {
             Schema::create('tenants', function (Blueprint $table) {
@@ -207,7 +212,7 @@ trait InteractsWithFacebookSchema
         }
 
         if (! Schema::hasTable('messenger_messages')) {
-            Schema::create('messenger_messages', function (Blueprint $table) use ($includeFacebookPageIdColumn) {
+            Schema::create('messenger_messages', function (Blueprint $table) use ($includeFacebookPageIdColumn, $includeAttachmentColumns) {
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
                 if ($includeFacebookPageIdColumn) {
@@ -218,8 +223,10 @@ trait InteractsWithFacebookSchema
                 $table->string('customer_name', 150)->nullable();
                 $table->text('message_text')->nullable();
                 $table->string('attachment_url', 500)->nullable();
-                $table->string('attachment_type', 20)->nullable();
-                $table->string('attachment_name', 255)->nullable();
+                if ($includeAttachmentColumns) {
+                    $table->string('attachment_type', 20)->nullable();
+                    $table->string('attachment_name', 255)->nullable();
+                }
                 $table->string('direction', 10)->default('in');
                 $table->string('status', 20)->default('new');
                 $table->timestamp('created_at')->nullable();

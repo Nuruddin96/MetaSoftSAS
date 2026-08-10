@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Traits\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class MessengerMessage extends Model
 {
@@ -27,5 +28,21 @@ class MessengerMessage extends Model
     protected static function booted(): void
     {
         static::creating(fn ($m) => $m->created_at = $m->created_at ?: now());
+    }
+
+    /**
+     * True once database/sql/chunk25.sql's attachment_type/attachment_name
+     * columns exist. Mirrors FacebookPage::tablesReady()'s reasoning: any
+     * create() call that includes these keys unconditionally throws
+     * "Unknown column" the instant either is missing, regardless of whether
+     * the message being inserted even has an attachment (the keys are
+     * still present in the column list with a null value). Deliberately
+     * not memoized — same low-frequency-call-site reasoning as
+     * FacebookPage::tablesReady().
+     */
+    public static function attachmentColumnsReady(): bool
+    {
+        return Schema::hasColumn('messenger_messages', 'attachment_type')
+            && Schema::hasColumn('messenger_messages', 'attachment_name');
     }
 }

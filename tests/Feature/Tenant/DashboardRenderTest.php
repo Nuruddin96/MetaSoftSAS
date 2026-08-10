@@ -3,6 +3,7 @@
 namespace Tests\Feature\Tenant;
 
 use App\Models\Customer;
+use App\Models\Expense;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Tenant;
@@ -11,11 +12,11 @@ use Tests\Concerns\InteractsWithCommerceSchema;
 use Tests\TestCase;
 
 /**
- * Smoke coverage for the mobile dashboard stat-tile redesign — no
- * dedicated GET-rendering test existed for this page before. Confirms the
- * five KPI values/labels render unchanged and that each tile's new href
- * resolves to the exact existing route (no new routes were added; a wrong
- * route() call here would throw at render time, not silently misbehave).
+ * Smoke coverage for the mobile dashboard stat tiles. Confirms the six KPI
+ * values/labels render and that each tile's href resolves to the exact
+ * existing route (no new routes were added apart from the courier=pending
+ * query param on the pre-existing orders.index route; a wrong route() call
+ * here would throw at render time, not silently misbehave).
  */
 class DashboardRenderTest extends TestCase
 {
@@ -47,18 +48,42 @@ class DashboardRenderTest extends TestCase
             'customer_id' => $customer->id, 'customer_name' => 'Karim', 'customer_phone' => '01711223344',
             'status' => 'pending', 'subtotal' => 500, 'total' => 550,
         ]);
+        // Sent to courier, not yet delivered — should count toward the
+        // "কুরিয়ারে পেন্ডিং" tile. A delivered one (below) should not.
+        Order::create([
+            'tenant_id' => $tenant->id, 'source' => 'web', 'channel' => 'website',
+            'customer_id' => $customer->id, 'customer_name' => 'Karim', 'customer_phone' => '01711223344',
+            'status' => 'shipped', 'subtotal' => 500, 'total' => 550,
+            'courier_consignment_id' => 'CN-1',
+        ]);
+        Order::create([
+            'tenant_id' => $tenant->id, 'source' => 'web', 'channel' => 'website',
+            'customer_id' => $customer->id, 'customer_name' => 'Karim', 'customer_phone' => '01711223344',
+            'status' => 'delivered', 'subtotal' => 500, 'total' => 550,
+            'courier_consignment_id' => 'CN-2',
+        ]);
+        Expense::create([
+            'tenant_id' => $tenant->id, 'title' => 'Packaging', 'amount' => 300, 'expense_date' => now()->toDateString(),
+        ]);
 
         $response = $this->actingAs($user, 'tenant')->get($this->panelUrl($tenant, ''));
 
         $response->assertOk();
 
-        // Stat values/labels unchanged.
+        // Stat labels.
         $response->assertSee('আজকের অর্ডার');
         $response->assertSee('আজকের বিক্রি');
         $response->assertSee('পেন্ডিং অর্ডার');
-        $response->assertSee('মোট প্রোডাক্ট');
+        $response->assertSee('কুরিয়ারে পেন্ডিং');
         $response->assertSee('মোট কাস্টমার');
-        $response->assertSee('1', false); // totalProducts / pendingOrders count
+        $response->assertSee('খরচ');
+        $response->assertDontSee('মোট প্রোডাক্ট');
+
+        // courierPendingCount counts only the shipped-with-consignment
+        // order, not the delivered one — 1 pending, not 2.
+        $response->assertSee('1', false);
+        // todayExpenses total.
+        $response->assertSee('300৳', false);
 
         // Each tile links to the exact existing route/params — a typo'd
         // route name here would throw a RouteNotFoundException, not just
@@ -67,8 +92,9 @@ class DashboardRenderTest extends TestCase
         $response->assertSee($this->panelUrl($tenant, 'orders'), false);
         $response->assertSee($this->panelUrl($tenant, 'reports/sales'), false);
         $response->assertSee($this->panelUrl($tenant, 'orders?status=pending'), false);
-        $response->assertSee($this->panelUrl($tenant, 'products'), false);
+        $response->assertSee($this->panelUrl($tenant, 'orders?courier=pending'), false);
         $response->assertSee($this->panelUrl($tenant, 'customers'), false);
+        $response->assertSee($this->panelUrl($tenant, 'expenses'), false);
     }
 
     public function test_dashboard_renders_with_zero_stats_and_no_data(): void

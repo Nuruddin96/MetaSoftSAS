@@ -81,6 +81,15 @@ class MessengerInboxController extends Controller
                 return back()->with('error', 'মেসেজ পাঠানো যায়নি: '.$e->getMessage());
             }
 
+            // Http::post(...)->json() only throws on a genuine transport
+            // failure (caught above) — Meta returning a normal 200/400 JSON
+            // error body (e.g. an expired Page token) doesn't throw, so
+            // without this check the reply looked "sent" in the panel while
+            // the customer never received anything.
+            if (isset($result['error'])) {
+                return back()->with('error', 'মেসেজ পাঠানো যায়নি: '.($result['error']['message'] ?? 'Facebook API error'));
+            }
+
             MessengerMessage::create([
                 'sender_psid' => $psid,
                 // Meta's Send API returns its own id for this message as
@@ -112,14 +121,23 @@ class MessengerInboxController extends Controller
                 return back()->with('error', 'ছবি পাঠানো যায়নি: '.$e->getMessage());
             }
 
-            MessengerMessage::create([
+            if (isset($result['error'])) {
+                return back()->with('error', 'ছবি পাঠানো যায়নি: '.($result['error']['message'] ?? 'Facebook API error'));
+            }
+
+            $attrs = [
                 'sender_psid' => $psid,
                 'mid' => $result['message_id'] ?? null,
                 'attachment_url' => $url,
-                'attachment_type' => 'image',
                 'direction' => 'out',
                 'status' => 'contacted',
-            ]);
+            ];
+
+            if (MessengerMessage::attachmentColumnsReady()) {
+                $attrs['attachment_type'] = 'image';
+            }
+
+            MessengerMessage::create($attrs);
         }
 
         // mark the conversation as contacted

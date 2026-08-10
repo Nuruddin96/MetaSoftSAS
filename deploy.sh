@@ -24,12 +24,14 @@ rsync -av --delete \
   --exclude=".env" \
   --exclude="storage/" \
   --exclude="node_modules/" \
+  --exclude="public/storage" \
   "$GIT_PROJECT/" \
   "$LIVE_PROJECT/"
 
 echo "Optimizing Laravel..."
 cd "$LIVE_PROJECT"
 
+php artisan storage:link
 php artisan optimize:clear
 php artisan optimize
 

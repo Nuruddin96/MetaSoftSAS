@@ -94,13 +94,13 @@
             img.onerror = () => { img.style.display = 'none'; fallback.classList.remove('hidden'); };
             wrap.append(img, fallback);
         } else if (type === 'audio') {
-            const audio = document.createElement('audio');
-            audio.controls = true; audio.preload = 'none'; audio.className = 'max-w-[240px] h-10';
-            const source = document.createElement('source'); source.src = url;
-            audio.appendChild(source);
-            fallback.textContent = '⚠️ অডিওটি আর পাওয়া যাচ্ছে না';
-            audio.onerror = () => { audio.style.display = 'none'; fallback.classList.remove('hidden'); };
-            wrap.append(audio, fallback);
+            const holder = document.createElement('div');
+            holder.className = 'msgr-audio';
+            holder.dataset.url = url;
+            wrap.append(holder);
+            // mountMessengerAudio is defined in tenant/messenger/_thread.blade.php's
+            // @once script block, already on the page before this poll can run.
+            mountMessengerAudio(holder, url);
         } else if (type === 'video') {
             const video = document.createElement('video');
             video.controls = true; video.preload = 'none'; video.className = 'max-w-[240px] rounded-lg';

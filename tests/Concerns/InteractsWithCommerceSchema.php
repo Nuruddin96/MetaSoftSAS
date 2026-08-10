@@ -50,6 +50,7 @@ trait InteractsWithCommerceSchema
                 $table->string('email');
                 $table->string('password');
                 $table->string('role')->default('owner');
+                $table->boolean('is_active')->default(true);
                 $table->rememberToken();
                 $table->timestamps();
             });

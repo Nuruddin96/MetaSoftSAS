@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\CourierSetting;
 use App\Models\Customer;
+use App\Models\Expense;
 use App\Models\IncompleteOrder;
 use App\Models\MessengerMessage;
 use App\Models\Order;
@@ -56,6 +57,16 @@ class DashboardController extends Controller
             'pendingOrders' => Order::where('status', 'pending')->count(),
             'totalProducts' => Product::count(),
             'totalCustomers' => Customer::count(),
+            // Orders actually handed to a courier and not yet resolved —
+            // NOT a product-catalog count. courier_status is only refreshed
+            // when staff manually clicks "refresh" (CourierController) and
+            // Pathao's refresh is a no-op stub, so courier_consignment_id +
+            // the app-level order status (which every delivered/cancelled/
+            // returned order does get moved to) is the reliable signal.
+            'courierPendingCount' => Order::whereNotNull('courier_consignment_id')
+                ->whereNotIn('status', ['delivered', 'cancelled', 'returned'])
+                ->count(),
+            'todayExpenses' => (float) Expense::whereDate('expense_date', $today)->sum('amount'),
             'recentOrders' => Order::latest()->paginate(10),
             'byChannel' => Order::selectRaw('channel, COUNT(*) as c')->groupBy('channel')->pluck('c', 'channel'),
             'topDistricts' => $districtStats->take(5),

@@ -33,7 +33,7 @@
                 </div>
                 <div class="flex items-center justify-between text-sm">
                     <label class="flex items-center gap-2 text-mute">
-                        <input type="checkbox" name="remember" class="rounded"> মনে রাখুন
+                        <input type="checkbox" name="remember" checked class="rounded"> মনে রাখুন
                     </label>
                     <a href="https://{{ config('app.central_domain') }}/forgot-password" class="text-leaf hover:underline">পাসওয়ার্ড ভুলে গেছেন?</a>
                 </div>

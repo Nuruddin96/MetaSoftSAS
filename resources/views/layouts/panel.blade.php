@@ -67,16 +67,28 @@
 
     {{-- sidebar --}}
     <aside class="lg:w-64 bg-ink text-white lg:min-h-screen">
-        <div class="p-4 border-b border-white/10 lg:border-0">
-            @if (app('currentTenant')->logo_path)
-                <img src="{{ asset('storage/' . app('currentTenant')->logo_path) }}"
-                     alt="{{ app('currentTenant')->store_name }}"
-                     class="h-8 max-w-[160px] object-contain bg-white/95 rounded px-2 py-1"
-                     onerror="this.style.display='none'; this.nextElementSibling?.classList.remove('hidden');">
-                <p class="hidden font-disp font-bold text-lg leading-tight">{{ app('currentTenant')->store_name }}</p>
-            @else
-                <p class="font-disp font-bold text-lg leading-tight">{{ app('currentTenant')->store_name }}</p>
-            @endif
+        <div class="p-4 border-b border-white/10 lg:border-0 flex items-center justify-between gap-2">
+            <a href="{{ route('tenant.dashboard') }}"
+               class="flex items-center gap-2 min-w-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-ink">
+                @if (app('currentTenant')->logo_path)
+                    {{-- onerror removes just the broken image (e.g. a dead
+                         storage symlink) — the store name next to it must
+                         stay visible either way, never hidden by a logo
+                         that failed to load. --}}
+                    <img src="{{ asset('storage/' . app('currentTenant')->logo_path) }}"
+                         alt="{{ app('currentTenant')->store_name }}"
+                         class="h-8 max-w-[120px] object-contain bg-white/95 rounded px-2 py-1 shrink-0"
+                         onerror="this.remove()">
+                @endif
+                <p class="font-disp font-bold text-lg leading-tight truncate">{{ app('currentTenant')->store_name }}</p>
+            </a>
+
+            {{-- Mobile-only — desktop already has the equivalent "দোকান দেখুন"
+                 link in the sidebar nav below (line ~140). --}}
+            <a href="{{ app('currentTenant')->url() }}" target="_blank"
+               class="lg:hidden shrink-0 flex items-center gap-1.5 bg-white text-ink text-xs font-semibold px-3 py-1.5 rounded-full hover:bg-white/90 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-ink">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> ওয়েবসাইট দেখুন
+            </a>
         </div>
 
         <nav id="navMenu" class="hidden lg:block pb-4 text-sm">

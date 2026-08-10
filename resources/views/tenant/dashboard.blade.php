@@ -117,14 +117,19 @@
      page it summarizes, using the exact same routes/params already used
      elsewhere on this page (e.g. the pending-orders link matches the
      "today's to-do" list below verbatim) — no new routes. --}}
-<div class="grid grid-cols-2 lg:grid-cols-5 gap-2.5 lg:gap-4">
+<div class="grid grid-cols-2 lg:grid-cols-6 gap-2.5 lg:gap-4">
     @php
         $stats = [
             ['আজকের অর্ডার', $todayOrders, 'receipt', false, 'bg-amber-50 text-amber-600 lg:bg-paper lg:text-mute', route('tenant.orders.index')],
             ['আজকের বিক্রি', number_format($todaySales) . '৳', 'trending-up', true, 'bg-leaf/10 text-leafdk', route('tenant.reports.sales')],
             ['পেন্ডিং অর্ডার', $pendingOrders, 'clock', false, 'bg-blue-50 text-blue-600 lg:bg-paper lg:text-mute', route('tenant.orders.index', ['status' => 'pending'])],
-            ['মোট প্রোডাক্ট', $totalProducts, 'package', false, 'bg-purple-50 text-purple-600 lg:bg-paper lg:text-mute', route('tenant.products.index')],
+            // Was a plain Product::count() ("মোট প্রোডাক্ট") — repurposed to
+            // count orders currently with a courier and not yet resolved
+            // (delivered/cancelled/returned), since that's the actionable
+            // number for this spot, not the static catalog size.
+            ['কুরিয়ারে পেন্ডিং', $courierPendingCount, 'truck', false, 'bg-purple-50 text-purple-600 lg:bg-paper lg:text-mute', route('tenant.orders.index', ['courier' => 'pending'])],
             ['মোট কাস্টমার', $totalCustomers, 'users', false, 'bg-pink-50 text-pink-600 lg:bg-paper lg:text-mute', route('tenant.customers.index')],
+            ['খরচ', number_format($todayExpenses) . '৳', 'wallet', false, 'bg-red-50 text-red-600 lg:bg-paper lg:text-mute', route('tenant.expenses.index')],
         ];
     @endphp
     @foreach ($stats as [$label, $value, $icon, $isRevenue, $iconTone, $link])

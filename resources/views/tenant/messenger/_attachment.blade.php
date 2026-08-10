@@ -11,11 +11,7 @@
              onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden')">
         <p class="hidden text-xs opacity-80">⚠️ ছবিটি আর পাওয়া যাচ্ছে না</p>
     @elseif ($type === 'audio')
-        <audio controls preload="none" class="max-w-[240px] h-10"
-               onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden')">
-            <source src="{{ $url }}">
-        </audio>
-        <p class="hidden text-xs opacity-80">⚠️ অডিওটি আর পাওয়া যাচ্ছে না</p>
+        <div class="msgr-audio" data-url="{{ $url }}"></div>
     @elseif ($type === 'video')
         <video controls preload="none" class="max-w-[240px] rounded-lg"
                onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden')">

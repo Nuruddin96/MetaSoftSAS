@@ -16,11 +16,14 @@ abstract class FacebookFeatureTestCase extends TestCase
     /** Override to false in a test class to simulate a PARTIAL chunk23.sql import (tables exist, trailing ALTER TABLE column does not). */
     protected bool $includeFacebookPageIdColumn = true;
 
+    /** Override to false in a test class to simulate database/sql/chunk25.sql not being imported yet. */
+    protected bool $includeAttachmentColumns = true;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->setUpFacebookSchema($this->includeFacebookOauthTables, $this->includeFacebookPageIdColumn);
+        $this->setUpFacebookSchema($this->includeFacebookOauthTables, $this->includeFacebookPageIdColumn, $this->includeAttachmentColumns);
         $this->withoutMiddleware(ValidateCsrfToken::class);
     }
 }

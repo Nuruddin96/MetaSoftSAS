@@ -195,12 +195,15 @@ class MessengerWebhookController extends Controller
             }
         }
 
-        // facebook_page_id is only ever included in the INSERT when the
-        // column is confirmed to exist (FacebookPage::tablesReady()) — an
-        // Eloquent create() builds its column list from this array's keys
-        // regardless of whether the schema actually has that column, so
-        // simply passing null here when the column is missing would still
-        // throw a SQL "unknown column" error, not silently no-op it.
+        // facebook_page_id and attachment_type/attachment_name are only
+        // ever included in the INSERT when their columns are confirmed to
+        // exist — an Eloquent create() builds its column list from this
+        // array's keys regardless of whether the schema actually has that
+        // column, so simply passing null here when a column is missing
+        // would still throw a SQL "unknown column" error, not silently
+        // no-op it. Without this guard, EVERY incoming message (not just
+        // ones with attachments) would fail to save until
+        // database/sql/chunk25.sql is imported.
         $attributes = [
             'tenant_id' => $owner->tenant_id,
             'sender_psid' => $psid,
@@ -208,11 +211,14 @@ class MessengerWebhookController extends Controller
             'customer_name' => $name,
             'message_text' => $text,
             'attachment_url' => $attachmentUrl,
-            'attachment_type' => $attachmentType,
-            'attachment_name' => $attachmentName,
             'direction' => $isEcho ? 'out' : 'in',
             'status' => $isEcho ? 'contacted' : 'new',
         ];
+
+        if (MessengerMessage::attachmentColumnsReady()) {
+            $attributes['attachment_type'] = $attachmentType;
+            $attributes['attachment_name'] = $attachmentName;
+        }
 
         if (FacebookPage::tablesReady()) {
             $attributes['facebook_page_id'] = $owner->facebook_page_id;
@@ -295,11 +301,24 @@ class MessengerWebhookController extends Controller
             return;
         }
 
-        DB::transaction(function () use ($tenantId, $psid, $info) {
+        // CustomerInfoExtractor only finds a name when the customer typed
+        // one explicitly (e.g. "Name: Apo") — the normal case is they never
+        // do, since Facebook already knows who they are. handleEvent()
+        // already resolved and cached that real name via getProfile() onto
+        // this psid's messenger_messages rows the moment the conversation
+        // started; reuse it here instead of falling through to the
+        // DEFAULT_CUSTOMER_NAME placeholder.
+        $resolvedName = $info['name'] ?: MessengerMessage::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('sender_psid', $psid)
+            ->whereNotNull('customer_name')
+            ->value('customer_name');
+
+        DB::transaction(function () use ($tenantId, $psid, $info, $resolvedName) {
             $customer = Customer::withoutGlobalScopes()->firstOrCreate(
                 ['tenant_id' => $tenantId, 'phone' => $info['phone']],
                 [
-                    'name' => $info['name'] ?: self::DEFAULT_CUSTOMER_NAME,
+                    'name' => $resolvedName ?: self::DEFAULT_CUSTOMER_NAME,
                     'address' => $info['address'],
                     'division_id' => $info['division_id'],
                     'district_id' => $info['district_id'],
@@ -309,7 +328,7 @@ class MessengerWebhookController extends Controller
 
             if (! $customer->wasRecentlyCreated) {
                 $fills = array_filter([
-                    'name' => ($customer->name === self::DEFAULT_CUSTOMER_NAME && $info['name']) ? $info['name'] : null,
+                    'name' => ($customer->name === self::DEFAULT_CUSTOMER_NAME && $resolvedName) ? $resolvedName : null,
                     'address' => ! $customer->address ? $info['address'] : null,
                     'division_id' => ! $customer->district_id ? $info['division_id'] : null,
                     'district_id' => ! $customer->district_id ? $info['district_id'] : null,
@@ -331,7 +350,7 @@ class MessengerWebhookController extends Controller
 
             if ($order) {
                 $fills = array_filter([
-                    'customer_name' => ($order->customer_name === self::DEFAULT_CUSTOMER_NAME && $info['name']) ? $info['name'] : null,
+                    'customer_name' => ($order->customer_name === self::DEFAULT_CUSTOMER_NAME && $resolvedName) ? $resolvedName : null,
                     'customer_address' => ! $order->customer_address ? $info['address'] : null,
                     'division_id' => ! $order->district_id ? $info['division_id'] : null,
                     'district_id' => ! $order->district_id ? $info['district_id'] : null,
