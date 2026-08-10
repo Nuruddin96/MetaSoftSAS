@@ -218,6 +218,8 @@ trait InteractsWithFacebookSchema
                 $table->string('customer_name', 150)->nullable();
                 $table->text('message_text')->nullable();
                 $table->string('attachment_url', 500)->nullable();
+                $table->string('attachment_type', 20)->nullable();
+                $table->string('attachment_name', 255)->nullable();
                 $table->string('direction', 10)->default('in');
                 $table->string('status', 20)->default('new');
                 $table->timestamp('created_at')->nullable();

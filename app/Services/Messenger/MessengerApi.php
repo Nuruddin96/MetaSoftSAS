@@ -32,4 +32,25 @@ class MessengerApi
             'messaging_type' => 'RESPONSE',
         ])->json() ?? [];
     }
+
+    /**
+     * Sends a media attachment by URL (our own re-hosted public URL, not a
+     * direct file upload — matches how MessengerWebhookController re-hosts
+     * inbound attachments, so both directions use the same "our durable
+     * URL" convention). $type is one of Meta's attachment types the Send
+     * API accepts: image, audio, video, file.
+     */
+    public function sendAttachment(string $psid, string $url, string $type, string $pageAccessToken): array
+    {
+        return Http::post("{$this->base}/me/messages?access_token={$pageAccessToken}", [
+            'recipient' => ['id' => $psid],
+            'message' => [
+                'attachment' => [
+                    'type' => $type,
+                    'payload' => ['url' => $url, 'is_reusable' => true],
+                ],
+            ],
+            'messaging_type' => 'RESPONSE',
+        ])->json() ?? [];
+    }
 }

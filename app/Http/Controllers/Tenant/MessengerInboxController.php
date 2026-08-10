@@ -7,6 +7,7 @@ use App\Models\FacebookPage;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\Order;
+use App\Services\ImageOptimizer;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Http\Request;
 
@@ -46,7 +47,19 @@ class MessengerInboxController extends Controller
 
     public function reply(Request $request, string $psid, MessengerApi $api)
     {
-        $data = $request->validate(['message' => 'required|string|max:1000']);
+        $data = $request->validate([
+            'message' => 'nullable|string|max:1000',
+            'image' => 'nullable|image|max:8192',
+        ]);
+
+        // nullable rules don't force the key into validate()'s return value
+        // when the input field is absent entirely (as opposed to present-
+        // but-empty) — normalize once so every use below is a plain lookup.
+        $message = $data['message'] ?? null;
+
+        if (! $message && ! $request->hasFile('image')) {
+            return back()->with('error', 'মেসেজ অথবা ছবি — অন্তত একটি দিন।');
+        }
 
         $token = $this->resolveReplyToken($psid);
 
@@ -61,30 +74,58 @@ class MessengerInboxController extends Controller
             return back()->with('error', 'মেসেঞ্জার পেজ কানেক্ট করা নেই।');
         }
 
-        try {
-            $result = $api->sendMessage($psid, $data['message'], $token);
-        } catch (\Throwable $e) {
-            return back()->with('error', 'মেসেজ পাঠানো যায়নি: '.$e->getMessage());
+        if ($message) {
+            try {
+                $result = $api->sendMessage($psid, $message, $token);
+            } catch (\Throwable $e) {
+                return back()->with('error', 'মেসেজ পাঠানো যায়নি: '.$e->getMessage());
+            }
+
+            MessengerMessage::create([
+                'sender_psid' => $psid,
+                // Meta's Send API returns its own id for this message as
+                // message_id. Recording it as our mid now means that when the
+                // matching message_echoes webhook event arrives later, its
+                // mid-based dedup check (see MessengerWebhookController::
+                // handleEvent()) finds this row already exists and skips it —
+                // so a panel reply is never inserted a second time as an echo.
+                'mid' => $result['message_id'] ?? null,
+                'message_text' => $message,
+                'direction' => 'out',
+                'status' => 'contacted',
+            ]);
         }
 
-        MessengerMessage::create([
-            'sender_psid' => $psid,
-            // Meta's Send API returns its own id for this message as
-            // message_id. Recording it as our mid now means that when the
-            // matching message_echoes webhook event arrives later, its
-            // mid-based dedup check (see MessengerWebhookController::
-            // handleEvent()) finds this row already exists and skips it —
-            // so a panel reply is never inserted a second time as an echo.
-            'mid' => $result['message_id'] ?? null,
-            'message_text' => $data['message'],
-            'direction' => 'out',
-            'status' => 'contacted',
-        ]);
+        if ($request->hasFile('image')) {
+            // Same "our own durable URL, not a direct upload" convention
+            // MessengerWebhookController::rehostAttachment() uses for
+            // inbound media — Meta's Send API takes a URL it can fetch, not
+            // a file body, so the image has to be publicly reachable first.
+            $path = app(ImageOptimizer::class)->storeOptimized(
+                $request->file('image'), 'public', 'messenger/'.app('currentTenant')->id.'/outgoing'
+            );
+            $url = asset('storage/'.$path);
+
+            try {
+                $result = $api->sendAttachment($psid, $url, 'image', $token);
+            } catch (\Throwable $e) {
+                return back()->with('error', 'ছবি পাঠানো যায়নি: '.$e->getMessage());
+            }
+
+            MessengerMessage::create([
+                'sender_psid' => $psid,
+                'mid' => $result['message_id'] ?? null,
+                'attachment_url' => $url,
+                'attachment_type' => 'image',
+                'direction' => 'out',
+                'status' => 'contacted',
+            ]);
+        }
 
         // mark the conversation as contacted
         MessengerMessage::where('sender_psid', $psid)->where('status', 'new')->update(['status' => 'contacted']);
 
-        return back()->with('success', 'রিপ্লাই পাঠানো হয়েছে।');
+        return back()->with('success', 'পাঠানো হয়েছে।');
     }
 
     /**
@@ -172,6 +213,7 @@ class MessengerInboxController extends Controller
                     'customer_name' => $c->customer_name,
                     'message_text' => $c->message_text,
                     'has_attachment' => (bool) $c->attachment_url,
+                    'attachment_type' => $c->attachment_type,
                     'direction' => $c->direction,
                     'status' => $c->status,
                     'time_label' => optional($c->created_at)->diffForHumans(),
@@ -193,6 +235,8 @@ class MessengerInboxController extends Controller
                     'direction' => $m->direction,
                     'message_text' => $m->message_text,
                     'attachment_url' => $m->attachment_url,
+                    'attachment_type' => $m->attachment_type,
+                    'attachment_name' => $m->attachment_name,
                     'time_label' => optional($m->created_at)->format('d M, h:i A'),
                 ])->values();
         }

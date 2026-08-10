@@ -20,8 +20,11 @@
                     <p class="conv-name font-medium">{{ $c->customer_name ?: 'অজানা কাস্টমার' }}</p>
                     <span class="conv-dot w-2 h-2 rounded-full bg-leaf {{ $c->status === 'new' ? '' : 'hidden' }}"></span>
                 </div>
+                @php
+                    $attachmentPreview = ['image' => '📷 ছবি পাঠিয়েছে', 'audio' => '🎤 অডিও পাঠিয়েছে', 'video' => '🎥 ভিডিও পাঠিয়েছে'][$c->attachment_type] ?? '📎 ফাইল পাঠিয়েছে';
+                @endphp
                 <p class="conv-msg text-sm text-mute truncate max-w-md">
-                    {{ $c->direction === 'out' ? 'আপনি: ' : '' }}{{ $c->message_text ?: '📎 ছবি/ফাইল পাঠিয়েছে' }}
+                    {{ $c->direction === 'out' ? 'আপনি: ' : '' }}{{ $c->message_text ?: $attachmentPreview }}
                 </p>
             </div>
             <div class="text-right shrink-0 ml-3">
@@ -51,6 +54,7 @@
 
     const statusLabel = { new: 'নতুন', contacted: 'যোগাযোগ হয়েছে', converted: 'অর্ডারে রূপান্তরিত', ignored: 'বাদ' };
     const statusClass = { new: 'bg-leaf/10 text-leafdk', contacted: 'bg-amber/15 text-ink', converted: 'bg-ink/5 text-mute', ignored: 'bg-red-50 text-red-600' };
+    const attachmentPreview = { image: '📷 ছবি পাঠিয়েছে', audio: '🎤 অডিও পাঠিয়েছে', video: '🎥 ভিডিও পাঠিয়েছে' };
 
     function upsertRow(c) {
         let row = document.getElementById('conv-' + c.psid);
@@ -76,7 +80,7 @@
 
         row.className = 'conv-row flex items-center justify-between px-5 py-4 hover:bg-paper/60 transition' + (c.status === 'new' ? ' bg-leaf/5' : '');
         row.querySelector('.conv-name').textContent = c.customer_name || 'অজানা কাস্টমার';
-        row.querySelector('.conv-msg').textContent = (c.direction === 'out' ? 'আপনি: ' : '') + (c.message_text || '📎 ছবি/ফাইল পাঠিয়েছে');
+        row.querySelector('.conv-msg').textContent = (c.direction === 'out' ? 'আপনি: ' : '') + (c.message_text || attachmentPreview[c.attachment_type] || '📎 ফাইল পাঠিয়েছে');
         row.querySelector('.conv-time').textContent = c.time_label;
         row.querySelector('.conv-dot').classList.toggle('hidden', c.status !== 'new');
         const statusEl = row.querySelector('.conv-status');

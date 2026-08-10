@@ -12,7 +12,9 @@ use App\Services\Messenger\MessengerApi;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -170,6 +172,29 @@ class MessengerWebhookController extends Controller
             }
         }
 
+        // Only the first attachment is used, matching the pre-existing
+        // single-attachment-per-row design — Meta's rare multi-attachment
+        // messages still only keep the first one.
+        $attachmentType = $attachments[0]['type'] ?? null;
+        $originalAttachmentUrl = $attachments[0]['payload']['url'] ?? null;
+        $attachmentUrl = null;
+        $attachmentName = null;
+
+        if ($originalAttachmentUrl) {
+            // Meta's attachment URL is time-limited/signed — re-host it to
+            // our own public storage now so it's still viewable whenever a
+            // staff member opens this conversation later, not just while
+            // Meta's link happens to still be valid. rehostAttachment()
+            // never throws; on any failure it returns null and we fall
+            // back to Meta's original URL (works until it expires, better
+            // than losing the attachment entirely).
+            $attachmentUrl = $this->rehostAttachment($originalAttachmentUrl, $owner->tenant_id, $mid) ?? $originalAttachmentUrl;
+
+            if ($attachmentType === 'file') {
+                $attachmentName = basename((string) parse_url($originalAttachmentUrl, PHP_URL_PATH)) ?: null;
+            }
+        }
+
         // facebook_page_id is only ever included in the INSERT when the
         // column is confirmed to exist (FacebookPage::tablesReady()) — an
         // Eloquent create() builds its column list from this array's keys
@@ -182,7 +207,9 @@ class MessengerWebhookController extends Controller
             'mid' => $mid,
             'customer_name' => $name,
             'message_text' => $text,
-            'attachment_url' => $attachments[0]['payload']['url'] ?? null,
+            'attachment_url' => $attachmentUrl,
+            'attachment_type' => $attachmentType,
+            'attachment_name' => $attachmentName,
             'direction' => $isEcho ? 'out' : 'in',
             'status' => $isEcho ? 'contacted' : 'new',
         ];
@@ -336,6 +363,71 @@ class MessengerWebhookController extends Controller
                 'fb_event_id' => (string) Str::uuid(),
             ]);
         });
+    }
+
+    /**
+     * Downloads a Meta CDN attachment URL and stores it on the public disk
+     * under messenger/{tenant_id}/, same disk/convention already used for
+     * tenant logos and product images (WebsiteController::brand(),
+     * ProductController). Returns the durable public URL, or null on any
+     * failure (network error, non-2xx, oversized body, storage error) —
+     * callers fall back to Meta's original URL rather than treat this as
+     * fatal, since a webhook event must never be lost over a re-hosting
+     * hiccup.
+     */
+    protected function rehostAttachment(string $metaUrl, int $tenantId, ?string $mid): ?string
+    {
+        try {
+            $response = Http::timeout(15)->get($metaUrl);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $body = $response->body();
+
+        // Sanity ceiling — normal Messenger attachments are well under
+        // this; matches the upload_max_filesize/post_max_size headroom
+        // already configured for the app (public/.user.ini).
+        if (strlen($body) > 20 * 1024 * 1024) {
+            return null;
+        }
+
+        $ext = $this->guessExtension($response->header('Content-Type', ''));
+        $filename = ($mid ? preg_replace('/[^A-Za-z0-9._-]/', '', $mid) : (string) Str::uuid()).'.'.$ext;
+        $path = "messenger/{$tenantId}/{$filename}";
+
+        try {
+            Storage::disk('public')->put($path, $body);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return asset('storage/'.$path);
+    }
+
+    protected function guessExtension(string $contentType): string
+    {
+        $contentType = strtolower(trim(explode(';', $contentType)[0]));
+
+        $map = [
+            'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp',
+            'audio/mpeg' => 'mp3', 'audio/mp4' => 'm4a', 'audio/aac' => 'aac', 'audio/ogg' => 'ogg',
+            'audio/x-caf' => 'caf', 'audio/wav' => 'wav', 'audio/x-wav' => 'wav',
+            'video/mp4' => 'mp4', 'video/quicktime' => 'mov',
+            'application/pdf' => 'pdf',
+        ];
+
+        if (isset($map[$contentType])) {
+            return $map[$contentType];
+        }
+
+        $sub = preg_replace('/[^a-z0-9]/', '', explode('/', $contentType)[1] ?? '');
+
+        return $sub ?: 'bin';
     }
 
     /**

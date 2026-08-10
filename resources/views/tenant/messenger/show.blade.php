@@ -15,10 +15,17 @@
             @include('tenant.messenger._thread', ['messages' => $messages])
         </x-ui.card>
 
-        <form method="POST" action="{{ route('tenant.messenger.reply', $psid) }}" class="flex gap-2 mt-4">
+        <form method="POST" action="{{ route('tenant.messenger.reply', $psid) }}" enctype="multipart/form-data" class="mt-4 space-y-1.5">
             @csrf
-            <input name="message" required placeholder="রিপ্লাই লিখুন..." class="flex-1 rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
-            <x-ui.button type="submit" variant="accent" size="sm">পাঠান</x-ui.button>
+            <div class="flex gap-2">
+                <input name="message" placeholder="রিপ্লাই লিখুন..." class="flex-1 rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                <label class="shrink-0 flex items-center justify-center w-10 h-10 rounded-btn border border-ink/15 cursor-pointer hover:bg-paper transition" title="ছবি যুক্ত করুন">
+                    🖼️
+                    <input type="file" name="image" accept="image/*" class="hidden" onchange="document.getElementById('imgFileName').textContent = this.files[0] ? '📎 ' + this.files[0].name : ''">
+                </label>
+                <x-ui.button type="submit" variant="accent" size="sm">পাঠান</x-ui.button>
+            </div>
+            <p id="imgFileName" class="text-xs text-mute"></p>
         </form>
     </div>
 
@@ -72,6 +79,47 @@
     let afterId = parseInt(thread.dataset.lastId || '0', 10);
     const psid = @json($psid);
 
+    function buildAttachmentEl(url, type, name) {
+        const wrap = document.createElement('div');
+        wrap.className = 'mt-1.5';
+        const fallback = document.createElement('p');
+        fallback.className = 'hidden text-xs opacity-80';
+
+        if (type === 'image') {
+            const img = document.createElement('img');
+            img.src = url; img.alt = 'ছবি'; img.loading = 'lazy';
+            img.className = 'max-w-[220px] max-h-[220px] rounded-lg border border-ink/10 object-cover cursor-pointer';
+            img.onclick = () => openLightbox(url);
+            fallback.textContent = '⚠️ ছবিটি আর পাওয়া যাচ্ছে না';
+            img.onerror = () => { img.style.display = 'none'; fallback.classList.remove('hidden'); };
+            wrap.append(img, fallback);
+        } else if (type === 'audio') {
+            const audio = document.createElement('audio');
+            audio.controls = true; audio.preload = 'none'; audio.className = 'max-w-[240px] h-10';
+            const source = document.createElement('source'); source.src = url;
+            audio.appendChild(source);
+            fallback.textContent = '⚠️ অডিওটি আর পাওয়া যাচ্ছে না';
+            audio.onerror = () => { audio.style.display = 'none'; fallback.classList.remove('hidden'); };
+            wrap.append(audio, fallback);
+        } else if (type === 'video') {
+            const video = document.createElement('video');
+            video.controls = true; video.preload = 'none'; video.className = 'max-w-[240px] rounded-lg';
+            const source = document.createElement('source'); source.src = url;
+            video.appendChild(source);
+            fallback.textContent = '⚠️ ভিডিওটি আর পাওয়া যাচ্ছে না';
+            video.onerror = () => { video.style.display = 'none'; fallback.classList.remove('hidden'); };
+            wrap.append(video, fallback);
+        } else {
+            const a = document.createElement('a');
+            a.href = url; a.target = '_blank';
+            a.className = 'block underline text-xs';
+            a.textContent = '📎 ' + (name || 'এটাচমেন্ট দেখুন');
+            wrap.appendChild(a);
+        }
+
+        return wrap;
+    }
+
     function appendBubble(m) {
         if (document.querySelector(`.msg-bubble[data-id="${m.id}"]`)) return;
 
@@ -80,18 +128,16 @@
         wrap.dataset.id = m.id;
 
         const bubble = document.createElement('div');
-        bubble.className = 'max-w-md ' + (m.direction === 'out' ? 'bg-leaf text-white' : 'bg-paper text-ink') + ' rounded-card px-4 py-2.5 text-sm';
+        bubble.className = 'max-w-[85%] sm:max-w-md break-words ' + (m.direction === 'out' ? 'bg-leaf text-white' : 'bg-paper text-ink') + ' rounded-card px-4 py-2.5 text-sm';
 
-        const text = document.createElement('div');
-        text.textContent = m.message_text || '';
-        bubble.appendChild(text);
+        if (m.message_text) {
+            const text = document.createElement('div');
+            text.textContent = m.message_text;
+            bubble.appendChild(text);
+        }
 
         if (m.attachment_url) {
-            const a = document.createElement('a');
-            a.href = m.attachment_url; a.target = '_blank';
-            a.className = 'block underline text-xs mt-1';
-            a.textContent = '📎 এটাচমেন্ট দেখুন';
-            bubble.appendChild(a);
+            bubble.appendChild(buildAttachmentEl(m.attachment_url, m.attachment_type, m.attachment_name));
         }
 
         const time = document.createElement('p');
