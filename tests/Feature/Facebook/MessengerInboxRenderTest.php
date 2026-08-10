@@ -62,4 +62,41 @@ class MessengerInboxRenderTest extends FacebookFeatureTestCase
 
         $this->assertInstanceOf(Carbon::class, $message->fresh()->created_at);
     }
+
+    /**
+     * Regression test for a live-production 500 on GET /panel/messenger/
+     * {psid}: a JS comment inside show.blade.php's <script> block
+     * literally contained the text "@once" ("... _thread.blade.php's
+     * @once script block ..."). Blade scans the entire raw template text
+     * for @directive patterns — including inside what looks like a plain
+     * JS comment to a human reader — so that literal text compiled into a
+     * real @once directive (`<?php if (! $__env->hasRenderedOnce(...)):
+     * ... ?>`) with no matching @endonce anywhere after it. The resulting
+     * unclosed if-block ran to end-of-file, producing exactly:
+     * "ParseError: syntax error, unexpected end of file, expecting
+     * elseif or else or endif" — confirmed byte-for-byte against the
+     * actual production log. No prior test rendered show() at all
+     * (only index()), so this was invisible until a real customer
+     * conversation was opened in production.
+     */
+    public function test_conversation_show_page_renders_without_a_blade_parse_error(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+
+        MessengerMessage::create([
+            'sender_psid' => 'psid-show-parse-1',
+            'mid' => 'mid-show-parse-1',
+            'customer_name' => 'Test Customer',
+            'message_text' => 'Hello',
+            'direction' => 'in',
+            'status' => 'new',
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->get($this->panelUrl($tenant, 'messenger/psid-show-parse-1'));
+
+        $response->assertOk();
+    }
+
 }

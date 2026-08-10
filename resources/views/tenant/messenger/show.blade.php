@@ -99,7 +99,7 @@
             holder.dataset.url = url;
             wrap.append(holder);
             // mountMessengerAudio is defined in tenant/messenger/_thread.blade.php's
-            // @once script block, already on the page before this poll can run.
+            // "once per page" script block, already present before this poll can run.
             mountMessengerAudio(holder, url);
         } else if (type === 'video') {
             const video = document.createElement('video');
