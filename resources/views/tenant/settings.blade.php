@@ -15,7 +15,8 @@
             <input type="hidden" name="provider" value="steadfast">
             <input name="credentials[api_key]" placeholder="API Key {{ isset($couriers['steadfast']) ? '(সেভ করা আছে — বদলাতে চাইলে লিখুন)' : '' }}"
                    class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
-            <input name="credentials[secret_key]" placeholder="Secret Key" class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+            <input name="credentials[secret_key]" placeholder="Secret Key {{ ! empty($couriers['steadfast']->credentials['secret_key'] ?? null) ? '(সেভ করা আছে — বদলাতে চাইলে লিখুন)' : '' }}"
+                   class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
             <label class="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="is_active" value="1" @checked($couriers['steadfast']->is_active ?? false)> চালু
             </label>
@@ -29,11 +30,17 @@
         <form method="POST" action="{{ route('tenant.settings.courier') }}" class="space-y-3">
             @csrf
             <input type="hidden" name="provider" value="pathao">
-            <input name="credentials[client_id]" placeholder="Client ID" class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
-            <input name="credentials[client_secret]" placeholder="Client Secret" class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
-            <input name="credentials[username]" placeholder="Merchant Email" class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
-            <input name="credentials[password]" type="password" placeholder="Merchant Password" class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
-            <input name="credentials[store_id]" placeholder="Store ID" class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+            @php $pathaoCreds = $couriers['pathao']->credentials ?? []; @endphp
+            <input name="credentials[client_id]" placeholder="Client ID {{ ! empty($pathaoCreds['client_id']) ? '(সেভ করা আছে — বদলাতে চাইলে লিখুন)' : '' }}"
+                   class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+            <input name="credentials[client_secret]" placeholder="Client Secret {{ ! empty($pathaoCreds['client_secret']) ? '(সেভ করা আছে — বদলাতে চাইলে লিখুন)' : '' }}"
+                   class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+            <input name="credentials[username]" placeholder="Merchant Email {{ ! empty($pathaoCreds['username']) ? '(সেভ করা আছে — বদলাতে চাইলে লিখুন)' : '' }}"
+                   class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+            <input name="credentials[password]" type="password" placeholder="Merchant Password {{ ! empty($pathaoCreds['password']) ? '(সেভ করা আছে — বদলাতে চাইলে লিখুন)' : '' }}"
+                   class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+            <input name="credentials[store_id]" placeholder="Store ID {{ ! empty($pathaoCreds['store_id']) ? '(সেভ করা আছে — বদলাতে চাইলে লিখুন)' : '' }}"
+                   class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
             <label class="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="is_active" value="1" @checked($couriers['pathao']->is_active ?? false)> চালু
             </label>
