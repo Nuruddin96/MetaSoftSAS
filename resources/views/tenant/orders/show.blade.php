@@ -216,6 +216,10 @@
                 @if ($order->courier_status)
                     <p class="text-xs text-mute mt-2 pt-2 border-t border-ink/10">কুরিয়ার স্ট্যাটাস: <span class="font-medium text-ink">{{ $order->courier_status }}</span></p>
                 @endif
+                <form method="POST" action="{{ route('tenant.orders.courier.refresh', $order) }}" class="mt-2">
+                    @csrf
+                    <button type="submit" class="w-full py-2.5 rounded-btn border border-ink/15 font-semibold text-xs hover:bg-paper transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">🔄 স্ট্যাটাস রিফ্রেশ করুন</button>
+                </form>
             @else
                 <form method="POST" action="{{ route('tenant.orders.courier', $order) }}" class="space-y-3">
                     @csrf

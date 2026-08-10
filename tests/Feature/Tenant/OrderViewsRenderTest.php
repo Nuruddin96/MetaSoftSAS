@@ -135,4 +135,48 @@ class OrderViewsRenderTest extends TestCase
         $response->assertSee('মেসেঞ্জার থেকে'); // Messenger-origin badge + section
         $response->assertSee('আপনাদের প্রোডাক্ট আছে?'); // embedded conversation thread
     }
+
+    public function test_order_show_renders_an_image_attachment_in_the_embedded_thread(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+
+        $order = Order::create([
+            'tenant_id' => $tenant->id, 'source' => 'messenger', 'channel' => 'facebook',
+            'messenger_psid' => 'psid-media-1', 'customer_name' => 'Nusrat',
+            'customer_phone' => '01911112222', 'status' => 'pending', 'subtotal' => 0, 'total' => 0,
+        ]);
+
+        MessengerMessage::create([
+            'tenant_id' => $tenant->id, 'sender_psid' => 'psid-media-1',
+            'customer_name' => 'Nusrat', 'attachment_url' => 'https://fake-cdn.test/pic.jpg',
+            'attachment_type' => 'image', 'direction' => 'in', 'status' => 'new',
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->get($this->panelUrl($tenant, 'orders/'.$order->id));
+
+        $response->assertOk();
+        $response->assertSee('fake-cdn.test');
+    }
+
+    public function test_order_show_has_a_courier_refresh_status_action_once_sent(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+
+        $order = Order::create([
+            'tenant_id' => $tenant->id, 'source' => 'web', 'channel' => 'website',
+            'customer_name' => 'Karim Uddin', 'customer_phone' => '01711223344',
+            'status' => 'processing', 'subtotal' => 500, 'total' => 550,
+            'courier_provider' => 'steadfast', 'courier_consignment_id' => 'CS-1',
+            'courier_tracking_code' => 'TRK-1', 'courier_status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->get($this->panelUrl($tenant, 'orders/'.$order->id));
+
+        $response->assertOk();
+        $response->assertSee('orders/'.$order->id.'/courier/refresh');
+    }
 }

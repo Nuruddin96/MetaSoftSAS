@@ -351,6 +351,18 @@ trait InteractsWithCommerceSchema
                 $table->decimal('line_total', 12, 2);
             });
         }
+
+        if (! Schema::hasTable('courier_settings')) {
+            Schema::create('courier_settings', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('provider', 30);
+                $table->text('credentials')->nullable();
+                $table->boolean('is_active')->default(false);
+                $table->timestamps();
+                $table->unique(['tenant_id', 'provider']);
+            });
+        }
     }
 
     protected function makeTenant(array $attrs = []): Tenant

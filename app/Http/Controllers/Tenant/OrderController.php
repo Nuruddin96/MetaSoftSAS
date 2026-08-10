@@ -14,6 +14,7 @@ use App\Models\Warehouse;
 use App\Services\Courier\CourierManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class OrderController extends Controller
@@ -330,8 +331,13 @@ class OrderController extends Controller
             return back()->with('error', 'কুরিয়ারের API সেটিংস পাওয়া যায়নি।');
         }
 
+        // Same two guards as CourierController::send() — never re-send an
+        // order that's already been dispatched, and never push an order
+        // that's already in a final state (delivered/cancelled/returned).
         $orders = Order::whereIn('id', $data['order_ids'])
-            ->whereNull('courier_consignment_id')->with('items')->get();
+            ->whereNull('courier_consignment_id')
+            ->whereNotIn('status', ['delivered', 'cancelled', 'returned'])
+            ->with('items')->get();
 
         $sent = 0;
         $failed = 0;
@@ -349,6 +355,11 @@ class OrderController extends Controller
                 $sent++;
             } catch (\Throwable $e) {
                 $failed++;
+                Log::warning('bulkCourier: failed to create shipment for one order.', [
+                    'order_id' => $order->id,
+                    'provider' => $data['provider'],
+                    'error' => $e->getMessage(),
+                ]);
             }
         }
 

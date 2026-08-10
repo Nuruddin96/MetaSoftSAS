@@ -213,6 +213,7 @@ $tenantRoutes = function () {
             Route::post('orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status');
             Route::post('orders/{order}/channel', [OrderController::class, 'updateChannel'])->name('orders.channel');
             Route::post('orders/{order}/courier', [CourierController::class, 'send'])->name('orders.courier');
+            Route::post('orders/{order}/courier/refresh', [CourierController::class, 'refreshStatus'])->name('orders.courier.refresh');
             Route::post('orders/bulk-status', [OrderController::class, 'bulkStatus'])->name('orders.bulk-status');
             Route::post('orders/bulk-courier', [OrderController::class, 'bulkCourier'])->name('orders.bulk-courier');
             Route::post('fraud-check', [FraudCheckController::class, 'check'])->name('fraud.check');
