@@ -6,7 +6,7 @@
 <div class="min-h-screen flex items-center justify-center px-4 py-10">
     <div class="w-full max-w-lg">
         <a href="/" class="flex items-center gap-2 justify-center mb-8">
-            <span class="w-9 h-9 rounded bg-leaf grid place-items-center text-white font-bold text-lg">M</span>
+            <x-ui.brand-mark />
             <span class="font-disp font-bold text-xl">MetaSoft BD</span>
         </a>
 

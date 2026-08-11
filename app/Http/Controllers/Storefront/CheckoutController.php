@@ -10,8 +10,8 @@ use App\Models\MarketingSetting;
 use App\Models\Order;
 use App\Models\ProductVariant;
 use App\Models\StockMovement;
-use App\Models\StoreSetting;
 use App\Models\Warehouse;
+use App\Services\DeliveryChargeService;
 use App\Services\Marketing\MetaCapiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +24,7 @@ class CheckoutController extends Controller
         return 'cart_'.app('currentTenant')->id;
     }
 
-    public function show()
+    public function show(DeliveryChargeService $deliveryCharge)
     {
         $cart = session($this->cartKey(), []);
         if (empty($cart)) {
@@ -36,18 +36,13 @@ class CheckoutController extends Controller
             'variant' => $v, 'qty' => $cart[$v->id], 'total' => $cart[$v->id] * $v->selling_price,
         ]);
 
-        $charges = StoreSetting::whereIn('key', ['delivery_charge_inside_dhaka', 'delivery_charge_outside_dhaka'])
-            ->pluck('value', 'key');
-
-        return view('storefront.checkout', [
+        return view('storefront.checkout', array_merge([
             'tenant' => app('currentTenant'),
             'items' => $items,
             'subtotal' => $items->sum('total'),
             'divisions' => DB::table('bd_divisions')->orderBy('id')->get(),
             'districts' => DB::table('bd_districts')->orderBy('name')->get(),
-            'chargeInside' => (float) ($charges['delivery_charge_inside_dhaka'] ?? 60),
-            'chargeOutside' => (float) ($charges['delivery_charge_outside_dhaka'] ?? 120),
-        ]);
+        ], $deliveryCharge->chargesForView()));
     }
 
     /** AJAX: save half-filled checkout as incomplete order.
@@ -89,7 +84,7 @@ class CheckoutController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function place(Request $request)
+    public function place(Request $request, DeliveryChargeService $deliveryChargeService)
     {
         $data = $request->validate([
             'customer_name' => 'required|string|max:150',
@@ -107,12 +102,7 @@ class CheckoutController extends Controller
 
         $variants = ProductVariant::with('product')->whereIn('id', array_keys($cart))->get();
 
-        $dhakaDivisionId = (int) DB::table('bd_divisions')->where('name', 'Dhaka')->value('id');
-        $charges = StoreSetting::whereIn('key', ['delivery_charge_inside_dhaka', 'delivery_charge_outside_dhaka'])
-            ->pluck('value', 'key');
-        $deliveryCharge = (int) $data['division_id'] === $dhakaDivisionId
-            ? (float) ($charges['delivery_charge_inside_dhaka'] ?? 60)
-            : (float) ($charges['delivery_charge_outside_dhaka'] ?? 120);
+        $deliveryCharge = $deliveryChargeService->calculate((int) $data['division_id']);
 
         $order = DB::transaction(function () use ($data, $cart, $variants, $deliveryCharge) {
             $customer = Customer::firstOrCreate(

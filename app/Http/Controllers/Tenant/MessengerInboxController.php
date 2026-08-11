@@ -23,6 +23,14 @@ class MessengerInboxController extends Controller
         $conversations = MessengerMessage::whereIn('id', $latestIds)
             ->orderByDesc('created_at')->paginate(20);
 
+        // The "latest message" row is frequently an outbound reply/echo —
+        // customer_name is only ever set on inbound messages — so reading
+        // it straight off that row showed "অজানা কাস্টমার" for customers
+        // whose Facebook name WAS already resolved earlier in the same
+        // conversation. Look up the actual resolved name per psid instead
+        // of trusting whichever row happens to be latest.
+        $this->applyResolvedNames($conversations->getCollection());
+
         return view('tenant.messenger.index', [
             'conversations' => $conversations,
             'connected' => MessengerSetting::exists()
@@ -37,12 +45,55 @@ class MessengerInboxController extends Controller
 
         abort_if($messages->isEmpty(), 404);
 
+        // Same "latest row might be outbound and never carries
+        // customer_name" issue as index() — $messages is already fully
+        // loaded here, so resolve the name in-memory rather than a query.
+        $customer = $messages->last();
+        $resolvedName = $messages->pluck('customer_name')->filter()->last();
+
+        if ($resolvedName) {
+            $customer->customer_name = $resolvedName;
+        }
+
         return view('tenant.messenger.show', [
             'psid' => $psid,
             'messages' => $messages,
-            'customer' => $messages->last(),
+            'customer' => $customer,
             'linkedOrder' => Order::where('messenger_psid', $psid)->latest()->first(),
         ]);
+    }
+
+    /**
+     * Overwrites customer_name on each conversation in the given
+     * collection with the actual resolved name for its psid (see
+     * MessengerMessage::resolvedNameFor()'s docblock for why the source
+     * row's own customer_name can't be trusted directly). Mutates the
+     * collection's models in place — used by index() and updates(), which
+     * both build their conversation list the same "latest row per psid"
+     * way.
+     */
+    protected function applyResolvedNames($conversations): void
+    {
+        $psids = $conversations->pluck('sender_psid')->unique();
+
+        if ($psids->isEmpty()) {
+            return;
+        }
+
+        $resolvedNames = MessengerMessage::whereIn('sender_psid', $psids)
+            ->whereNotNull('customer_name')
+            ->orderByDesc('id')
+            ->get(['sender_psid', 'customer_name'])
+            ->unique('sender_psid')
+            ->pluck('customer_name', 'sender_psid');
+
+        foreach ($conversations as $c) {
+            $resolved = $resolvedNames->get($c->sender_psid);
+
+            if ($resolved) {
+                $c->customer_name = $resolved;
+            }
+        }
     }
 
     public function reply(Request $request, string $psid, MessengerApi $api)
@@ -225,7 +276,13 @@ class MessengerInboxController extends Controller
             $latestIds = MessengerMessage::whereIn('sender_psid', $touchedPsids)
                 ->selectRaw('MAX(id) as id')->groupBy('sender_psid')->pluck('id');
 
-            $conversations = MessengerMessage::whereIn('id', $latestIds)->get()
+            $latestPerPsid = MessengerMessage::whereIn('id', $latestIds)->get();
+
+            // Same "latest row might be outbound and never carries
+            // customer_name" fix as index()/show() — see applyResolvedNames().
+            $this->applyResolvedNames($latestPerPsid);
+
+            $conversations = $latestPerPsid
                 ->map(fn ($c) => [
                     'psid' => $c->sender_psid,
                     'customer_name' => $c->customer_name,

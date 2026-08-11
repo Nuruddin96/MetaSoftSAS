@@ -34,6 +34,7 @@ use App\Http\Controllers\Tenant\ExpenseController;
 use App\Http\Controllers\Tenant\FacebookConnectController;
 use App\Http\Controllers\Tenant\FraudCheckController;
 use App\Http\Controllers\Tenant\IncompleteOrderController;
+use App\Http\Controllers\Tenant\InboxController;
 use App\Http\Controllers\Tenant\InventoryController;
 use App\Http\Controllers\Tenant\MessengerInboxController;
 use App\Http\Controllers\Tenant\NotificationController;
@@ -46,7 +47,10 @@ use App\Http\Controllers\Tenant\PwaController as TenantPwaController;
 use App\Http\Controllers\Tenant\ReportController;
 use App\Http\Controllers\Tenant\SettingController;
 use App\Http\Controllers\Tenant\WebsiteController;
+use App\Http\Controllers\Tenant\WhatsAppConnectController;
+use App\Http\Controllers\Tenant\WhatsAppInboxController;
 use App\Http\Controllers\TenantAuth\LoginController;
+use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
@@ -281,6 +285,12 @@ $tenantRoutes = function () {
             Route::get('product-source/{product}', [ProductSourceController::class, 'show'])->name('product-source.show');
             Route::post('product-source/{product}/order', [ProductSourceController::class, 'order'])->name('product-source.order');
 
+            // Unified Inbox (Phase 5) — read-model list only; opening a
+            // conversation hands off to that channel's own native route
+            // below (messenger.show, unchanged; whatsapp.show, new).
+            Route::get('inbox', [InboxController::class, 'index'])->name('inbox');
+            Route::get('inbox/more', [InboxController::class, 'more'])->name('inbox.more');
+
             // Messenger inbox
             Route::get('messenger', [MessengerInboxController::class, 'index'])->name('messenger.index');
             Route::get('messenger/updates', [MessengerInboxController::class, 'updates'])->name('messenger.updates');
@@ -304,6 +314,25 @@ $tenantRoutes = function () {
             Route::get('facebook/pages', [FacebookConnectController::class, 'pages'])->name('facebook.pages');
             Route::post('facebook/pages/{pageId}/connect', [FacebookConnectController::class, 'connect'])->name('facebook.pages.connect');
             Route::post('facebook/pages/{page}/disconnect', [FacebookConnectController::class, 'disconnect'])->name('facebook.pages.disconnect');
+
+            // WhatsApp Embedded Signup "Connect WhatsApp" (Phase 4). No
+            // separate central callback route needed here, unlike Facebook
+            // above — the signup popup runs entirely inside this
+            // already-tenant-authenticated Settings page, so complete()
+            // stays a normal panel route. See WhatsAppConnectController's
+            // docblock for why.
+            Route::post('whatsapp/connect', [WhatsAppConnectController::class, 'complete'])->name('whatsapp.connect.complete');
+            Route::post('whatsapp/{phone}/disconnect', [WhatsAppConnectController::class, 'disconnect'])->name('whatsapp.disconnect');
+
+            // WhatsApp inbox (Phase 5) — channel-native thread view, mirrors
+            // the Messenger inbox routes above wherever the concept
+            // genuinely matches. 'updates' registered before the {waId}
+            // wildcard so it isn't swallowed by it, same ordering Messenger
+            // uses for messenger/updates vs messenger/{psid}.
+            Route::get('whatsapp/updates', [WhatsAppInboxController::class, 'updates'])->name('whatsapp.updates');
+            Route::get('whatsapp/{waId}', [WhatsAppInboxController::class, 'show'])->name('whatsapp.show');
+            Route::post('whatsapp/{waId}/reply', [WhatsAppInboxController::class, 'reply'])->name('whatsapp.reply');
+            Route::post('whatsapp/{waId}/status', [WhatsAppInboxController::class, 'updateStatus'])->name('whatsapp.status');
         });
     });
 
@@ -383,6 +412,18 @@ Route::get('/webhook/messenger', [MessengerWebhookController::class, 'verify'])-
 Route::post('/webhook/messenger', [MessengerWebhookController::class, 'receive'])
     ->withoutMiddleware([ValidateCsrfToken::class])
     ->name('messenger.webhook.receive');
+
+/*
+|--------------------------------------------------------------------------
+| WHATSAPP WEBHOOK (single global URL — same "one URL, many tenants" shape
+| as the Messenger webhook above; tenant is resolved per-event inside the
+| controller via phone_number_id, never from this route)
+|--------------------------------------------------------------------------
+*/
+Route::get('/webhook/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('whatsapp.webhook.verify');
+Route::post('/webhook/whatsapp', [WhatsAppWebhookController::class, 'receive'])
+    ->withoutMiddleware([ValidateCsrfToken::class])
+    ->name('whatsapp.webhook.receive');
 
 /*
 |--------------------------------------------------------------------------

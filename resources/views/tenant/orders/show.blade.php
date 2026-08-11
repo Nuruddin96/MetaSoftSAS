@@ -138,6 +138,42 @@
 
                 <form method="POST" action="{{ route('tenant.orders.complete', $order) }}" id="completeForm" class="space-y-4">
                     @csrf
+                    {{-- Messenger orders arrive with only whatever CustomerInfoExtractor
+                         found in the conversation text — often no division/district at
+                         all. Same fields the manual order-create form already collects
+                         (tenant/orders/create.blade.php), added here so a Messenger order
+                         can be confirmed with complete delivery info, not just name/phone/
+                         address text. --}}
+                    <div class="grid sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm font-medium">নাম</label>
+                            <input name="customer_name" value="{{ old('customer_name', $order->customer_name) }}" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 focus:ring-2 focus:ring-leaf outline-none">
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium">মোবাইল নাম্বার</label>
+                            <input name="customer_phone" value="{{ old('customer_phone', $order->customer_phone) }}" placeholder="01XXXXXXXXX" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 focus:ring-2 focus:ring-leaf outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">ঠিকানা</label>
+                        <textarea name="customer_address" rows="2" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 focus:ring-2 focus:ring-leaf outline-none">{{ old('customer_address', $order->customer_address) }}</textarea>
+                    </div>
+                    <div class="grid sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm font-medium">বিভাগ</label>
+                            <select name="division_id" id="divisionSelect" onchange="calcTotal()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
+                                <option value="">— নেই —</option>
+                                @foreach ($divisions as $d)<option value="{{ $d->id }}" @selected(old('division_id', $order->division_id) == $d->id)>{{ $d->bn_name }}</option>@endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium">জেলা</label>
+                            <select name="district_id" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
+                                <option value="">— নেই —</option>
+                                @foreach ($districts as $d)<option value="{{ $d->id }}" @selected(old('district_id', $order->district_id) == $d->id)>{{ $d->bn_name }}</option>@endforeach
+                            </select>
+                        </div>
+                    </div>
                     <div>
                         <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                             <p class="font-bold text-sm">প্রোডাক্ট</p>
@@ -145,13 +181,14 @@
                         </div>
                         <div id="itemRows" class="space-y-3"></div>
                         <p id="noItemMsg" class="text-sm text-mute text-center py-6">উপরের বাটনে ক্লিক করে প্রোডাক্ট যোগ করুন</p>
-                        <div class="text-right mt-4 pt-4 border-t border-ink/10">
-                            <span class="text-sm text-mute">সাবটোটাল: </span>
-                            <span class="font-bold text-lg" id="subtotalShow">0৳</span>
+                        <div class="mt-4 pt-4 border-t border-ink/10 space-y-1.5 text-sm">
+                            <div class="flex justify-between text-mute"><span>প্রোডাক্ট সাবটোটাল</span><span id="subtotalShow">0৳</span></div>
+                            <div class="flex justify-between text-mute"><span>ডেলিভারি চার্জ</span><span id="deliveryChargeShow">0৳</span></div>
+                            <div class="flex justify-between font-bold text-base pt-1.5 border-t border-ink/10"><span>মোট টাকা</span><span id="grandTotalShow">0৳</span></div>
                         </div>
                     </div>
 
-                    <div class="grid sm:grid-cols-3 gap-4 pt-2 border-t border-ink/10">
+                    <div class="grid sm:grid-cols-2 gap-4 pt-2 border-t border-ink/10">
                         <div>
                             <label class="text-sm font-medium">পেমেন্ট পদ্ধতি</label>
                             <select name="payment_method" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
@@ -163,19 +200,14 @@
                             </select>
                         </div>
                         <div>
-                            <label class="text-sm font-medium">ডেলিভারি চার্জ</label>
-                            <input name="delivery_charge" id="deliveryChargeInput" type="number" step="0.01" min="0" value="0" oninput="calcTotal()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 focus:ring-2 focus:ring-leaf outline-none">
-                        </div>
-                        <div>
                             <label class="text-sm font-medium">ডিসকাউন্ট</label>
                             <input name="discount" id="discountInput" type="number" step="0.01" min="0" value="0" oninput="calcTotal()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 focus:ring-2 focus:ring-leaf outline-none">
                         </div>
                     </div>
-
-                    <div class="text-right py-2">
-                        <span class="text-sm text-mute">সর্বমোট: </span>
-                        <span class="font-bold text-xl" id="grandTotalShow">0৳</span>
-                    </div>
+                    {{-- No manual delivery-charge field here either — same
+                         DeliveryChargeService-driven, division-based
+                         auto-calculation as the New Order form. --}}
+                    <p class="text-xs text-mute">ডেলিভারি চার্জ বিভাগ অনুযায়ী স্বয়ংক্রিয়ভাবে হিসাব হয় — <a href="{{ route('tenant.settings') }}" class="text-leaf hover:underline">সেটিংসে বদলান</a>।</p>
 
                     @if ($errors->any())
                         <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-btn p-3">
@@ -326,7 +358,16 @@
 @if ($order->items->isEmpty())
 <script>
     const products = @json($productsJson);
+    const dhakaDivisionId = @json($dhakaDivisionId);
+    const chargeInside = @json($chargeInside);
+    const chargeOutside = @json($chargeOutside);
     let rowIdx = 0;
+
+    /** No manual delivery-charge input exists — same client-side-preview-only computation as tenant/orders/create.blade.php; the server independently recomputes from division_id and never trusts a submitted amount. */
+    function currentDeliveryCharge() {
+        const divisionId = parseInt(document.getElementById('divisionSelect').value, 10) || null;
+        return divisionId === dhakaDivisionId ? chargeInside : chargeOutside;
+    }
 
     function addRow() {
         document.getElementById('noItemMsg').style.display = 'none';
@@ -386,8 +427,9 @@
         });
         document.getElementById('subtotalShow').textContent = subtotal.toLocaleString() + '৳';
 
-        const delivery = parseFloat(document.getElementById('deliveryChargeInput').value) || 0;
+        const delivery = currentDeliveryCharge();
         const discount = Math.min(parseFloat(document.getElementById('discountInput').value) || 0, subtotal);
+        document.getElementById('deliveryChargeShow').textContent = delivery.toLocaleString() + '৳';
         document.getElementById('grandTotalShow').textContent = (subtotal - discount + delivery).toLocaleString() + '৳';
     }
 
@@ -406,6 +448,7 @@
     });
 
     addRow(); // start with one row
+    calcTotal(); // initializes the delivery-charge preview from any division_id already on this order (e.g. from a Messenger conversation)
 </script>
 @endif
 @endpush

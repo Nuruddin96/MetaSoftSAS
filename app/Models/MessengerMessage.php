@@ -45,4 +45,28 @@ class MessengerMessage extends Model
         return Schema::hasColumn('messenger_messages', 'attachment_type')
             && Schema::hasColumn('messenger_messages', 'attachment_name');
     }
+
+    /**
+     * The resolved Facebook display name for a conversation, if one has
+     * ever been captured on any message row for this psid — not just the
+     * most recent one. customer_name is only ever set on inbound messages
+     * (resolved via MessengerApi::getProfile() the first time a psid is
+     * seen); outbound replies/echoes never carry it. Any caller that reads
+     * customer_name off a single specific row (especially "the latest
+     * message") risks landing on an outbound row and seeing null even
+     * though the name was already resolved earlier in the same
+     * conversation — this is the one correct way to look it up.
+     * withoutGlobalScopes() + explicit tenant_id so this also works from
+     * the central Messenger webhook route, where app('currentTenant') is
+     * never bound.
+     */
+    public static function resolvedNameFor(int $tenantId, string $psid): ?string
+    {
+        return static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('sender_psid', $psid)
+            ->whereNotNull('customer_name')
+            ->orderByDesc('id')
+            ->value('customer_name');
+    }
 }

@@ -54,6 +54,35 @@ class CentralPwaTest extends TestCase
         $response->assertSee('Add to Home Screen', false);
     }
 
+    /**
+     * The install banner's inner content used to be laid out with
+     * `justify-between` (icon+text pinned left, button pinned right),
+     * which read as the button sitting in a stray corner rather than a
+     * single centered call-to-action — especially on narrow screens where
+     * the left-side text got visually squeezed. Now centered instead.
+     * beforeinstallprompt/iOS Add to Home Screen logic in app.js is
+     * untouched by this — those IDs (asserted in the test above) still
+     * exist unchanged, only the surrounding layout classes moved.
+     */
+    public function test_install_banner_content_is_centered_not_pinned_to_a_corner(): void
+    {
+        $response = $this->get('/');
+
+        $response->assertOk();
+        $html = $response->getContent();
+
+        $bannerStart = strpos($html, 'id="pwaInstallBanner"');
+        $this->assertNotFalse($bannerStart, 'install banner not found in the rendered page');
+
+        // The banner's own markup block, not the whole page — scoped so
+        // this doesn't accidentally match justify-between/-center classes
+        // used elsewhere on the landing page for unrelated sections.
+        $bannerBlock = substr($html, $bannerStart, 900);
+
+        $this->assertStringContainsString('justify-center', $bannerBlock);
+        $this->assertStringNotContainsString('justify-between', $bannerBlock);
+    }
+
     public function test_landing_page_existing_content_is_unchanged(): void
     {
         $response = $this->get('/');

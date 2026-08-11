@@ -9,7 +9,10 @@ use App\Models\FacebookPage;
 use App\Models\MarketingSetting;
 use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
+use App\Models\WhatsAppBusinessAccount;
+use App\Models\WhatsAppPhoneNumber;
 use App\Services\Domain\DomainManager;
+use App\Services\WhatsApp\WhatsAppOAuthService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
@@ -25,10 +28,33 @@ class SettingController extends Controller
         // card) keeps working exactly as before rather than 500ing.
         $facebookReady = FacebookPage::tablesReady();
 
+        // Same additive-table guard for WhatsApp (database/sql/chunk26.sql).
+        $whatsappReady = WhatsAppPhoneNumber::tablesReady();
+        $whatsappAccount = $whatsappReady ? WhatsAppBusinessAccount::first() : null;
+        $whatsappPhoneNumbers = $whatsappReady ? WhatsAppPhoneNumber::orderByDesc('id')->get() : collect();
+
+        // Embedded into the Connect/Reconnect WhatsApp button for the
+        // Settings page's JS to submit back with the signup result — minted
+        // whenever the tenant might plausibly click that button (no
+        // connection at all, or an existing one that needs reconnecting/
+        // retrying), never when a fully active connection already exists,
+        // since it would be meaningless there. currentOrNewState() also
+        // avoids leaving a fresh unused row behind on every page view a
+        // tenant makes without clicking Connect — see its docblock.
+        $hasFullyActiveNumber = $whatsappPhoneNumbers->contains(
+            fn ($p) => $p->is_active && $p->status === 'active'
+        );
+        $whatsappConnectState = ($whatsappReady && ! $hasFullyActiveNumber)
+            ? (new WhatsAppOAuthService)->currentOrNewState($tenant, auth('tenant')->user())
+            : null;
+
         return view('tenant.settings', [
             'messenger' => MessengerSetting::first(),
             'facebookConnection' => $facebookReady ? FacebookConnection::first() : null,
             'facebookPages' => $facebookReady ? FacebookPage::orderByDesc('id')->get() : collect(),
+            'whatsappAccount' => $whatsappAccount,
+            'whatsappPhoneNumbers' => $whatsappPhoneNumbers,
+            'whatsappConnectState' => $whatsappConnectState,
             'tenant' => $tenant,
             'couriers' => CourierSetting::get()->keyBy('provider'),
             'marketing' => MarketingSetting::firstOrNew(['tenant_id' => app('currentTenant')->id]),

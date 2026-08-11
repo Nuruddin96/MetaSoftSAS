@@ -86,20 +86,23 @@
                 $existing = old('variants', $existing);
             @endphp
             @foreach ($existing as $i => $v)
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 variant-row">
-                    <input type="hidden" name="variants[{{ $i }}][id]" value="{{ $v['id'] ?? '' }}">
-                    <input name="variants[{{ $i }}][variant_name]" value="{{ $v['variant_name'] ?? '' }}" placeholder="নাম (লাল / XL)"
-                           class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                    <input name="variants[{{ $i }}][purchase_price]" value="{{ $v['purchase_price'] ?? '' }}" type="number" step="0.01" min="0" placeholder="কেনা দাম"
-                           class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                    <input name="variants[{{ $i }}][selling_price]" value="{{ $v['selling_price'] ?? '' }}" type="number" step="0.01" min="0" required placeholder="বিক্রয় দাম *"
-                           class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                    @if (!$product)
-                        <input name="variants[{{ $i }}][stock]" value="{{ $v['stock'] ?? '' }}" type="number" min="0" placeholder="শুরুর স্টক"
+                <div class="flex items-start gap-2 variant-row">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 min-w-0">
+                        <input type="hidden" name="variants[{{ $i }}][id]" value="{{ $v['id'] ?? '' }}">
+                        <input name="variants[{{ $i }}][variant_name]" value="{{ $v['variant_name'] ?? '' }}" placeholder="নাম (লাল / XL)"
                                class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                    @else
-                        <span class="text-xs text-mute self-center">স্টক: {{ $v['stock'] ?? 0 }} (ইনভেন্টরি পেজে বদলান)</span>
-                    @endif
+                        <input name="variants[{{ $i }}][purchase_price]" value="{{ $v['purchase_price'] ?? '' }}" type="number" step="0.01" min="0" placeholder="কেনা দাম"
+                               class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                        <input name="variants[{{ $i }}][selling_price]" value="{{ $v['selling_price'] ?? '' }}" type="number" step="0.01" min="0" required placeholder="বিক্রয় দাম *"
+                               class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                        @if (!$product)
+                            <input name="variants[{{ $i }}][stock]" value="{{ $v['stock'] ?? '' }}" type="number" min="0" placeholder="শুরুর স্টক"
+                                   class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                        @else
+                            <span class="text-xs text-mute self-center">স্টক: {{ $v['stock'] ?? 0 }} (ইনভেন্টরি পেজে বদলান)</span>
+                        @endif
+                    </div>
+                    <button type="button" onclick="removeVariantRow(this)" class="shrink-0 text-red-600 text-sm px-2 py-2" aria-label="ভ্যারিয়েন্ট মুছুন">✕</button>
                 </div>
             @endforeach
         </div>
@@ -116,15 +119,25 @@
     function addVariantRow() {
         const wrap = document.getElementById('variantRows');
         const div = document.createElement('div');
-        div.className = 'grid grid-cols-2 md:grid-cols-4 gap-3 variant-row';
+        div.className = 'flex items-start gap-2 variant-row';
         div.innerHTML = `
-            <input type="hidden" name="variants[${idx}][id]" value="">
-            <input name="variants[${idx}][variant_name]" placeholder="নাম (লাল / XL)" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-            <input name="variants[${idx}][purchase_price]" type="number" step="0.01" min="0" placeholder="কেনা দাম" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-            <input name="variants[${idx}][selling_price]" type="number" step="0.01" min="0" required placeholder="বিক্রয় দাম *" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-            <input name="variants[${idx}][stock]" type="number" min="0" placeholder="শুরুর স্টক" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">`;
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 min-w-0">
+                <input type="hidden" name="variants[${idx}][id]" value="">
+                <input name="variants[${idx}][variant_name]" placeholder="নাম (লাল / XL)" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                <input name="variants[${idx}][purchase_price]" type="number" step="0.01" min="0" placeholder="কেনা দাম" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                <input name="variants[${idx}][selling_price]" type="number" step="0.01" min="0" required placeholder="বিক্রয় দাম *" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                <input name="variants[${idx}][stock]" type="number" min="0" placeholder="শুরুর স্টক" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+            </div>
+            <button type="button" onclick="removeVariantRow(this)" class="shrink-0 text-red-600 text-sm px-2 py-2" aria-label="ভ্যারিয়েন্ট মুছুন">✕</button>`;
         wrap.appendChild(div);
         idx++;
+    }
+
+    /** At least one variant row must always remain — a product needs at least one price. */
+    function removeVariantRow(button) {
+        const rows = document.querySelectorAll('#variantRows .variant-row');
+        if (rows.length <= 1) return;
+        button.closest('.variant-row').remove();
     }
 
     const galleryGrid = document.getElementById('galleryGrid');

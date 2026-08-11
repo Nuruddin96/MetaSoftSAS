@@ -364,6 +364,18 @@ trait InteractsWithCommerceSchema
                 $table->unique(['tenant_id', 'provider']);
             });
         }
+
+        // DeliveryChargeService (order calculation fix) queries this on
+        // every order create/show/complete render.
+        if (! Schema::hasTable('store_settings')) {
+            Schema::create('store_settings', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('key', 100);
+                $table->string('value', 255)->nullable();
+                $table->timestamps();
+            });
+        }
     }
 
     protected function makeTenant(array $attrs = []): Tenant

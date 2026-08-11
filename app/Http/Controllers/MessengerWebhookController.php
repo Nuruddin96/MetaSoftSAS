@@ -154,13 +154,7 @@ class MessengerWebhookController extends Controller
 
         if (! $isEcho) {
             // resolve customer's display name once, reuse for later messages
-            $existing = MessengerMessage::withoutGlobalScopes()
-                ->where('tenant_id', $owner->tenant_id)
-                ->where('sender_psid', $psid)
-                ->whereNotNull('customer_name')
-                ->first();
-
-            $name = $existing?->customer_name;
+            $name = MessengerMessage::resolvedNameFor($owner->tenant_id, $psid);
 
             if (! $name) {
                 try {
@@ -308,11 +302,7 @@ class MessengerWebhookController extends Controller
         // this psid's messenger_messages rows the moment the conversation
         // started; reuse it here instead of falling through to the
         // DEFAULT_CUSTOMER_NAME placeholder.
-        $resolvedName = $info['name'] ?: MessengerMessage::withoutGlobalScopes()
-            ->where('tenant_id', $tenantId)
-            ->where('sender_psid', $psid)
-            ->whereNotNull('customer_name')
-            ->value('customer_name');
+        $resolvedName = $info['name'] ?: MessengerMessage::resolvedNameFor($tenantId, $psid);
 
         DB::transaction(function () use ($tenantId, $psid, $info, $resolvedName) {
             $customer = Customer::withoutGlobalScopes()->firstOrCreate(

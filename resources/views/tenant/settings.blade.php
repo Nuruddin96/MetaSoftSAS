@@ -7,8 +7,10 @@
 
 <div class="grid lg:grid-cols-2 gap-6 max-w-5xl">
 
-    <x-ui.card>
-        <p class="font-bold mb-1">🚚 Steadfast কুরিয়ার</p>
+    <x-ui.collapsible-card title="🚚 Steadfast কুরিয়ার">
+        <x-slot:status>
+            @if ($couriers['steadfast']->is_active ?? false)<x-ui.badge tone="leaf">চালু</x-ui.badge>@endif
+        </x-slot:status>
         <p class="text-xs text-mute mb-4">steadfast.com.bd → API সেকশন থেকে Key দুটো নিন। এটা দিলেই এক-ক্লিক কুরিয়ার + ফ্রড চেকার চালু হবে।</p>
         <form method="POST" action="{{ route('tenant.settings.courier') }}" class="space-y-3">
             @csrf
@@ -22,10 +24,12 @@
             </label>
             <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
         </form>
-    </x-ui.card>
+    </x-ui.collapsible-card>
 
-    <x-ui.card>
-        <p class="font-bold mb-1">🚚 Pathao কুরিয়ার</p>
+    <x-ui.collapsible-card title="🚚 Pathao কুরিয়ার">
+        <x-slot:status>
+            @if ($couriers['pathao']->is_active ?? false)<x-ui.badge tone="leaf">চালু</x-ui.badge>@endif
+        </x-slot:status>
         <p class="text-xs/relaxed text-mute mb-4">Pathao Merchant প্যানেল → Developer API থেকে তথ্যগুলো নিন।</p>
         <form method="POST" action="{{ route('tenant.settings.courier') }}" class="space-y-3">
             @csrf
@@ -46,10 +50,16 @@
             </label>
             <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
         </form>
-    </x-ui.card>
+    </x-ui.collapsible-card>
 
-    <x-ui.card>
-        <p class="font-bold mb-1">🔗 Facebook কানেক্ট (Messenger)</p>
+    <x-ui.collapsible-card title="🔗 Facebook কানেক্ট (Messenger)">
+        <x-slot:status>
+            @if ($facebookConnection && $facebookPages->where('is_active', true)->where('status', 'active')->isNotEmpty())
+                <x-ui.badge tone="leaf">কানেক্টেড</x-ui.badge>
+            @elseif ($facebookConnection)
+                <x-ui.badge tone="amber">মনোযোগ প্রয়োজন</x-ui.badge>
+            @endif
+        </x-slot:status>
         <p class="text-xs text-mute mb-4">Facebook দিয়ে লগইন করে সরাসরি আপনার Page কানেক্ট করুন — কোনো টোকেন কপি-পেস্ট করা লাগবে না, ওয়েবহুক সাবস্ক্রিপশনও স্বয়ংক্রিয়ভাবে হয়ে যাবে।</p>
 
         @if (! $facebookConnection)
@@ -99,10 +109,90 @@
             </div>
             <x-ui.button href="{{ route('tenant.facebook.pages') }}" variant="outline" size="sm">আরেকটি Page যোগ করুন</x-ui.button>
         @endif
-    </x-ui.card>
+    </x-ui.collapsible-card>
 
-    <x-ui.card>
-        <p class="font-bold mb-1">🛠️ উন্নত: ম্যানুয়াল Page Access Token</p>
+    <x-ui.collapsible-card title="💬 WhatsApp কানেক্ট">
+        <x-slot:status>
+            @php $waActiveForBadge = $whatsappPhoneNumbers->where('is_active', true); @endphp
+            @if ($waActiveForBadge->where('status', 'active')->isNotEmpty())
+                <x-ui.badge tone="leaf">কানেক্টেড</x-ui.badge>
+            @elseif ($whatsappAccount)
+                <x-ui.badge tone="amber">মনোযোগ প্রয়োজন</x-ui.badge>
+            @endif
+        </x-slot:status>
+        <p class="text-xs text-mute mb-4">Meta-এর অফিসিয়াল WhatsApp Business Platform (Embedded Signup) দিয়ে আপনার WhatsApp Business নম্বর কানেক্ট করুন — কোনো টোকেন কপি-পেস্ট করা লাগবে না।</p>
+
+        @php
+            $waActiveNumbers = $whatsappPhoneNumbers->where('is_active', true);
+        @endphp
+
+        @if (! $whatsappAccount)
+            {{-- Not Connected --}}
+            <x-ui.button type="button" id="whatsappConnectBtn" variant="accent" size="sm"
+                data-state="{{ $whatsappConnectState->state ?? '' }}"
+                data-app-id="{{ config('facebook.app_id') }}"
+                data-config-id="{{ config('whatsapp.embedded_signup_config_id') }}"
+                data-graph-version="{{ config('whatsapp.graph_version') }}"
+                data-complete-url="{{ route('tenant.whatsapp.connect.complete') }}">
+                Connect WhatsApp
+            </x-ui.button>
+
+        @elseif ($waActiveNumbers->isEmpty())
+            {{-- WABA connected but no active number (disconnected earlier, or the previous attempt never finished) --}}
+            <p class="text-sm text-leafdk mb-3">✅ WhatsApp Business Account কানেক্ট করা হয়েছে — এখন একটি নম্বর কানেক্ট করুন।</p>
+            <x-ui.button type="button" id="whatsappConnectBtn" variant="accent" size="sm"
+                data-state="{{ $whatsappConnectState->state ?? '' }}"
+                data-app-id="{{ config('facebook.app_id') }}"
+                data-config-id="{{ config('whatsapp.embedded_signup_config_id') }}"
+                data-graph-version="{{ config('whatsapp.graph_version') }}"
+                data-complete-url="{{ route('tenant.whatsapp.connect.complete') }}">
+                Connect Number
+            </x-ui.button>
+
+        @else
+            <div class="space-y-3 mb-3">
+                @foreach ($waActiveNumbers as $waPhone)
+                    <div class="border border-ink/10 rounded-btn p-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="font-semibold text-sm">{{ $waPhone->display_phone_number ?? $waPhone->verified_name ?? 'নামহীন নম্বর' }}</p>
+                                <p class="text-xs text-mute">Phone Number ID: {{ $waPhone->phone_number_id }}</p>
+                                @if ($whatsappAccount->business_name)
+                                    <p class="text-xs text-mute">Business: {{ $whatsappAccount->business_name }}</p>
+                                @endif
+                            </div>
+                            @if ($waPhone->status === 'active')
+                                <x-ui.badge tone="leaf">✅ সক্রিয়, সাবস্ক্রাইবড</x-ui.badge>
+                            @elseif ($waPhone->status === 'subscription_failed')
+                                <x-ui.badge tone="amber">⚠️ সাবস্ক্রিপশন ব্যর্থ</x-ui.badge>
+                            @else
+                                <x-ui.badge tone="amber">🔄 পুনরায় কানেক্ট প্রয়োজন</x-ui.badge>
+                            @endif
+                        </div>
+
+                        <div class="flex flex-wrap gap-2 mt-3">
+                            @if ($waPhone->status !== 'active')
+                                <x-ui.button type="button" class="whatsapp-connect-btn" variant="accent" size="sm"
+                                    data-state="{{ $whatsappConnectState->state ?? '' }}"
+                                    data-app-id="{{ config('facebook.app_id') }}"
+                                    data-config-id="{{ config('whatsapp.embedded_signup_config_id') }}"
+                                    data-graph-version="{{ config('whatsapp.graph_version') }}"
+                                    data-complete-url="{{ route('tenant.whatsapp.connect.complete') }}">
+                                    Reconnect WhatsApp
+                                </x-ui.button>
+                            @endif
+                            <form method="POST" action="{{ route('tenant.whatsapp.disconnect', $waPhone) }}" onsubmit="return confirm('এই WhatsApp নম্বর ডিসকানেক্ট করতে চান?');">
+                                @csrf
+                                <x-ui.button type="submit" variant="outline" size="sm">Disconnect</x-ui.button>
+                            </form>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+    </x-ui.collapsible-card>
+
+    <x-ui.collapsible-card title="🛠️ উন্নত: ম্যানুয়াল Page Access Token">
         <p class="text-xs text-mute mb-4">উপরের <b>Connect Facebook</b> ব্যবহার করাই সহজ ও সুপারিশকৃত। শুধু প্রয়োজন হলে (যেমন OAuth কাজ না করলে) নিচে ম্যানুয়ালি Page ID ও Access Token দিন।</p>
         <form method="POST" action="{{ route('tenant.settings.messenger') }}" class="space-y-3">
             @csrf
@@ -119,10 +209,9 @@
             <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
         </form>
         <p class="text-xs text-mute mt-3">Page ID ও Access Token পাবেন <a href="https://developers.facebook.com" target="_blank" class="text-leaf hover:underline">Meta for Developers</a> থেকে আপনার অ্যাপে Messenger প্রোডাক্ট যোগ করে।</p>
-    </x-ui.card>
+    </x-ui.collapsible-card>
 
-    <x-ui.card class="lg:col-span-2">
-        <p class="font-bold mb-1">📣 Facebook Pixel, Conversion API ও GTM</p>
+    <x-ui.collapsible-card title="📣 Facebook Pixel, Conversion API ও GTM" class="lg:col-span-2">
         <p class="text-xs text-mute mb-4">Pixel ID দিলে ব্রাউজার ইভেন্ট যাবে। সাথে CAPI টোকেন দিলে সার্ভার থেকেও ইভেন্ট যাবে (iOS/অ্যাডব্লকারেও ট্র্যাকিং ঠিক থাকবে) — দুটোতেই একই event_id যায়, তাই ডাবল কাউন্ট হবে না। শুধু GTM ব্যবহার করলে শুধু GTM ID দিলেই চলবে।</p>
         <form method="POST" action="{{ route('tenant.settings.marketing') }}" class="grid md:grid-cols-2 gap-3">
             @csrf
@@ -155,10 +244,9 @@
                 <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
             </div>
         </form>
-    </x-ui.card>
+    </x-ui.collapsible-card>
 
-    <x-ui.card>
-        <p class="font-bold mb-1">🌐 কাস্টম ডোমেইন</p>
+    <x-ui.collapsible-card title="🌐 কাস্টম ডোমেইন">
         @php $tenant = app('currentTenant'); @endphp
         @if (! $tenant->plan?->allow_custom_domain)
             <p class="text-xs text-mute mb-4">এই ফিচারটি শুধু Pro প্ল্যানে আছে। <a href="{{ route('tenant.billing') }}" class="text-leaf hover:underline">আপগ্রেড করুন</a>।</p>
@@ -188,10 +276,10 @@
                 <x-ui.button type="submit" variant="accent" size="sm">রিকোয়েস্ট পাঠান</x-ui.button>
             </form>
         @endif
-    </x-ui.card>
+    </x-ui.collapsible-card>
 
-    <x-ui.card>
-        <p class="font-bold mb-4">🛵 ডেলিভারি চার্জ</p>
+    <x-ui.collapsible-card title="🛵 ডেলিভারি চার্জ" :open="true">
+        <p class="text-xs text-mute -mt-2 mb-1">অর্ডার তৈরির সময় বিভাগ অনুযায়ী এই চার্জ অটো বসে যাবে (ঢাকা বিভাগ = ভেতরে, বাকি সব = বাইরে)।</p>
         <form method="POST" action="{{ route('tenant.settings.store') }}" class="space-y-3">
             @csrf
             <div>
@@ -208,6 +296,111 @@
             </div>
             <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
         </form>
-    </x-ui.card>
+    </x-ui.collapsible-card>
 </div>
+
+@push('scripts')
+<script>
+(function () {
+    // Only load Meta's JS SDK / wire up Embedded Signup at all if a Connect/
+    // Reconnect WhatsApp button is actually on this page render — a tenant
+    // with a fully active connection never gets one (see SettingController::
+    // index()'s $whatsappConnectState), so this whole block is a no-op for
+    // them rather than an unconditional third-party script load.
+    const connectButtons = document.querySelectorAll('#whatsappConnectBtn, .whatsapp-connect-btn');
+    if (!connectButtons.length) return;
+
+    const config = connectButtons[0].dataset;
+    if (!config.appId || !config.configId) return; // not configured yet — nothing to wire up
+
+    let popupResult = null; // {code} from FB.login's callback
+    let signupResult = null; // {wabaId, phoneNumberId, businessId} from the postMessage event
+
+    function trySubmit() {
+        if (!popupResult || !signupResult) return;
+
+        // A real <form> POST (not fetch) — WhatsAppConnectController::
+        // complete() is a normal panel action that redirects back to
+        // Settings with a flash message, same as every other action here.
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = config.completeUrl;
+        form.style.display = 'none';
+
+        const fields = {
+            _token: document.querySelector('meta[name="csrf-token"]')?.content
+                || document.querySelector('input[name="_token"]')?.value,
+            state: config.state,
+            code: popupResult.code,
+            waba_id: signupResult.wabaId,
+            phone_number_id: signupResult.phoneNumberId,
+            business_id: signupResult.businessId || '',
+        };
+
+        Object.entries(fields).forEach(([name, value]) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value || '';
+            form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    window.addEventListener('message', function (event) {
+        if (event.origin !== 'https://www.facebook.com') return;
+
+        let data;
+        try {
+            data = JSON.parse(event.data);
+        } catch (e) {
+            return; // not a JSON message Meta sent us — ignore
+        }
+
+        if (data.type !== 'WA_EMBEDDED_SIGNUP') return;
+
+        if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA') {
+            signupResult = {
+                wabaId: data.data?.waba_id,
+                phoneNumberId: data.data?.phone_number_id,
+                businessId: data.data?.business_id,
+            };
+            trySubmit();
+        }
+    });
+
+    window.fbAsyncInit = function () {
+        FB.init({ appId: config.appId, autoLogAppEvents: true, xfbml: true, version: config.graphVersion });
+    };
+
+    (function loadSdk() {
+        if (document.getElementById('facebook-jssdk')) return;
+        const script = document.createElement('script');
+        script.id = 'facebook-jssdk';
+        script.src = 'https://connect.facebook.net/en_US/sdk.js';
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
+    })();
+
+    connectButtons.forEach((btn) => btn.addEventListener('click', function () {
+        if (typeof FB === 'undefined') return; // SDK still loading — tenant can just click again in a moment
+
+        FB.login(function (response) {
+            if (response.authResponse && response.authResponse.code) {
+                popupResult = { code: response.authResponse.code };
+                trySubmit();
+            }
+        }, {
+            config_id: btn.dataset.configId,
+            response_type: 'code',
+            override_default_response_type: true,
+            extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+        });
+    }));
+})();
+</script>
+@endpush
 @endsection

@@ -12,6 +12,7 @@ use App\Models\ProductVariant;
 use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Services\Courier\CourierManager;
+use App\Services\DeliveryChargeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -19,13 +20,13 @@ use Illuminate\Support\Str;
 
 class OrderController extends Controller
 {
-    public function create()
+    public function create(DeliveryChargeService $deliveryCharge)
     {
-        return view('tenant.orders.create', [
+        return view('tenant.orders.create', array_merge([
             'productsJson' => $this->productsJson(),
             'divisions' => DB::table('bd_divisions')->orderBy('id')->get(),
             'districts' => DB::table('bd_districts')->orderBy('name')->get(),
-        ]);
+        ], $deliveryCharge->chargesForView()));
     }
 
     /** Active products+variants, shaped for the product/variant picker JS shared by create.blade.php and show.blade.php. */
@@ -42,7 +43,7 @@ class OrderController extends Controller
             ])->values();
     }
 
-    public function store(Request $request)
+    public function store(Request $request, DeliveryChargeService $deliveryChargeService)
     {
         $data = $request->validate([
             'customer_name' => 'required|string|max:150',
@@ -52,7 +53,11 @@ class OrderController extends Controller
             'district_id' => 'nullable|integer|exists:bd_districts,id',
             'channel' => 'required|in:website,facebook,instagram,whatsapp,call,others',
             'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
-            'delivery_charge' => 'nullable|numeric|min:0',
+            // delivery_charge is deliberately NOT an accepted input — the
+            // New Order form no longer has a manual field for it at all
+            // (see create.blade.php). The server always computes it from
+            // division_id via DeliveryChargeService below; a client can no
+            // longer influence the charged amount by submitting a value.
             'discount' => 'nullable|numeric|min:0',
             'note' => 'nullable|string|max:500',
             'variant_ids' => 'required|array|min:1',
@@ -71,7 +76,7 @@ class OrderController extends Controller
             return back()->withErrors(['variant_ids' => 'একটি বা একাধিক প্রোডাক্ট পাওয়া যায়নি।'])->withInput();
         }
 
-        $order = DB::transaction(function () use ($data, $variants) {
+        $order = DB::transaction(function () use ($data, $variants, $deliveryChargeService) {
             $customer = Customer::firstOrCreate(
                 ['phone' => $data['customer_phone']],
                 ['name' => $data['customer_name'], 'address' => $data['customer_address'] ?? null,
@@ -80,7 +85,7 @@ class OrderController extends Controller
 
             $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
             $discount = min((float) ($data['discount'] ?? 0), $subtotal);
-            $deliveryCharge = (float) ($data['delivery_charge'] ?? 0);
+            $deliveryCharge = $deliveryChargeService->calculate($data['division_id'] ?? null);
 
             $order = Order::create([
                 'source' => 'manual',
@@ -122,7 +127,7 @@ class OrderController extends Controller
      * transitions pending -> confirmed exactly like a fresh manual order
      * does in store() above.
      */
-    public function complete(Request $request, Order $order)
+    public function complete(Request $request, Order $order, DeliveryChargeService $deliveryChargeService)
     {
         // Defense-in-depth: implicit route-model binding on {order} is
         // expected to already be scoped to the current tenant via Order's
@@ -139,8 +144,11 @@ class OrderController extends Controller
             'customer_name' => 'nullable|string|max:150',
             'customer_phone' => 'nullable|regex:/^01[3-9][0-9]{8}$/',
             'customer_address' => 'nullable|string|max:1000',
+            'division_id' => 'nullable|integer|exists:bd_divisions,id',
+            'district_id' => 'nullable|integer|exists:bd_districts,id',
             'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
-            'delivery_charge' => 'nullable|numeric|min:0',
+            // Same "no manual delivery_charge input" rule as store() — see
+            // its comment. The confirm form no longer submits this field.
             'discount' => 'nullable|numeric|min:0',
             'note' => 'nullable|string|max:500',
             'variant_ids' => 'required|array|min:1',
@@ -164,15 +172,27 @@ class OrderController extends Controller
             return back()->withErrors(['variant_ids' => 'একটি বা একাধিক প্রোডাক্ট পাওয়া যায়নি।'])->withInput();
         }
 
-        DB::transaction(function () use ($order, $data, $variants) {
+        DB::transaction(function () use ($order, $data, $variants, $deliveryChargeService) {
             $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
             $discount = min((float) ($data['discount'] ?? 0), $subtotal);
-            $deliveryCharge = (float) ($data['delivery_charge'] ?? 0);
+            // Effective division: whatever was just submitted, falling back
+            // to whatever the order already had (e.g. from a Messenger
+            // conversation's extracted address) — so confirming without
+            // touching the division field still charges correctly rather
+            // than silently reverting to the "outside Dhaka" default.
+            $effectiveDivisionId = $data['division_id'] ?? $order->division_id;
+            $deliveryCharge = $deliveryChargeService->calculate($effectiveDivisionId);
 
             $order->update(array_filter([
                 'customer_name' => $data['customer_name'] ?? null,
                 'customer_phone' => $data['customer_phone'] ?? null,
                 'customer_address' => $data['customer_address'] ?? null,
+                // Messenger-created pending orders had no way to record
+                // these before — the confirm form only ever collected name/
+                // phone/address text. Nullable/optional, same as the three
+                // fields above: staff fills in whatever was missing.
+                'division_id' => $data['division_id'] ?? null,
+                'district_id' => $data['district_id'] ?? null,
             ]) + [
                 'subtotal' => $subtotal,
                 'discount' => $discount,
@@ -263,7 +283,7 @@ class OrderController extends Controller
         return view('tenant.orders.index', compact('orders'));
     }
 
-    public function show(Order $order)
+    public function show(Order $order, DeliveryChargeService $deliveryCharge)
     {
         $order->load('items');
 
@@ -271,11 +291,17 @@ class OrderController extends Controller
             ? MessengerMessage::where('sender_psid', $order->messenger_psid)->orderBy('created_at')->get()
             : collect();
 
-        return view('tenant.orders.show', [
+        return view('tenant.orders.show', array_merge([
             'order' => $order,
             'messengerMessages' => $messengerMessages,
             'productsJson' => $order->items->isEmpty() ? $this->productsJson() : collect(),
-        ]);
+            // Only meaningful for the pending-order complete form (see
+            // show.blade.php's @else branch) but harmless/unused otherwise —
+            // cheaper to always pass than to conditionally build two
+            // different view-data shapes for one controller action.
+            'divisions' => DB::table('bd_divisions')->orderBy('id')->get(),
+            'districts' => DB::table('bd_districts')->orderBy('name')->get(),
+        ], $deliveryCharge->chargesForView()));
     }
 
     public function updateStatus(Request $request, Order $order)

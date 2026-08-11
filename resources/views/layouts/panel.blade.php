@@ -57,6 +57,17 @@
     $notifNewMessages = \App\Models\MessengerMessage::where('status', 'new')->where('direction', 'in')
         ->when($notifSeen['messages'], fn ($q) => $q->where('created_at', '>', $notifSeen['messages']))
         ->count();
+
+    // Unified badge (Phase 5) — a tenant expects "new message" to mean
+    // either channel, not Messenger only. Guarded the same way every other
+    // WhatsApp-aware call site is (chunk26.sql may not be imported yet on
+    // every environment) so this layout, rendered on every panel page,
+    // never 500s for a tenant who hasn't reached WhatsApp at all.
+    if (\App\Models\WhatsAppPhoneNumber::tablesReady()) {
+        $notifNewMessages += \App\Models\WhatsAppMessage::where('status', 'new')->where('direction', 'in')
+            ->when($notifSeen['messages'], fn ($q) => $q->where('created_at', '>', $notifSeen['messages']))
+            ->count();
+    }
     $notifNewIncomplete = \App\Models\IncompleteOrder::where('status', 'abandoned')
         ->when($notifSeen['incomplete'], fn ($q) => $q->where('created_at', '>', $notifSeen['incomplete']))
         ->count();
@@ -102,6 +113,11 @@
                         $tenant->plan?->allow_pos ? ['tenant.pos', 'POS বিক্রি', 'calculator'] : null,
                         ['tenant.orders.index', 'অর্ডার', 'receipt'],
                         ['tenant.incomplete', 'অসম্পূর্ণ অর্ডার', 'phone-missed'],
+                        // Unified Inbox (Phase 5) — added alongside the
+                        // existing Messenger-only link below, not replacing
+                        // it, so tenants already using it keep the exact
+                        // same workflow unchanged.
+                        ['tenant.inbox', 'ইনবক্স', 'inbox'],
                         ['tenant.messenger.index', 'মেসেঞ্জার ইনবক্স', 'message-circle'],
                     ]),
                     'প্রোডাক্ট' => [

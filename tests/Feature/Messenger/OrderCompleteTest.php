@@ -67,7 +67,6 @@ class OrderCompleteTest extends TestCase
 
         $response = $this->actingAs($user, 'tenant')->post($this->panelUrl($tenant, 'orders/'.$order->id.'/complete'), [
             'payment_method' => 'cod',
-            'delivery_charge' => 60,
             'discount' => 0,
             'variant_ids' => [$variant->id],
             'quantities' => [2],
@@ -79,7 +78,11 @@ class OrderCompleteTest extends TestCase
         $this->assertSame('confirmed', $order->status);
         $this->assertNotNull($order->confirmed_at);
         $this->assertEquals(1600, (float) $order->subtotal);
-        $this->assertEquals(1660, (float) $order->total);
+        // No division_id on this order at all — DeliveryChargeService
+        // treats that as "outside Dhaka" (its own documented default),
+        // same as an unconfigured store_settings row falling back to 120.
+        $this->assertEquals(120, (float) $order->delivery_charge);
+        $this->assertEquals(1720, (float) $order->total);
         $this->assertSame(1, $order->items()->count());
 
         $inventory = Inventory::where('variant_id', $variant->id)->first();
@@ -87,6 +90,32 @@ class OrderCompleteTest extends TestCase
 
         $customer = Customer::find($order->customer_id);
         $this->assertSame(1, $customer->total_orders);
+    }
+
+    /**
+     * Regression test for this sprint's requirement: the confirm form has
+     * no manual delivery-charge field at all — even if a request somehow
+     * still submits one (a stale client, a crafted request), the server
+     * must never use it. The stored charge must come from
+     * DeliveryChargeService only.
+     */
+    public function test_a_submitted_delivery_charge_value_is_completely_ignored(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $order = $this->makePendingMessengerOrder($tenant);
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 800]);
+
+        $this->actingAs($user, 'tenant')->post($this->panelUrl($tenant, 'orders/'.$order->id.'/complete'), [
+            'payment_method' => 'cod',
+            'delivery_charge' => 999999, // an attacker/stale-client-shaped value
+            'variant_ids' => [$variant->id],
+            'quantities' => [1],
+        ])->assertRedirect();
+
+        $order->refresh();
+        $this->assertNotEquals(999999, (float) $order->delivery_charge);
+        $this->assertEquals(120, (float) $order->delivery_charge, 'must fall back to the server-computed charge, never the submitted one');
     }
 
     public function test_completing_an_already_completed_order_is_rejected(): void

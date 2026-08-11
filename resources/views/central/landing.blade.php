@@ -9,7 +9,7 @@
 <header class="sticky top-0 z-40 bg-paper/90 backdrop-blur border-b border-ink/10">
     <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <a href="/" class="flex items-center gap-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
-            <span class="w-8 h-8 rounded bg-leaf grid place-items-center text-white font-bold text-lg">M</span>
+            <x-ui.brand-mark size="sm" />
             <span class="font-disp font-bold text-lg">MetaSoft BD</span>
         </a>
         <nav class="hidden md:flex items-center gap-5 text-sm text-mute">
@@ -36,12 +36,20 @@
      Starts `hidden` (safe default — no flash before JS can decide) and is
      only ever revealed by pwa-install.js once it has confirmed the app
      isn't already running in standalone/installed mode; `md:hidden` keeps
-     it mobile-only even after that reveal. --}}
-<div id="pwaInstallBanner" class="hidden md:hidden bg-leaf/10 border-b border-leaf/20">
-    <div class="max-w-6xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
-        <div class="flex items-center gap-2.5 min-w-0">
+     it mobile-only even after that reveal (this is the ONLY breakpoint
+     this component ever renders at, so no responsive variants are needed
+     below — the centered layout is simply the layout, not a mobile
+     override of some wider one).
+     Content is centered (icon+text row, button below) rather than the
+     previous edge-to-edge `justify-between` — that pushed the button to
+     the far right, reading as a stray "corner" element on narrow screens
+     instead of a single centered call-to-action. Safe-area insets guard
+     the sides for landscape/notched phones. --}}
+<div id="pwaInstallBanner" class="hidden md:hidden bg-leaf/10 border-b border-leaf/20 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+    <div class="max-w-6xl mx-auto px-4 py-2.5 flex flex-col items-center justify-center gap-2 text-center">
+        <div class="flex items-center gap-2.5 justify-center">
             <img src="{{ asset('images/icons/icon-192.png') }}" alt="" width="32" height="32" class="w-8 h-8 rounded-lg shrink-0" aria-hidden="true">
-            <p class="text-sm text-ink truncate">MetaSoft BD অ্যাপ হিসেবে ইনস্টল করুন</p>
+            <p class="text-sm text-ink">MetaSoft BD অ্যাপ হিসেবে ইনস্টল করুন</p>
         </div>
         <button type="button" id="pwaInstallBtn"
                 class="shrink-0 flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-btn bg-leaf text-white hover:bg-leafdk active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
@@ -601,6 +609,17 @@
                             <x-ui.icon name="{{ $plan->allow_custom_domain ? 'shield-check' : 'globe' }}" class="w-4.5 h-4.5 {{ $plan->allow_custom_domain ? 'text-leaf' : 'text-mute' }} shrink-0 mt-0.5" />
                             {{ $plan->allow_custom_domain ? 'নিজের ডোমেইন (myshop.com)' : 'কাস্টম ডোমেইন নেই' }}
                         </li>
+                        {{-- Super Admin-configured feature list (config/features.php +
+                             plans.features) — never hardcoded per-plan here. A plan with
+                             none configured yet (or before chunk27.sql is imported)
+                             simply shows every feature as "not included", which is
+                             accurate, not broken. --}}
+                        @foreach (config('features.list') as $featureKey => $featureLabel)
+                            <li class="flex items-start gap-2.5 {{ ! $plan->hasFeature($featureKey) ? 'opacity-50' : '' }}">
+                                <x-ui.icon name="{{ $plan->hasFeature($featureKey) ? 'shield-check' : 'x' }}" class="w-4.5 h-4.5 {{ $plan->hasFeature($featureKey) ? 'text-leaf' : 'text-mute' }} shrink-0 mt-0.5" />
+                                {{ $featureLabel }}
+                            </li>
+                        @endforeach
                     </ul>
 
                     <x-ui.button
@@ -723,7 +742,7 @@
         <div class="py-12 grid md:grid-cols-3 gap-10">
             <div>
                 <div class="flex items-center gap-2">
-                    <span class="w-8 h-8 rounded bg-leaf grid place-items-center text-white font-bold text-lg">M</span>
+                    <x-ui.brand-mark size="sm" />
                     <span class="font-disp font-bold text-white text-lg">MetaSoft BD</span>
                 </div>
                 <p class="mt-3 max-w-xs leading-relaxed">বাংলাদেশের ব্যবসার জন্য বিজনেস অটোমেশন প্ল্যাটফর্ম।</p>
