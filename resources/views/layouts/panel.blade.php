@@ -113,12 +113,14 @@
                         $tenant->plan?->allow_pos ? ['tenant.pos', 'POS বিক্রি', 'calculator'] : null,
                         ['tenant.orders.index', 'অর্ডার', 'receipt'],
                         ['tenant.incomplete', 'অসম্পূর্ণ অর্ডার', 'phone-missed'],
-                        // Unified Inbox (Phase 5) — added alongside the
-                        // existing Messenger-only link below, not replacing
-                        // it, so tenants already using it keep the exact
-                        // same workflow unchanged.
+                        // The WhatsApp-style unified inbox (Messenger +
+                        // WhatsApp together, filterable by channel) is now
+                        // the one primary nav entry for messaging — the
+                        // older Messenger-only list (tenant.messenger.index)
+                        // is intentionally not linked here anymore, per the
+                        // inbox redesign. Its route/controller/view are
+                        // untouched and still work if reached directly.
                         ['tenant.inbox', 'ইনবক্স', 'inbox'],
-                        ['tenant.messenger.index', 'মেসেঞ্জার ইনবক্স', 'message-circle'],
                     ]),
                     'প্রোডাক্ট' => [
                         ['tenant.products.index', 'প্রোডাক্ট', 'package'],
@@ -241,12 +243,13 @@
     @php
         // POS stays fully available (desktop sidebar + mobile hamburger menu,
         // routes/controller/permissions untouched) — this bottom bar is only a
-        // quick-access shortcut row, and Messenger is the more frequently
-        // needed shortcut there on mobile.
+        // quick-access shortcut row, and the inbox is the more frequently
+        // needed shortcut there on mobile. Points at the unified inbox
+        // (Messenger + WhatsApp) now, same nav-demotion as the sidebar above.
         $mobileTabs = [
             ['tenant.dashboard', 'হোম', 'layout-dashboard'],
             ['tenant.orders.index', 'অর্ডার', 'receipt'],
-            ['tenant.messenger.index', 'মেসেঞ্জার', 'message-circle'],
+            ['tenant.inbox', 'ইনবক্স', 'inbox'],
             ['tenant.customers.index', 'কাস্টমার', 'users'],
             ['tenant.settings', 'সেটিংস', 'settings'],
         ];

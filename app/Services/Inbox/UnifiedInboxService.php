@@ -25,15 +25,21 @@ use Illuminate\Support\Collection;
 class UnifiedInboxService
 {
     /**
+     * @param  ?string  $search  Matches conversations with at least one message whose
+     *   customer_name or platform id (sender_psid/wa_id) contains this string — a
+     *   "any message in the conversation," not just latest-message, semantic. Honest
+     *   about that limitation rather than pretending it's a full-text search.
+     * @param  bool  $unreadOnly  Applied as a HAVING on each channel's grouped query
+     *   (not a client-side post-filter) so keyset pagination stays correct across pages.
      * @return array{conversations: Collection<int, UnifiedConversation>, nextCursor: ?string, hasMore: bool}
      */
-    public function paginate(?string $cursor, int $perPage = 20, ?string $channelFilter = null): array
+    public function paginate(?string $cursor, int $perPage = 20, ?string $channelFilter = null, ?string $search = null, bool $unreadOnly = false): array
     {
         [$cursorAt, $cursorId] = $this->decodeCursor($cursor);
 
         $messenger = ($channelFilter && $channelFilter !== 'messenger')
             ? collect()
-            : $this->fetchMessengerCandidates($cursorAt, $cursorId, $perPage);
+            : $this->fetchMessengerCandidates($cursorAt, $cursorId, $perPage, $search, $unreadOnly);
 
         // Guarded the same way every other WhatsApp-aware call site in this
         // codebase is (chunk26.sql may not be imported yet on a given
@@ -43,7 +49,7 @@ class UnifiedInboxService
         // reached WhatsApp at all yet.
         $whatsapp = ($channelFilter && $channelFilter !== 'whatsapp') || ! WhatsAppPhoneNumber::tablesReady()
             ? collect()
-            : $this->fetchWhatsAppCandidates($cursorAt, $cursorId, $perPage);
+            : $this->fetchWhatsAppCandidates($cursorAt, $cursorId, $perPage, $search, $unreadOnly);
 
         // Both inputs are already sorted DESC individually — a stable sort
         // on a zero-padded (timestamp, id) composite key gives a correct
@@ -90,13 +96,19 @@ class UnifiedInboxService
     /**
      * @return Collection<int, UnifiedConversation>
      */
-    protected function fetchMessengerCandidates(?int $cursorAt, ?int $cursorId, int $limit): Collection
+    protected function fetchMessengerCandidates(?int $cursorAt, ?int $cursorId, int $limit, ?string $search = null, bool $unreadOnly = false): Collection
     {
         $query = MessengerMessage::query()
-            ->selectRaw('sender_psid, MAX(id) as latest_id, MAX(created_at) as last_at')
+            ->selectRaw('sender_psid, MAX(id) as latest_id, MAX(created_at) as last_at, SUM(CASE WHEN status = "new" AND direction = "in" THEN 1 ELSE 0 END) as unread_c')
             ->groupBy('sender_psid');
 
+        $this->applySearchFilter($query, 'sender_psid', $search);
+
         $this->applyCursorHaving($query, $cursorAt, $cursorId);
+
+        if ($unreadOnly) {
+            $query->having('unread_c', '>', 0);
+        }
 
         $candidates = $query->orderByRaw('last_at DESC, latest_id DESC')->limit($limit)->get();
 
@@ -141,13 +153,19 @@ class UnifiedInboxService
     /**
      * @return Collection<int, UnifiedConversation>
      */
-    protected function fetchWhatsAppCandidates(?int $cursorAt, ?int $cursorId, int $limit): Collection
+    protected function fetchWhatsAppCandidates(?int $cursorAt, ?int $cursorId, int $limit, ?string $search = null, bool $unreadOnly = false): Collection
     {
         $query = WhatsAppMessage::query()
-            ->selectRaw('wa_id, MAX(id) as latest_id, MAX(created_at) as last_at')
+            ->selectRaw('wa_id, MAX(id) as latest_id, MAX(created_at) as last_at, SUM(CASE WHEN status = "new" AND direction = "in" THEN 1 ELSE 0 END) as unread_c')
             ->groupBy('wa_id');
 
+        $this->applySearchFilter($query, 'wa_id', $search);
+
         $this->applyCursorHaving($query, $cursorAt, $cursorId);
+
+        if ($unreadOnly) {
+            $query->having('unread_c', '>', 0);
+        }
 
         $candidates = $query->orderByRaw('last_at DESC, latest_id DESC')->limit($limit)->get();
 
@@ -184,6 +202,30 @@ class UnifiedInboxService
                 showUrl: route('tenant.whatsapp.show', $c->wa_id),
             );
         })->values();
+    }
+
+    /**
+     * Pre-filters the grouped query to only the conversation ids that have at
+     * least one message matching $search on customer_name or the platform id
+     * itself — applied as a whereIn() ahead of the GROUP BY, not a HAVING on
+     * a resolved name (the grouped query has no resolved-name column to
+     * HAVING against, since name resolution happens in a separate lookup
+     * after candidates are picked). Same idColumn/model-agnostic shape for
+     * both channels so this isn't duplicated per fetch*Candidates() method.
+     */
+    protected function applySearchFilter($query, string $idColumn, ?string $search): void
+    {
+        if (! $search) {
+            return;
+        }
+
+        $modelClass = get_class($query->getModel());
+
+        $matchingIds = $modelClass::where(fn ($q) => $q->where('customer_name', 'like', "%{$search}%")
+            ->orWhere($idColumn, 'like', "%{$search}%"))
+            ->distinct()->pluck($idColumn);
+
+        $query->whereIn($idColumn, $matchingIds);
     }
 
     protected function applyCursorHaving($query, ?int $cursorAt, ?int $cursorId): void

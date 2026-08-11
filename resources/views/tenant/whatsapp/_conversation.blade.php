@@ -1,0 +1,60 @@
+{{--
+    Center (thread + reply composer) + right (customer info) panes for one
+    WhatsApp conversation — the part that gets swapped in place when a
+    conversation row is clicked (WhatsAppInboxController::show()'s ?panel=1
+    branch returns just this), and also included as-is inside the full page
+    (whatsapp/show.blade.php). Root node carries the data-* attributes the
+    shell's JS reads after a swap to (re)start polling for the right
+    conversation. Expects the same $waId/$messages/$customer/$connected/
+    $linkedOrder/$matchedCustomer the controller's show() already computes.
+--}}
+<div id="conversationArea" data-conversation-key="whatsapp:{{ $waId }}" data-updates-url="{{ route('tenant.whatsapp.updates') }}" data-external-id="{{ $waId }}" data-channel="whatsapp">
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3 min-w-0">
+            <x-ui.avatar :name="$customer->customer_name" size="sm" class="lg:hidden" />
+            <div class="min-w-0">
+                <h1 class="font-disp font-bold text-lg truncate">{{ $customer->customer_name ?: 'অজানা কাস্টমার' }}</h1>
+                <p class="text-xs text-mute">WhatsApp: {{ $waId }}</p>
+            </div>
+        </div>
+        <a href="{{ route('tenant.inbox') }}" class="lg:hidden text-sm text-mute hover:text-ink shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">← তালিকা</a>
+    </div>
+
+    @if (! $connected)
+        <x-ui.card tone="amber" padding="sm" class="text-sm mb-4">
+            এই WhatsApp নম্বরটি বর্তমানে ডিসকানেক্টেড — রিপ্লাই পাঠানো যাবে না। <a href="{{ route('tenant.settings') }}" class="text-leafdk font-semibold hover:underline">সেটিংসে গিয়ে আবার কানেক্ট করুন</a>।
+        </x-ui.card>
+    @endif
+
+    <div class="grid lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2">
+            <x-ui.card>
+                @include('tenant.whatsapp._thread', ['messages' => $messages])
+            </x-ui.card>
+
+            <form method="POST" action="{{ route('tenant.whatsapp.reply', $waId) }}" enctype="multipart/form-data" class="mt-4 space-y-1.5">
+                @csrf
+                <div class="flex gap-2">
+                    <input name="message" placeholder="রিপ্লাই লিখুন..." class="flex-1 rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                    <label class="shrink-0 flex items-center justify-center w-10 h-10 rounded-btn border border-ink/15 cursor-pointer hover:bg-paper transition" title="ছবি যুক্ত করুন">
+                        🖼️
+                        <input type="file" name="image" accept="image/*" class="hidden" onchange="document.getElementById('waImgFileName').textContent = this.files[0] ? '📎 ' + this.files[0].name : ''">
+                    </label>
+                    <x-ui.button type="submit" variant="accent" size="sm">পাঠান</x-ui.button>
+                </div>
+                <p id="waImgFileName" class="text-xs text-mute"></p>
+            </form>
+        </div>
+
+        @include('tenant.inbox._customer_panel', [
+            'channel' => 'whatsapp',
+            'externalId' => $waId,
+            'customerName' => $customer->customer_name,
+            'statusValue' => $customer->status,
+            'statusUpdateUrl' => route('tenant.whatsapp.status', $waId),
+            'linkedOrder' => $linkedOrder,
+            'matchedCustomer' => $matchedCustomer,
+            'newOrderCreateUrl' => route('tenant.orders.create', ['name' => $customer->customer_name, 'channel' => 'whatsapp']),
+        ])
+    </div>
+</div>

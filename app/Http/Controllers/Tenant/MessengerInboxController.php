@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
+use App\Models\Customer;
 use App\Models\FacebookPage;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\Order;
 use App\Services\ImageOptimizer;
+use App\Services\Inbox\UnifiedInboxService;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Http\Request;
 
@@ -38,7 +40,8 @@ class MessengerInboxController extends Controller
         ]);
     }
 
-    public function show(string $psid)
+    /** Same ?panel=1 partial-response convention as WhatsAppInboxController::show() — see its docblock. */
+    public function show(Request $request, string $psid, UnifiedInboxService $inbox)
     {
         $messages = MessengerMessage::where('sender_psid', $psid)
             ->orderBy('created_at')->get();
@@ -55,11 +58,34 @@ class MessengerInboxController extends Controller
             $customer->customer_name = $resolvedName;
         }
 
-        return view('tenant.messenger.show', [
+        $linkedOrder = Order::where('messenger_psid', $psid)->latest()->first();
+
+        // Messenger conversations carry no phone number at all (Facebook's
+        // psid isn't one) — a Customer match is only reachable indirectly,
+        // via a linked order's own customer_phone. No linked order means no
+        // possible match, not a failed lookup.
+        $matchedCustomer = $linkedOrder?->customer_phone
+            ? Customer::where('phone', $linkedOrder->customer_phone)->first()
+            : null;
+
+        $data = [
             'psid' => $psid,
             'messages' => $messages,
             'customer' => $customer,
-            'linkedOrder' => Order::where('messenger_psid', $psid)->latest()->first(),
+            'linkedOrder' => $linkedOrder,
+            'matchedCustomer' => $matchedCustomer,
+        ];
+
+        if ($request->query('panel') === '1') {
+            return view('tenant.messenger._conversation', $data);
+        }
+
+        $list = $inbox->paginate(null, 20);
+
+        return view('tenant.messenger.show', $data + [
+            'listConversations' => $list['conversations'],
+            'listNextCursor' => $list['nextCursor'],
+            'listHasMore' => $list['hasMore'],
         ]);
     }
 

@@ -1,63 +1,23 @@
 @extends('layouts.panel')
 @section('title', 'ইনবক্স')
 @section('content')
-<h1 class="font-disp font-bold text-2xl mb-2">📥 ইনবক্স</h1>
-<p class="text-xs text-mute mb-4">Messenger ও WhatsApp — দুই চ্যানেলের কনভারসেশন একসাথে, নতুন মেসেজ আগে।</p>
+<div class="grid lg:grid-cols-[340px_1fr] gap-0 lg:gap-6">
+    <div class="lg:h-[calc(100vh-140px)] lg:sticky lg:top-20 border border-ink/10 rounded-card overflow-hidden bg-white">
+        @include('tenant.inbox._list', [
+            'conversations' => $conversations, 'nextCursor' => $nextCursor, 'hasMore' => $hasMore,
+            'channel' => $channel, 'search' => $search, 'unread' => $unread, 'activeConversationKey' => null,
+        ])
+    </div>
 
-<div class="flex gap-2 mb-4">
-    @php
-        $tabs = ['' => 'সব', 'messenger' => 'Messenger', 'whatsapp' => 'WhatsApp'];
-    @endphp
-    @foreach ($tabs as $value => $label)
-        <a href="{{ route('tenant.inbox', $value ? ['channel' => $value] : []) }}"
-           class="px-3 py-1.5 rounded-pill text-xs font-semibold transition {{ ($channel ?? '') === $value ? 'bg-ink text-white' : 'bg-paper text-mute hover:bg-ink/5' }}">
-            {{ $label }}
-        </a>
-    @endforeach
-</div>
-
-<x-ui.card id="unifiedConversationList" padding="none" class="divide-y divide-ink/5"
-    data-next-cursor="{{ $nextCursor }}"
-    data-has-more="{{ $hasMore ? '1' : '0' }}"
-    data-channel="{{ $channel }}"
-    data-more-url="{{ route('tenant.inbox.more') }}">
-    @forelse ($conversations as $c)
-        @php
-            $isWhatsapp = $c->channel === 'whatsapp';
-            $channelBadge = $isWhatsapp ? ['🟢', 'WhatsApp'] : ['🔵', 'Messenger'];
-            $attachmentPreview = ['image' => '📷 ছবি পাঠিয়েছে', 'audio' => '🎤 অডিও পাঠিয়েছে', 'video' => '🎥 ভিডিও পাঠিয়েছে', 'document' => '📄 ডকুমেন্ট পাঠিয়েছে', 'sticker' => '🌟 স্টিকার পাঠিয়েছে'][$c->lastMessageAttachmentType] ?? '📎 ফাইল পাঠিয়েছে';
-        @endphp
-        <a id="conv-{{ $c->conversationKey() }}" href="{{ $c->showUrl }}"
-           class="conv-row flex items-center justify-between px-5 py-4 hover:bg-paper/60 transition {{ $c->status === 'new' ? 'bg-leaf/5' : '' }}">
-            <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                    <span class="text-xs shrink-0" title="{{ $channelBadge[1] }}">{{ $channelBadge[0] }} {{ $channelBadge[1] }}</span>
-                    <p class="conv-name font-medium truncate">{{ $c->customerName ?: 'অজানা কাস্টমার' }}</p>
-                    <span class="conv-dot w-2 h-2 rounded-full bg-leaf {{ $c->status === 'new' ? '' : 'hidden' }}"></span>
-                </div>
-                <p class="conv-msg text-sm text-mute truncate max-w-md">
-                    {{ $c->lastMessageDirection === 'out' ? 'আপনি: ' : '' }}{{ $c->lastMessageText ?: $attachmentPreview }}
-                </p>
-            </div>
-            <div class="text-right shrink-0 ml-3">
-                <p class="conv-time text-xs text-mute">{{ $c->lastMessageAt->diffForHumans() }}</p>
-                <span class="conv-status text-xs px-2.5 py-1 rounded-pill font-semibold {{ ['new' => 'bg-leaf/10 text-leafdk', 'contacted' => 'bg-amber/15 text-ink', 'converted' => 'bg-ink/5 text-mute', 'ignored' => 'bg-red-50 text-red-600'][$c->status] ?? '' }}">
-                    {{ ['new' => 'নতুন', 'contacted' => 'যোগাযোগ হয়েছে', 'converted' => 'অর্ডারে রূপান্তরিত', 'ignored' => 'বাদ'][$c->status] ?? $c->status }}
-                </span>
-            </div>
-        </a>
-    @empty
-        <div id="unifiedEmptyState" class="px-5 py-16 text-center text-mute text-sm">
-            <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-3 text-mute/40"></i>
-            এখনো কোনো মেসেজ আসেনি।
+    <div id="conversationPane" class="hidden lg:flex min-w-0 items-center justify-center lg:h-[calc(100vh-140px)] text-center text-mute">
+        <div>
+            <i data-lucide="message-square" class="w-10 h-10 mx-auto mb-3 text-mute/40"></i>
+            <p class="text-sm">একটি কনভারসেশন বেছে নিন</p>
         </div>
-    @endforelse
-</x-ui.card>
-
-<div class="mt-4 text-center">
-    <x-ui.button type="button" id="loadMoreBtn" variant="outline" size="sm" class="{{ $hasMore ? '' : 'hidden' }}">আরও দেখুন</x-ui.button>
+    </div>
 </div>
 
+@include('tenant.inbox._shell_scripts')
 @push('scripts')
 <script>
 (function () {
@@ -67,12 +27,17 @@
 
     let cursor = container.dataset.nextCursor || '';
     const channel = container.dataset.channel || '';
+    const search = container.dataset.search || '';
+    const unread = container.dataset.unread === '1';
     const moreUrl = container.dataset.moreUrl;
 
-    const statusLabel = { new: 'নতুন', contacted: 'যোগাযোগ হয়েছে', converted: 'অর্ডারে রূপান্তরিত', ignored: 'বাদ' };
-    const statusClass = { new: 'bg-leaf/10 text-leafdk', contacted: 'bg-amber/15 text-ink', converted: 'bg-ink/5 text-mute', ignored: 'bg-red-50 text-red-600' };
-    const attachmentPreview = { image: '📷 ছবি পাঠিয়েছে', audio: '🎤 অডিও পাঠিয়েছে', video: '🎥 ভিডিও পাঠিয়েছে', document: '📄 ডকুমেন্ট পাঠিয়েছে', sticker: '🌟 স্টিকার পাঠিয়েছে' };
-    const channelBadge = { messenger: '🔵 Messenger', whatsapp: '🟢 WhatsApp' };
+    const attachmentPreview = { image: '📷 ছবি', audio: '🎤 অডিও', video: '🎥 ভিডিও', document: '📄 ডকুমেন্ট', sticker: '🌟 স্টিকার' };
+    const channelBadge = { messenger: '🔵', whatsapp: '🟢' };
+
+    function initials(name) {
+        const label = (name || '').trim();
+        return label ? label[0].toUpperCase() : '?';
+    }
 
     function appendRow(c) {
         document.getElementById('unifiedEmptyState')?.remove();
@@ -80,28 +45,39 @@
         const row = document.createElement('a');
         row.id = 'conv-' + c.conversation_key;
         row.href = c.show_url;
-        row.className = 'conv-row flex items-center justify-between px-5 py-4 hover:bg-paper/60 transition' + (c.status === 'new' ? ' bg-leaf/5' : '');
+        row.dataset.showUrl = c.show_url;
+        row.dataset.conversationKey = c.conversation_key;
+        row.className = 'conv-row flex items-center gap-3 px-4 py-3 hover:bg-paper/60 transition';
         row.innerHTML = `
+            <span class="relative shrink-0">
+                <span class="inline-flex items-center justify-center rounded-full font-bold shrink-0 w-11 h-11 text-sm bg-ink/5 text-ink"></span>
+                <span class="absolute -bottom-0.5 -right-0.5 text-[10px] leading-none bg-white rounded-full"></span>
+            </span>
             <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                    <span class="text-xs shrink-0"></span>
-                    <p class="conv-name font-medium truncate"></p>
-                    <span class="conv-dot w-2 h-2 rounded-full bg-leaf ${c.status === 'new' ? '' : 'hidden'}"></span>
+                <div class="flex items-center justify-between gap-2">
+                    <p class="conv-name truncate"></p>
+                    <p class="conv-time text-[11px] text-mute shrink-0"></p>
                 </div>
-                <p class="conv-msg text-sm text-mute truncate max-w-md"></p>
-            </div>
-            <div class="text-right shrink-0 ml-3">
-                <p class="conv-time text-xs text-mute"></p>
-                <span class="conv-status text-xs px-2.5 py-1 rounded-pill font-semibold"></span>
+                <div class="flex items-center justify-between gap-2 mt-0.5">
+                    <p class="conv-msg text-xs text-mute truncate"></p>
+                    <span class="conv-unread hidden shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-leaf text-white text-[10px] font-bold items-center justify-center"></span>
+                </div>
             </div>`;
 
-        row.querySelector('.text-xs.shrink-0').textContent = channelBadge[c.channel] || c.channel;
+        row.querySelector('.rounded-full.font-bold').textContent = initials(c.customer_name);
+        row.querySelector('span.absolute').textContent = channelBadge[c.channel] || '';
         row.querySelector('.conv-name').textContent = c.customer_name || 'অজানা কাস্টমার';
-        row.querySelector('.conv-msg').textContent = (c.direction === 'out' ? 'আপনি: ' : '') + (c.message_text || attachmentPreview[c.attachment_type] || '📎 ফাইল পাঠিয়েছে');
-        row.querySelector('.conv-time').textContent = c.time_label;
-        const statusEl = row.querySelector('.conv-status');
-        statusEl.textContent = statusLabel[c.status] || c.status;
-        statusEl.className = 'conv-status text-xs px-2.5 py-1 rounded-pill font-semibold ' + (statusClass[c.status] || '');
+        row.querySelector('.conv-name').className = 'conv-name truncate ' + (c.unread_count > 0 ? 'font-bold text-ink' : 'font-medium text-ink/90');
+        row.querySelector('.conv-msg').textContent = (c.direction === 'out' ? 'আপনি: ' : '') + (c.message_text || attachmentPreview[c.attachment_type] || '📎 ফাইল');
+        row.querySelector('.conv-msg').className = 'conv-msg text-xs truncate ' + (c.unread_count > 0 ? 'text-ink/80 font-medium' : 'text-mute');
+        row.querySelector('.conv-time').textContent = c.time_label || '';
+
+        if (c.unread_count > 0) {
+            const badge = row.querySelector('.conv-unread');
+            badge.textContent = c.unread_count > 99 ? '99+' : c.unread_count;
+            badge.classList.remove('hidden');
+            badge.classList.add('flex');
+        }
 
         container.appendChild(row);
     }
@@ -113,6 +89,8 @@
         try {
             const params = new URLSearchParams({ cursor });
             if (channel) params.set('channel', channel);
+            if (search) params.set('search', search);
+            if (unread) params.set('unread', '1');
 
             const res = await fetch(`${moreUrl}?${params.toString()}`, { headers: { Accept: 'application/json' } });
             if (!res.ok) return;
@@ -120,7 +98,7 @@
 
             (data.conversations || []).forEach(appendRow);
             cursor = data.next_cursor || '';
-            loadMoreBtn.classList.toggle('hidden', !data.has_more);
+            document.getElementById('loadMoreWrap')?.classList.toggle('hidden', !data.has_more);
         } catch (e) {
             // silent — tenant can just click again
         } finally {

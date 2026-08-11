@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
+use App\Models\Customer;
+use App\Models\Order;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
 use App\Services\ImageOptimizer;
+use App\Services\Inbox\UnifiedInboxService;
 use App\Services\WhatsApp\WhatsAppMediaService;
 use App\Services\WhatsApp\WhatsAppSendService;
 use Illuminate\Http\Request;
@@ -21,7 +24,18 @@ use Illuminate\Http\Request;
  */
 class WhatsAppInboxController extends Controller
 {
-    public function show(string $waId)
+    /**
+     * ?panel=1 (set by the inbox shell's row-click fetch-swap, see
+     * resources/views/tenant/inbox/_shell_scripts.blade.php) returns ONLY
+     * the center+right conversation partial — no layout, no list pane — so
+     * the shell can inject it into an already-loaded page without a full
+     * reload. Absent (a normal link click, direct link, bookmark, or
+     * shared URL), this renders the complete page exactly as before this
+     * redesign: same route, same controller action, genuinely the same
+     * page at that URL either way — the only difference is how much of it
+     * comes back.
+     */
+    public function show(Request $request, string $waId, UnifiedInboxService $inbox)
     {
         $messages = WhatsAppMessage::where('wa_id', $waId)
             ->orderBy('created_at')->get();
@@ -37,12 +51,58 @@ class WhatsAppInboxController extends Controller
             $customer->customer_name = $resolvedName;
         }
 
-        return view('tenant.whatsapp.show', [
+        // wa_id IS a phone number, so it can be matched against orders/
+        // customers by phone without any schema change — but its digits-only
+        // international format ("8801700000000") commonly differs from how
+        // a phone got typed into an order ("01700000000"), so both forms are
+        // tried. Best-effort: a genuine format mismatch beyond the 880/0
+        // prefix (spacing, a different number entirely) will still miss —
+        // "no linked order shown" must never be read as "definitely none."
+        $phoneCandidates = $this->phoneCandidates($waId);
+
+        $data = [
             'waId' => $waId,
             'messages' => $messages,
             'customer' => $customer,
             'connected' => WhatsAppPhoneNumber::where('is_active', 1)->where('status', 'active')->exists(),
+            'linkedOrder' => Order::whereIn('customer_phone', $phoneCandidates)->latest()->first(),
+            'matchedCustomer' => Customer::whereIn('phone', $phoneCandidates)->first(),
+        ];
+
+        if ($request->query('panel') === '1') {
+            return view('tenant.whatsapp._conversation', $data);
+        }
+
+        // Unfiltered, all-channels list — the left pane shown alongside an
+        // already-open conversation always shows the full inbox regardless
+        // of whatever filter/search was active on tenant.inbox when this
+        // conversation was opened from there (search/filter state isn't
+        // carried across navigation in this pass — see _list.blade.php's
+        // docblock for the same known limitation).
+        $list = $inbox->paginate(null, 20);
+
+        return view('tenant.whatsapp.show', $data + [
+            'listConversations' => $list['conversations'],
+            'listNextCursor' => $list['nextCursor'],
+            'listHasMore' => $list['hasMore'],
         ]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function phoneCandidates(string $rawId): array
+    {
+        $digits = preg_replace('/\D/', '', $rawId) ?? '';
+        $candidates = [$digits];
+
+        if (str_starts_with($digits, '880') && strlen($digits) > 10) {
+            $candidates[] = '0'.substr($digits, 3); // 8801700000000 -> 01700000000
+        } elseif (str_starts_with($digits, '0')) {
+            $candidates[] = '880'.substr($digits, 1); // 01700000000 -> 8801700000000
+        }
+
+        return array_values(array_unique($candidates));
     }
 
     public function reply(Request $request, string $waId, WhatsAppSendService $service)

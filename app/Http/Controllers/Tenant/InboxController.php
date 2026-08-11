@@ -18,13 +18,17 @@ class InboxController extends Controller
     public function index(Request $request, UnifiedInboxService $inbox)
     {
         $channel = $this->normalizeChannel($request->query('channel'));
-        $result = $inbox->paginate(null, 20, $channel);
+        $search = $this->normalizeSearch($request->query('search'));
+        $unread = $request->boolean('unread');
+        $result = $inbox->paginate(null, 20, $channel, $search, $unread);
 
         return view('tenant.inbox.index', [
             'conversations' => $result['conversations'],
             'nextCursor' => $result['nextCursor'],
             'hasMore' => $result['hasMore'],
             'channel' => $channel,
+            'search' => $search,
+            'unread' => $unread,
         ]);
     }
 
@@ -32,7 +36,9 @@ class InboxController extends Controller
     public function more(Request $request, UnifiedInboxService $inbox)
     {
         $channel = $this->normalizeChannel($request->query('channel'));
-        $result = $inbox->paginate($request->query('cursor'), 20, $channel);
+        $search = $this->normalizeSearch($request->query('search'));
+        $unread = $request->boolean('unread');
+        $result = $inbox->paginate($request->query('cursor'), 20, $channel, $search, $unread);
 
         return response()->json([
             'conversations' => $result['conversations']->map(fn ($c) => $c->toArray())->values(),
@@ -44,5 +50,12 @@ class InboxController extends Controller
     protected function normalizeChannel(?string $channel): ?string
     {
         return in_array($channel, ['messenger', 'whatsapp'], true) ? $channel : null;
+    }
+
+    protected function normalizeSearch(?string $search): ?string
+    {
+        $search = trim((string) $search);
+
+        return $search === '' ? null : $search;
     }
 }
