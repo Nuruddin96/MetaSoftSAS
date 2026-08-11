@@ -55,6 +55,12 @@ class SettingController extends Controller
             'whatsappAccount' => $whatsappAccount,
             'whatsappPhoneNumbers' => $whatsappPhoneNumbers,
             'whatsappConnectState' => $whatsappConnectState,
+            // Cosmetic mirror of the server-side 'feature:whatsapp' route
+            // gate (EnsureFeatureEnabled) — this only decides what the
+            // Connect button looks like; the actual enforcement lives in the
+            // middleware, same "UI reflects it, server enforces it" split as
+            // the custom-domain card below (($tenant->plan?->allow_custom_domain).
+            'whatsappFeatureEnabled' => (bool) $tenant->plan?->hasFeature('whatsapp'),
             'tenant' => $tenant,
             'couriers' => CourierSetting::get()->keyBy('provider'),
             'marketing' => MarketingSetting::firstOrNew(['tenant_id' => app('currentTenant')->id]),

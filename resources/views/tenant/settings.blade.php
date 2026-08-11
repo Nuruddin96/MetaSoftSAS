@@ -126,7 +126,14 @@
             $waActiveNumbers = $whatsappPhoneNumbers->where('is_active', true);
         @endphp
 
-        @if (! $whatsappAccount)
+        @if (! $whatsappAccount && ! $whatsappFeatureEnabled)
+            {{-- Not connected, and this plan doesn't include WhatsApp — same
+                 "explain + link to upgrade" shape as the custom-domain card
+                 below, rather than a Connect button that would just 403/
+                 redirect back with an error via 'feature:whatsapp'. --}}
+            <p class="text-xs text-mute mb-4">এই ফিচারটি আপনার বর্তমান প্ল্যানে অন্তর্ভুক্ত নেই। <a href="{{ route('tenant.billing') }}" class="text-leaf hover:underline">আপগ্রেড করুন</a>।</p>
+
+        @elseif (! $whatsappAccount)
             {{-- Not Connected --}}
             <x-ui.button type="button" id="whatsappConnectBtn" variant="accent" size="sm"
                 data-state="{{ $whatsappConnectState->state ?? '' }}"
@@ -140,16 +147,23 @@
         @elseif ($waActiveNumbers->isEmpty())
             {{-- WABA connected but no active number (disconnected earlier, or the previous attempt never finished) --}}
             <p class="text-sm text-leafdk mb-3">✅ WhatsApp Business Account কানেক্ট করা হয়েছে — এখন একটি নম্বর কানেক্ট করুন।</p>
-            <x-ui.button type="button" id="whatsappConnectBtn" variant="accent" size="sm"
-                data-state="{{ $whatsappConnectState->state ?? '' }}"
-                data-app-id="{{ config('facebook.app_id') }}"
-                data-config-id="{{ config('whatsapp.embedded_signup_config_id') }}"
-                data-graph-version="{{ config('whatsapp.graph_version') }}"
-                data-complete-url="{{ route('tenant.whatsapp.connect.complete') }}">
-                Connect Number
-            </x-ui.button>
+            @if ($whatsappFeatureEnabled)
+                <x-ui.button type="button" id="whatsappConnectBtn" variant="accent" size="sm"
+                    data-state="{{ $whatsappConnectState->state ?? '' }}"
+                    data-app-id="{{ config('facebook.app_id') }}"
+                    data-config-id="{{ config('whatsapp.embedded_signup_config_id') }}"
+                    data-graph-version="{{ config('whatsapp.graph_version') }}"
+                    data-complete-url="{{ route('tenant.whatsapp.connect.complete') }}">
+                    Connect Number
+                </x-ui.button>
+            @else
+                <p class="text-xs text-mute">এই ফিচারটি আপনার বর্তমান প্ল্যানে অন্তর্ভুক্ত নেই। <a href="{{ route('tenant.billing') }}" class="text-leaf hover:underline">আপগ্রেড করুন</a>।</p>
+            @endif
 
         @else
+            @unless ($whatsappFeatureEnabled)
+                <p class="text-xs text-amber-700 mb-3">⚠️ আপনার বর্তমান প্ল্যানে এই ফিচারটি আর অন্তর্ভুক্ত নেই — বিদ্যমান সংযোগ দেখা ও ডিসকানেক্ট করা যাবে, কিন্তু পুনরায় কানেক্ট করতে <a href="{{ route('tenant.billing') }}" class="text-leaf hover:underline">আপগ্রেড</a> প্রয়োজন।</p>
+            @endunless
             <div class="space-y-3 mb-3">
                 @foreach ($waActiveNumbers as $waPhone)
                     <div class="border border-ink/10 rounded-btn p-3">
@@ -171,7 +185,7 @@
                         </div>
 
                         <div class="flex flex-wrap gap-2 mt-3">
-                            @if ($waPhone->status !== 'active')
+                            @if ($waPhone->status !== 'active' && $whatsappFeatureEnabled)
                                 <x-ui.button type="button" class="whatsapp-connect-btn" variant="accent" size="sm"
                                     data-state="{{ $whatsappConnectState->state ?? '' }}"
                                     data-app-id="{{ config('facebook.app_id') }}"

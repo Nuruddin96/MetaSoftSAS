@@ -321,7 +321,16 @@ $tenantRoutes = function () {
             // already-tenant-authenticated Settings page, so complete()
             // stays a normal panel route. See WhatsAppConnectController's
             // docblock for why.
-            Route::post('whatsapp/connect', [WhatsAppConnectController::class, 'complete'])->name('whatsapp.connect.complete');
+            //
+            // 'feature:whatsapp' gates connecting and using the inbox behind
+            // the tenant's Plan (config/features.php + Plan::hasFeature()) —
+            // disconnect is deliberately NOT gated, same reasoning
+            // CheckSubscription always allows tenant.billing/tenant.logout:
+            // a tenant who loses the feature (downgrade, or was never
+            // granted it) must still be able to turn an existing connection
+            // off, not get stuck unable to reach the one action that exits
+            // the feature.
+            Route::post('whatsapp/connect', [WhatsAppConnectController::class, 'complete'])->middleware('feature:whatsapp')->name('whatsapp.connect.complete');
             Route::post('whatsapp/{phone}/disconnect', [WhatsAppConnectController::class, 'disconnect'])->name('whatsapp.disconnect');
 
             // WhatsApp inbox (Phase 5) — channel-native thread view, mirrors
@@ -329,10 +338,17 @@ $tenantRoutes = function () {
             // genuinely matches. 'updates' registered before the {waId}
             // wildcard so it isn't swallowed by it, same ordering Messenger
             // uses for messenger/updates vs messenger/{psid}.
-            Route::get('whatsapp/updates', [WhatsAppInboxController::class, 'updates'])->name('whatsapp.updates');
-            Route::get('whatsapp/{waId}', [WhatsAppInboxController::class, 'show'])->name('whatsapp.show');
-            Route::post('whatsapp/{waId}/reply', [WhatsAppInboxController::class, 'reply'])->name('whatsapp.reply');
-            Route::post('whatsapp/{waId}/status', [WhatsAppInboxController::class, 'updateStatus'])->name('whatsapp.status');
+            Route::middleware('feature:whatsapp')->group(function () {
+                Route::get('whatsapp/updates', [WhatsAppInboxController::class, 'updates'])->name('whatsapp.updates');
+                // Two segments ('whatsapp/media/{id}'), so this never collides
+                // with the single-segment 'whatsapp/{waId}' wildcard below
+                // regardless of registration order — kept next to 'updates'
+                // for the same "register the non-wildcard route first" clarity.
+                Route::get('whatsapp/media/{id}', [WhatsAppInboxController::class, 'media'])->name('whatsapp.media');
+                Route::get('whatsapp/{waId}', [WhatsAppInboxController::class, 'show'])->name('whatsapp.show');
+                Route::post('whatsapp/{waId}/reply', [WhatsAppInboxController::class, 'reply'])->name('whatsapp.reply');
+                Route::post('whatsapp/{waId}/status', [WhatsAppInboxController::class, 'updateStatus'])->name('whatsapp.status');
+            });
         });
     });
 

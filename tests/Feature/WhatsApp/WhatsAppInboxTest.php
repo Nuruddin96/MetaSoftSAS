@@ -230,7 +230,15 @@ class WhatsAppInboxTest extends WhatsAppFeatureTestCase
         $response->assertOk();
     }
 
-    public function test_inbound_media_without_a_url_renders_a_placeholder_not_a_broken_media_tag(): void
+    /**
+     * No raw_payload at all here (unlike a normal webhook-ingested row) —
+     * simulates a row with no resolvable Cloud API media id
+     * (WhatsAppMessage::inboundMediaId() returns null), which is the one
+     * case WhatsAppInboxController::media() can never proxy regardless of
+     * Meta's API being reachable. Still must render a safe placeholder, not
+     * a broken media tag or a blank bubble.
+     */
+    public function test_inbound_media_with_no_resolvable_media_id_renders_a_placeholder_not_a_broken_media_tag(): void
     {
         $tenant = $this->makeTenant();
         $user = $this->makeUser($tenant->id);
@@ -242,7 +250,24 @@ class WhatsAppInboxTest extends WhatsAppFeatureTestCase
         $response = $this->actingAs($user, 'tenant')->get($this->panelUrl($tenant, 'whatsapp/8801700000000'));
 
         $response->assertOk();
-        $response->assertSee('মিডিয়া এখনো ডাউনলোড করা হয়নি');
+        $response->assertSee('মিডিয়া লোড করা যায়নি');
+    }
+
+    /** The normal case (a real webhook-ingested row, raw_payload carries the media id) renders a live, proxied <img> instead of the placeholder. */
+    public function test_inbound_media_with_a_resolvable_media_id_renders_a_proxied_image_tag(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $message = WhatsAppMessage::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'wa_id' => '8801700000000', 'message_type' => 'image',
+            'attachment_type' => 'image', 'attachment_url' => null, 'direction' => 'in',
+            'raw_payload' => ['image' => ['id' => 'media-xyz', 'mime_type' => 'image/jpeg']],
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->get($this->panelUrl($tenant, 'whatsapp/8801700000000'));
+
+        $response->assertOk();
+        $response->assertSee(route('tenant.whatsapp.media', $message->id), false);
     }
 
     public function test_outbound_image_with_a_url_renders_a_real_image_tag(): void

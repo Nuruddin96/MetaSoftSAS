@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\CheckSubscription;
+use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\ResolveTenant;
 use Illuminate\Foundation\Application;
@@ -18,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'resolve.tenant' => ResolveTenant::class,
             'check.subscription' => CheckSubscription::class,
+            'feature' => EnsureFeatureEnabled::class,
         ]);
 
         // Must run before routing (not a route middleware) so a verified

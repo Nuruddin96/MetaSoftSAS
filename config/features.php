@@ -10,9 +10,11 @@
  * a new pattern for this codebase.
  *
  * Adding a feature here is enough for Super Admin configuration + landing-
- * page display (see Plan::hasFeature()). Nothing yet gates tenant-facing
- * functionality on these — that's deliberately a later phase, not built
- * here per the current scope.
+ * page display (see Plan::hasFeature()). Enforcement is opt-in per feature,
+ * not automatic just by listing a key here: 'whatsapp' is gated (routes/
+ * web.php's 'feature:whatsapp' middleware, App\Http\Middleware\
+ * EnsureFeatureEnabled) — every other key here is still display/marketing-
+ * only until a route/controller explicitly checks it the same way.
  */
 return [
     'list' => [

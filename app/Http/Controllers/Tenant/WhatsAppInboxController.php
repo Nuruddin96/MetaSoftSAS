@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
 use App\Services\ImageOptimizer;
+use App\Services\WhatsApp\WhatsAppMediaService;
 use App\Services\WhatsApp\WhatsAppSendService;
 use Illuminate\Http\Request;
 
@@ -122,6 +123,13 @@ class WhatsAppInboxController extends Controller
                     'message_type' => $m->message_type,
                     'message_text' => $m->message_text,
                     'attachment_url' => $m->attachment_url,
+                    // Live-proxied inbound media URL (WhatsAppMediaService via
+                    // media()), same fields the initial server-rendered thread
+                    // uses via WhatsAppMessage::inboundMediaId() — keeps the
+                    // JS poller's rendering in parity with _attachment.blade.php
+                    // instead of only ever showing the "not downloaded" text
+                    // for messages that arrive after the page first loaded.
+                    'inbound_media_url' => $m->inboundMediaId() ? route('tenant.whatsapp.media', $m->id) : null,
                     'attachment_type' => $m->attachment_type,
                     'attachment_name' => $m->attachment_name,
                     'delivery_status' => $m->delivery_status,
@@ -130,5 +138,35 @@ class WhatsAppInboxController extends Controller
         }
 
         return response()->json($response);
+    }
+
+    /**
+     * Streams an inbound media attachment through the Cloud API on demand
+     * (WhatsAppMediaService) — see that class's docblock for why this is a
+     * live proxy rather than a stored copy. Deliberately NOT a type-hinted
+     * {message} route parameter (no implicit model binding) — same
+     * SubstituteBindings-runs-before-resolve.tenant reasoning documented on
+     * WhatsAppConnectController::disconnect(): resolving inside the method
+     * body, after every middleware (including 'feature:whatsapp' and
+     * resolve.tenant) has run, is what makes WhatsAppMessage's
+     * BelongsToTenant scope genuinely apply, so a foreign tenant's message
+     * id correctly 404s instead of leaking another tenant's photo.
+     */
+    public function media(int $id, WhatsAppMediaService $service)
+    {
+        $message = WhatsAppMessage::with('phoneNumber.businessAccount')->findOrFail($id);
+
+        $mediaId = $message->inboundMediaId();
+        $token = $message->phoneNumber?->businessAccount?->user_access_token;
+
+        abort_if(! $mediaId || ! $token, 404);
+
+        $result = $service->fetch($mediaId, $token);
+
+        abort_if(! $result, 404);
+
+        return response($result['body'], 200)
+            ->header('Content-Type', $result['mimeType'])
+            ->header('Cache-Control', 'private, max-age=300');
     }
 }

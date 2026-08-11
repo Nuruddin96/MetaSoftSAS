@@ -24,9 +24,17 @@ use Illuminate\Support\Facades\Log;
  * from Messenger's (entry[].changes[].value.{messages,statuses,contacts}
  * rather than entry[].messaging[]).
  *
- * Send service (outgoing messages), media download/re-hosting, and the
- * onboarding flow that populates whatsapp_phone_numbers are later phases —
- * this controller only ever reads those tables, never writes to them.
+ * Outgoing sends (WhatsAppSendService) and onboarding (WhatsAppConnectController,
+ * which populates whatsapp_phone_numbers) live elsewhere, not in this
+ * controller — it only ever reads that table, never writes to it. Inbound
+ * media is deliberately never downloaded/re-hosted here either: this
+ * controller stores the Cloud API media id via raw_payload and nothing more
+ * (see handleIncomingMessage() below); WhatsAppMediaService fetches it live,
+ * on demand, from WhatsAppInboxController::media() when a tenant actually
+ * opens the thread — not at webhook time, since a synchronous Graph API
+ * round-trip here would add latency/failure surface to a request Meta
+ * expects acked fast, and this app has no confirmed background queue worker
+ * on shared hosting to defer it to instead.
  */
 class WhatsAppWebhookController extends Controller
 {
@@ -204,10 +212,12 @@ class WhatsAppWebhookController extends Controller
             'wamid' => $wamid,
             'customer_name' => $name,
             'message_type' => $type,
-            // No media download/re-hosting in this phase — the Cloud API
-            // media id (in raw_payload, e.g. $message['image']['id']) is
-            // enough to fetch it later once that service exists.
-            // attachment_url intentionally stays null until then.
+            // Never downloaded/re-hosted here — the Cloud API media id
+            // (in raw_payload, e.g. $message['image']['id']) is all this
+            // webhook stores; WhatsAppMediaService fetches it live, on
+            // demand, when a tenant opens the thread (see this class's
+            // docblock and WhatsAppMessage::inboundMediaId()).
+            // attachment_url intentionally stays null for inbound rows.
             'attachment_url' => null,
             'raw_payload' => $message,
             'direction' => 'in',

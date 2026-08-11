@@ -64,22 +64,44 @@
         const wrap = document.createElement('div');
         wrap.className = 'mt-1.5';
 
-        if (m.direction === 'out' && m.attachment_url && m.attachment_type === 'image') {
+        // Outbound (our own durable URL) and inbound (live-proxied through
+        // WhatsAppInboxController::media()) both point at a real,
+        // browser-fetchable URL by the time they reach this function — only
+        // the source field differs, so both share the same render branches.
+        const mediaUrl = (m.direction === 'out' ? m.attachment_url : m.inbound_media_url) || null;
+
+        if (mediaUrl && m.attachment_type === 'image') {
             const img = document.createElement('img');
-            img.src = m.attachment_url; img.alt = 'ছবি'; img.loading = 'lazy';
+            img.src = mediaUrl; img.alt = 'ছবি'; img.loading = 'lazy';
             img.className = 'max-w-[220px] max-h-[220px] rounded-lg border border-ink/10 object-cover cursor-pointer';
-            img.onclick = () => openWaLightbox(m.attachment_url);
+            img.onclick = () => openWaLightbox(mediaUrl);
             wrap.appendChild(img);
-        } else if (m.direction === 'out' && m.attachment_url) {
+        } else if (mediaUrl && m.attachment_type === 'video') {
+            const video = document.createElement('video');
+            video.controls = true; video.preload = 'none';
+            video.className = 'max-w-[240px] rounded-lg';
+            const source = document.createElement('source');
+            source.src = mediaUrl;
+            video.appendChild(source);
+            wrap.appendChild(video);
+        } else if (mediaUrl && m.attachment_type === 'audio') {
+            const audio = document.createElement('audio');
+            audio.controls = true; audio.preload = 'none';
+            audio.className = 'max-w-[240px]';
+            const source = document.createElement('source');
+            source.src = mediaUrl;
+            audio.appendChild(source);
+            wrap.appendChild(audio);
+        } else if (mediaUrl) {
             const a = document.createElement('a');
-            a.href = m.attachment_url; a.target = '_blank';
+            a.href = mediaUrl; a.target = '_blank';
             a.className = 'block underline text-xs';
             a.textContent = '📎 ' + (m.attachment_name || 'ফাইল দেখুন');
             wrap.appendChild(a);
         } else if (m.attachment_type) {
             const p = document.createElement('p');
             p.className = 'text-xs opacity-80';
-            p.textContent = 'মিডিয়া পাঠিয়েছে — মিডিয়া এখনো ডাউনলোড করা হয়নি';
+            p.textContent = 'মিডিয়া পাঠিয়েছে — মিডিয়া লোড করা যায়নি';
             wrap.appendChild(p);
         } else {
             return null;

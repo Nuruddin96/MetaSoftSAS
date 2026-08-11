@@ -2,6 +2,7 @@
 
 namespace Tests\Concerns;
 
+use App\Models\Plan;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
@@ -34,9 +35,27 @@ trait InteractsWithWhatsAppSchema
      */
     protected function setUpWhatsAppSchema(bool $includeAllTables = true): void
     {
+        // Needed so Tenant::plan()/Plan::hasFeature('whatsapp') can be
+        // exercised by the feature-gate tests, and so makeTenant() can grant
+        // the feature by default without every other WhatsApp test having to
+        // know that gate exists — mirrors production's tenants.plan_id
+        // NOT NULL FK (schema.sql), except nullable here since this stub
+        // schema (unlike production) predates the feature-gate phase and
+        // some tests may want an explicitly plan-less tenant.
+        if (! Schema::hasTable('plans')) {
+            Schema::create('plans', function (Blueprint $table) {
+                $table->id();
+                $table->string('name', 100);
+                $table->string('slug', 100)->unique();
+                $table->json('features')->nullable();
+                $table->timestamps();
+            });
+        }
+
         if (! Schema::hasTable('tenants')) {
             Schema::create('tenants', function (Blueprint $table) {
                 $table->id();
+                $table->unsignedBigInteger('plan_id')->nullable();
                 $table->string('subdomain')->unique();
                 $table->string('store_name');
                 $table->string('status')->default('active');
@@ -243,8 +262,22 @@ trait InteractsWithWhatsAppSchema
         }
     }
 
+    /**
+     * Every WhatsApp connect/inbox route now sits behind 'feature:whatsapp'
+     * (EnsureFeatureEnabled, reading Plan::hasFeature()) — a tenant with no
+     * plan, or a plan whose features don't include 'whatsapp', gets
+     * redirected before ever reaching the controller. Defaulting every
+     * makeTenant() call to a plan that already has the feature keeps every
+     * existing connection/inbox test exercising the behavior it was written
+     * to test, not this gate; WhatsAppFeatureGateTest covers the gate itself
+     * (both the blocked and explicitly-plan-less-tenant cases).
+     */
     protected function makeTenant(array $attrs = []): Tenant
     {
+        if (! array_key_exists('plan_id', $attrs)) {
+            $attrs['plan_id'] = $this->makeWhatsAppEnabledPlan()->id;
+        }
+
         $id = DB::table('tenants')->insertGetId(array_merge([
             // routes/web.php constrains tenant_slug to [a-z0-9-]+ in path
             // mode — Str::random() is mixed-case and would 404 before ever
@@ -258,6 +291,15 @@ trait InteractsWithWhatsAppSchema
         ], $attrs));
 
         return Tenant::find($id);
+    }
+
+    protected function makeWhatsAppEnabledPlan(array $attrs = []): Plan
+    {
+        return Plan::create(array_merge([
+            'name' => 'Test Plan',
+            'slug' => 'test-plan-'.strtolower(Str::random(10)),
+            'features' => ['whatsapp'],
+        ], $attrs));
     }
 
     protected function makeUser(int $tenantId, array $attrs = []): User
