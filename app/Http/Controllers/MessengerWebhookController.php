@@ -160,7 +160,38 @@ class MessengerWebhookController extends Controller
                 try {
                     $profile = $api->getProfile($psid, $owner->page_access_token);
                     $name = trim(($profile['first_name'] ?? '').' '.($profile['last_name'] ?? '')) ?: null;
+
+                    // A 200 response with no usable first_name/last_name is
+                    // otherwise indistinguishable from "Facebook genuinely
+                    // has no name" — this is the "অজানা কাস্টমার persists
+                    // even though Facebook has a name" failure mode, and
+                    // without this it's invisible: nothing before this
+                    // logged the difference between "no name" and "name
+                    // fetch didn't return one," so there was no way to tell
+                    // a stale/invalid page_access_token or a Graph API
+                    // permission issue apart from a customer who truly has
+                    // no Facebook name set.
+                    if (! $name) {
+                        Log::info('Messenger webhook: profile fetch returned no usable name.', [
+                            'tenant_id' => $owner->tenant_id,
+                            'psid' => $psid,
+                            'response_had_first_name' => isset($profile['first_name']),
+                            'response_had_last_name' => isset($profile['last_name']),
+                        ]);
+                    }
                 } catch (\Throwable $e) {
+                    // Same "never log $e->getMessage()" caution used
+                    // throughout this codebase's Graph API error handling
+                    // (e.g. WhatsAppSendService) — a Graph exception's
+                    // message can echo request details. Logging the
+                    // exception class + psid is enough to distinguish
+                    // "the profile call is failing" (investigate the Page's
+                    // token/permissions) from "no name was ever available."
+                    Log::warning('Messenger webhook: profile fetch failed while resolving customer name.', [
+                        'tenant_id' => $owner->tenant_id,
+                        'psid' => $psid,
+                        'exception' => get_class($e),
+                    ]);
                     $name = null;
                 }
             }

@@ -1,11 +1,27 @@
 {{-- Shared Messenger message-bubble thread, used by both messenger/show.blade.php
      (the inbox conversation view) and orders/show.blade.php (an order that
      originated from Messenger) — one message UI, not duplicated into a
-     second chat system. $messages: Collection<MessengerMessage>, oldest first. --}}
-@php $lastMessageId = optional($messages->last())->id ?? 0; @endphp
-<div id="threadMessages" data-last-id="{{ $lastMessageId }}" class="space-y-4 max-h-[500px] overflow-y-auto overflow-x-hidden">
+     second chat system. $messages: Collection<MessengerMessage>, oldest first.
+     $fillHeight (optional, default false): the inbox conversation view passes
+     true to make this fill its flex-column parent's full height instead of
+     the fixed 500px cap — orders/show.blade.php doesn't pass it, so its
+     embedded thread keeps the exact height behavior it always had. --}}
+@php
+    $fillHeight ??= false;
+    $lastMessageId = optional($messages->last())->id ?? 0;
+    $lastDate = null;
+    $dateLabel = fn ($carbon) => $carbon->isToday() ? 'আজ' : ($carbon->isYesterday() ? 'গতকাল' : $carbon->translatedFormat('d F, Y'));
+@endphp
+<div id="threadMessages" data-last-id="{{ $lastMessageId }}" class="space-y-1.5 {{ $fillHeight ? 'h-full' : 'max-h-[500px]' }} overflow-y-auto overflow-x-hidden px-1">
     @foreach ($messages as $m)
-        <div class="msg-bubble flex {{ $m->direction === 'out' ? 'justify-end' : 'justify-start' }}" data-id="{{ $m->id }}">
+        @php $msgDate = $m->created_at?->toDateString(); @endphp
+        @if ($msgDate && $msgDate !== $lastDate)
+            @php $lastDate = $msgDate; @endphp
+            <div class="flex justify-center my-3">
+                <span class="text-[11px] font-medium bg-ink/5 text-mute px-2.5 py-1 rounded-pill">{{ $dateLabel($m->created_at) }}</span>
+            </div>
+        @endif
+        <div class="msg-bubble flex {{ $m->direction === 'out' ? 'justify-end' : 'justify-start' }} mb-1.5" data-id="{{ $m->id }}">
             <div class="max-w-[85%] sm:max-w-md break-words {{ $m->direction === 'out' ? 'bg-leaf text-white' : 'bg-paper text-ink' }} rounded-card px-4 py-2.5 text-sm">
                 @if ($m->message_text){{ $m->message_text }}@endif
                 @if ($m->attachment_url)

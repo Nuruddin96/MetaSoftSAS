@@ -45,6 +45,13 @@
 
         window.clearInboxPoll();
 
+        // Server-rendered thread scrolls to the newest message on its own
+        // (see below) only via this init call — the #waThreadMessages
+        // container is a fixed-height, overflow-y-auto pane (h-full inside
+        // the conversation's flex layout), so without this it would default
+        // to showing the OLDEST messages first on every open/swap.
+        thread.scrollTop = thread.scrollHeight;
+
         let afterId = parseInt(thread.dataset.lastId || '0', 10);
         const waId = root.dataset.externalId;
         const updatesUrl = root.dataset.updatesUrl;
@@ -144,6 +151,8 @@
 
         window.clearInboxPoll();
 
+        thread.scrollTop = thread.scrollHeight;
+
         let afterId = parseInt(thread.dataset.lastId || '0', 10);
         const psid = root.dataset.externalId;
         const updatesUrl = root.dataset.updatesUrl;
@@ -238,6 +247,17 @@
     // for it immediately, same as before this redesign.
     document.addEventListener('DOMContentLoaded', () => initPollingFor(document.getElementById('conversationArea')));
 
+    // Off-canvas customer-info drawer (see _conversation.blade.php) —
+    // delegated, same as the row-click handler below, since the drawer
+    // itself is part of #conversationArea and gets replaced on every swap.
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('.conv-info-toggle')) {
+            document.querySelector('.conv-info-drawer')?.classList.remove('hidden');
+        } else if (e.target.closest('.conv-info-close') || e.target.closest('.conv-info-backdrop')) {
+            document.querySelector('.conv-info-drawer')?.classList.add('hidden');
+        }
+    });
+
     // Desktop-only conversation-row fetch-swap. Event delegation on the
     // list container (not the individual rows) since rows get replaced
     // wholesale on every navigation and appended by "load more".
@@ -250,6 +270,10 @@
 
         e.preventDefault();
         const url = row.dataset.showUrl || row.href;
+
+        // Loading state — the fetch is usually near-instant, but a visible
+        // pane-dim avoids the panel looking unresponsive on a slow connection.
+        pane.classList.add('opacity-50', 'pointer-events-none');
 
         try {
             const res = await fetch(url + (url.includes('?') ? '&' : '?') + 'panel=1', {
@@ -266,6 +290,7 @@
 
             pane.innerHTML = '';
             pane.appendChild(newRoot);
+            pane.classList.remove('opacity-50', 'pointer-events-none');
             // Any lightbox markup the fetched partial brought along (not
             // deduped, meaning the page didn't already have one) needs to
             // land in the document too, not just inside #conversationPane —
@@ -278,6 +303,8 @@
                     document.body.appendChild(el);
                 }
             });
+
+            if (window.lucide) window.lucide.createIcons();
 
             history.pushState(null, '', url);
 

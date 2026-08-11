@@ -2,10 +2,21 @@
      shape, kept as its own file rather than shared: WhatsApp's delivery-
      status ticks and type-aware placeholder rendering (see _attachment.blade.php)
      have no Messenger equivalent. $messages: Collection<WhatsAppMessage>, oldest first. --}}
-@php $lastMessageId = optional($messages->last())->id ?? 0; @endphp
-<div id="waThreadMessages" data-last-id="{{ $lastMessageId }}" class="space-y-4 max-h-[500px] overflow-y-auto overflow-x-hidden">
+@php
+    $lastMessageId = optional($messages->last())->id ?? 0;
+    $lastDate = null;
+    $dateLabel = fn ($carbon) => $carbon->isToday() ? 'আজ' : ($carbon->isYesterday() ? 'গতকাল' : $carbon->translatedFormat('d F, Y'));
+@endphp
+<div id="waThreadMessages" data-last-id="{{ $lastMessageId }}" class="space-y-1.5 h-full overflow-y-auto overflow-x-hidden px-1">
     @foreach ($messages as $m)
-        <div class="msg-bubble flex {{ $m->direction === 'out' ? 'justify-end' : 'justify-start' }}" data-id="{{ $m->id }}">
+        @php $msgDate = $m->created_at?->toDateString(); @endphp
+        @if ($msgDate && $msgDate !== $lastDate)
+            @php $lastDate = $msgDate; @endphp
+            <div class="flex justify-center my-3">
+                <span class="text-[11px] font-medium bg-ink/5 text-mute px-2.5 py-1 rounded-pill">{{ $dateLabel($m->created_at) }}</span>
+            </div>
+        @endif
+        <div class="msg-bubble flex {{ $m->direction === 'out' ? 'justify-end' : 'justify-start' }} mb-1.5" data-id="{{ $m->id }}">
             <div class="max-w-[85%] sm:max-w-md break-words {{ $m->direction === 'out' ? 'bg-leaf text-white' : 'bg-paper text-ink' }} rounded-card px-4 py-2.5 text-sm">
                 @if ($m->message_text){{ $m->message_text }}@endif
                 @include('tenant.whatsapp._attachment', ['m' => $m])

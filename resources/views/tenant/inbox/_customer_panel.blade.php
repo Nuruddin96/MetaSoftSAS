@@ -1,10 +1,17 @@
 {{--
-    Right pane: customer info, linked order/customer history, and the
+    Customer-info drawer content: linked order/customer history and the
     (de-emphasized but fully functional) triage status control — shared by
-    whatsapp/show.blade.php and messenger/show.blade.php so the two channels'
-    previously-duplicated sidebar markup lives in one place. Nothing here
-    changes what updateStatus()/the order-linking queries actually do —
-    presentation only.
+    whatsapp/_conversation.blade.php and messenger/_conversation.blade.php,
+    which both render this inside an off-canvas drawer (hidden by default,
+    opened via the chat header's info icon — see _shell_scripts.blade.php's
+    delegated click handler). Nothing here changes what updateStatus()/the
+    order-linking queries actually do — presentation only.
+
+    Deliberately does NOT repeat an avatar+name header of its own — the
+    drawer wrapper already has a "কাস্টমার তথ্য" title, and the chat header
+    (part of _conversation.blade.php, still visible behind/beside the
+    drawer) already shows avatar+name+phone/channel once. Repeating it here
+    was the "customer name shown 2-3 times" bug this refinement fixes.
 
     Expected vars:
       $channel          'whatsapp'|'messenger'
@@ -23,13 +30,7 @@
 @endphp
 <div class="space-y-4">
     <x-ui.card padding="sm">
-        <div class="flex items-center gap-3 mb-3">
-            <x-ui.avatar :name="$customerName" size="default" />
-            <div class="min-w-0">
-                <p class="font-bold text-sm truncate">{{ $customerName ?: 'অজানা কাস্টমার' }}</p>
-                <p class="text-xs text-mute">{{ $isWhatsapp ? '🟢 WhatsApp' : '🔵 Messenger' }}</p>
-            </div>
-        </div>
+        <p class="font-bold text-sm mb-2">যোগাযোগ</p>
         <div class="text-xs text-mute space-y-1">
             @if ($isWhatsapp)
                 <p>📞 <a href="tel:{{ $externalId }}" class="hover:underline">{{ $externalId }}</a></p>
@@ -85,8 +86,8 @@
         </x-ui.card>
     @endif
 
-    <x-ui.collapsible-card title="বিস্তারিত">
-        <p class="text-xs text-mute mb-2">কনভারসেশন স্ট্যাটাস</p>
+    <x-ui.card padding="sm">
+        <p class="font-bold text-sm mb-2">কনভারসেশন স্ট্যাটাস</p>
         <form method="POST" action="{{ $statusUpdateUrl }}">
             @csrf
             <select name="status" onchange="this.form.submit()" class="w-full rounded-btn border border-ink/15 px-3 py-2 text-xs bg-white">
@@ -95,5 +96,5 @@
                 @endforeach
             </select>
         </form>
-    </x-ui.collapsible-card>
+    </x-ui.card>
 </div>
