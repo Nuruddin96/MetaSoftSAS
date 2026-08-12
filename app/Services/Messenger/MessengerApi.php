@@ -14,10 +14,17 @@ class MessengerApi
         $this->base = 'https://graph.facebook.com/'.config('facebook.graph_version');
     }
 
+    /**
+     * profile_pic added alongside the pre-existing first_name/last_name in
+     * the same request/same call sites — not a second Graph call, just a
+     * richer response from the one already being made (see
+     * FacebookMessengerCustomerService, the identity system's canonical
+     * caller of this method).
+     */
     public function getProfile(string $psid, string $pageAccessToken): ?array
     {
         $response = Http::get("{$this->base}/{$psid}", [
-            'fields' => 'first_name,last_name',
+            'fields' => 'first_name,last_name,profile_pic',
             'access_token' => $pageAccessToken,
         ]);
 
