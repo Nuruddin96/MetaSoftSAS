@@ -28,6 +28,9 @@
 <div id="navProgress"></div>
 @php
     $notifTenant = app('currentTenant');
+    $adService = app(\App\Services\Advertising\AdvertisingBalanceService::class);
+    $adEnabled = $adService->isEnabled($notifTenant);
+    $adBalance = $adEnabled ? $adService->balance($notifTenant->id) : null;
 
     // Notifications have no persisted record of their own to hang a
     // read/unread flag on — badges below are live business-state counts.
@@ -133,11 +136,12 @@
                         ['tenant.expenses.index', 'খরচ', 'wallet'],
                         ['tenant.billing', 'বিলিং', 'credit-card'],
                     ],
-                    'গ্রোথ' => [
+                    'গ্রোথ' => array_filter([
                         ['tenant.reports.sales', 'রিপোর্ট', 'bar-chart-3'],
                         ['tenant.product-source.index', 'প্রোডাক্ট সোর্স', 'search'],
                         ['tenant.website', 'ওয়েবসাইট সেটিংস', 'palette'],
-                    ],
+                        $adEnabled ? ['tenant.advertising.overview', 'অ্যাডভার্টাইজিং', 'megaphone'] : null,
+                    ]),
                     'অন্যান্য' => [
                         ['tenant.settings', 'সেটিংস', 'settings'],
                     ],
@@ -161,6 +165,14 @@
             @if (request()->routeIs('tenant.reports.*'))
                 <div class="bg-black/20 py-1 mx-2 rounded-btn">
                     @foreach ([['tenant.reports.sales','বিক্রয়'],['tenant.reports.pl','লাভ-ক্ষতি'],['tenant.reports.locations','এলাকা'],['tenant.reports.products','প্রোডাক্ট']] as [$r,$l])
+                        <a href="{{ route($r) }}" class="block pl-10 pr-4 py-1.5 text-xs rounded transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-ink {{ request()->routeIs($r) ? 'text-amber font-semibold' : 'text-white/70 hover:text-white' }}">{{ $l }}</a>
+                    @endforeach
+                </div>
+            @endif
+
+            @if ($adEnabled && request()->routeIs('tenant.advertising.*'))
+                <div class="bg-black/20 py-1 mx-2 rounded-btn">
+                    @foreach ([['tenant.advertising.overview','ওভারভিউ'],['tenant.advertising.ledger','ব্যালেন্স / লেজার'],['tenant.advertising.payments','পেমেন্টস'],['tenant.advertising.charges','চার্জেস']] as [$r,$l])
                         <a href="{{ route($r) }}" class="block pl-10 pr-4 py-1.5 text-xs rounded transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-ink {{ request()->routeIs($r) ? 'text-amber font-semibold' : 'text-white/70 hover:text-white' }}">{{ $l }}</a>
                     @endforeach
                 </div>
@@ -191,7 +203,16 @@
 
             <p class="font-bold text-sm lg:text-base truncate">@yield('title', 'প্যানেল')</p>
 
-            <div class="relative ml-auto">
+            @if ($adEnabled)
+                {{-- Compact wallet indicator only — full balance/budget/rate detail lives in the Advertising module, never here --}}
+                <a href="{{ route('tenant.advertising.overview') }}"
+                   title="বর্তমান ব্যালেন্স"
+                   class="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-pill border border-ink/10 bg-paper/80 hover:bg-paper transition text-xs sm:text-sm font-semibold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 {{ $adBalance !== null && (float) $adBalance <= 0 ? 'border-red-200 text-red-600' : '' }}">
+                    <span>💰</span><span>৳{{ number_format((float) $adBalance) }}</span>
+                </a>
+            @endif
+
+            <div class="relative {{ $adEnabled ? '' : 'ml-auto' }}">
                 <button id="notifBtn" data-seen-url="{{ route('tenant.notifications.seen') }}" data-csrf="{{ csrf_token() }}"
                         class="relative w-10 h-10 rounded-full hover:bg-ink/5 grid place-items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
                     <i data-lucide="bell" class="w-5 h-5 text-ink"></i>

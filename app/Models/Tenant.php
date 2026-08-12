@@ -58,6 +58,11 @@ class Tenant extends Model
         return $this->hasMany(StoreSetting::class);
     }
 
+    public function adBillingAccount()
+    {
+        return $this->hasOne(AdBillingAccount::class);
+    }
+
     /** Plan limit check, e.g. isWithinLimit('max_products', $count) */
     public function isWithinLimit(string $limit, int $currentCount): bool
     {

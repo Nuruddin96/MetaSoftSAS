@@ -26,6 +26,7 @@
             </div>
             <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="allow_pos" value="1" @checked($plan->allow_pos)> POS বিক্রি</label>
             <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="allow_custom_domain" value="1" @checked($plan->allow_custom_domain)> কাস্টম ডোমেইন</label>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="allow_meta_ads" value="1" @checked($plan->allow_meta_ads)> অ্যাডভার্টাইজিং বিলিং মডিউল</label>
 
             @if ($featuresReady)
                 <div class="pt-2 border-t border-ink/10">

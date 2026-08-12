@@ -14,6 +14,7 @@ use App\Http\Controllers\Storefront\CheckoutController;
 use App\Http\Controllers\Storefront\HomeController as StorefrontHome;
 use App\Http\Controllers\Storefront\PageController as StorefrontPage;
 use App\Http\Controllers\Storefront\ProductController as StorefrontProduct;
+use App\Http\Controllers\SuperAdmin\AdvertisingController as SuperAdvertisingController;
 use App\Http\Controllers\SuperAdmin\AffiliateController as SuperAffiliateController;
 use App\Http\Controllers\SuperAdmin\AuthController;
 use App\Http\Controllers\SuperAdmin\ClientController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\SuperAdmin\SourceOrderController;
 use App\Http\Controllers\SuperAdmin\SourceProductController;
 use App\Http\Controllers\SuperAdmin\TenantController;
 use App\Http\Controllers\TelegramController;
+use App\Http\Controllers\Tenant\AdvertisingController;
 use App\Http\Controllers\Tenant\BarcodeController;
 use App\Http\Controllers\Tenant\BillingController;
 use App\Http\Controllers\Tenant\CategoryController;
@@ -136,6 +138,17 @@ Route::domain(config('app.central_domain'))->group(function () {
 
             Route::get('plans', [PlanController::class, 'index'])->name('plans');
             Route::put('plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
+
+            // Advertising / Ads Billing — full visibility (incl. Meta spend/margin), admin-only mutations
+            Route::prefix('advertising')->name('advertising.')->group(function () {
+                Route::get('/', [SuperAdvertisingController::class, 'index'])->name('index');
+                Route::get('{tenant}', [SuperAdvertisingController::class, 'show'])->name('show');
+                Route::post('{tenant}/activate', [SuperAdvertisingController::class, 'activate'])->name('activate');
+                Route::put('{tenant}/settings', [SuperAdvertisingController::class, 'updateSettings'])->name('settings');
+                Route::post('{tenant}/payments', [SuperAdvertisingController::class, 'storePayment'])->name('payments.store');
+                Route::post('{tenant}/charges', [SuperAdvertisingController::class, 'storeCharge'])->name('charges.store');
+                Route::post('{tenant}/adjustments', [SuperAdvertisingController::class, 'storeAdjustment'])->name('adjustments.store');
+            });
 
             Route::get('source/products', [SourceProductController::class, 'index'])->name('source.products');
             Route::get('source/products/create', [SourceProductController::class, 'create'])->name('source.products.create');
@@ -297,6 +310,15 @@ $tenantRoutes = function () {
             Route::get('messenger/{psid}', [MessengerInboxController::class, 'show'])->name('messenger.show');
             Route::post('messenger/{psid}/reply', [MessengerInboxController::class, 'reply'])->name('messenger.reply');
             Route::post('messenger/{psid}/status', [MessengerInboxController::class, 'updateStatus'])->name('messenger.status');
+
+            // Advertising / Ads Billing — read-only for tenants, gated by
+            // AdvertisingBalanceService::isEnabled() inside the controller
+            Route::prefix('advertising')->name('advertising.')->group(function () {
+                Route::get('/', [AdvertisingController::class, 'overview'])->name('overview');
+                Route::get('ledger', [AdvertisingController::class, 'ledger'])->name('ledger');
+                Route::get('payments', [AdvertisingController::class, 'payments'])->name('payments');
+                Route::get('charges', [AdvertisingController::class, 'charges'])->name('charges');
+            });
 
             // Settings
             Route::get('settings', [SettingController::class, 'index'])->name('settings');
