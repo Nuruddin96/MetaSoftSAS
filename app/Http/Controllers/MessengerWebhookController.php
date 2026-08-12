@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessAiAgentMessage;
+use App\Models\AiAgentMessageJob;
 use App\Models\Customer;
 use App\Models\FacebookPage;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\Order;
+use App\Models\StoreSetting;
 use App\Services\Messenger\CustomerInfoExtractor;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Database\QueryException;
@@ -249,15 +252,19 @@ class MessengerWebhookController extends Controller
             $attributes['facebook_page_id'] = $owner->facebook_page_id;
         }
 
+        $message = null;
+
         try {
-            MessengerMessage::withoutGlobalScopes()->create($attributes);
+            $message = MessengerMessage::withoutGlobalScopes()->create($attributes);
         } catch (QueryException $e) {
             if ($e->getCode() !== '23000') {
                 throw $e;
             }
             // Race: a concurrent retry of this same mid won the insert first
             // (between the exists() check above and this create()) — the
-            // message is already recorded, nothing else to do.
+            // message is already recorded, nothing else to do. $message
+            // stays null: that concurrent request already owns any AI
+            // Agent dispatch for it, not this one.
         }
 
         if ($isEcho) {
@@ -286,6 +293,76 @@ class MessengerWebhookController extends Controller
                 'error' => $e->getMessage(),
             ]);
         }
+
+        if ($message && $text) {
+            try {
+                $this->maybeDispatchAiAgent($owner->tenant_id, $message);
+            } catch (\Throwable $e) {
+                // Same "additive convenience, must never take the webhook
+                // down" posture as pending-order auto-creation above — the
+                // message is already safely recorded regardless.
+                Log::warning('Messenger webhook: AI agent dispatch failed.', [
+                    'tenant_id' => $owner->tenant_id,
+                    'psid' => $psid,
+                    'exception' => get_class($e),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Phase 1/2 of the AI Customer Support Agent — purely additive on top
+     * of the message-storage flow above, never replacing any of it. Only
+     * ever reached for genuine inbound (non-echo) customer text messages:
+     * $isEcho already took the early-return path above for anything sent
+     * from the Page itself, and the caller only invokes this when $text is
+     * non-empty. That is the entire loop-prevention mechanism this needs —
+     * the AI's own outgoing send (see ProcessAiAgentMessage) is always
+     * recorded with direction='out', and the matching echo event Meta
+     * sends back for it always takes the $isEcho path above, never this
+     * one.
+     *
+     * Everything here is synchronous but cheap: one settings lookup, one
+     * insert. All AI processing — building context, calling OpenAI,
+     * sending the reply — happens inside the queued ProcessAiAgentMessage
+     * job, never in this webhook request. The 'pending' row this writes is
+     * what that job atomically claims before doing anything else; see
+     * AiAgentMessageJob's docblock for the full duplicate-reply guard this
+     * is part of.
+     */
+    protected function maybeDispatchAiAgent(int $tenantId, MessengerMessage $message): void
+    {
+        if (! AiAgentMessageJob::tablesReady()) {
+            return; // database/sql/chunk30.sql not imported on this environment yet
+        }
+
+        if (! $this->isAiAgentEnabled($tenantId)) {
+            return;
+        }
+
+        AiAgentMessageJob::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantId,
+            'messenger_message_id' => $message->id,
+            'status' => 'pending',
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenantId, $message->id);
+    }
+
+    /**
+     * The AI Agent ON/OFF toggle reuses the existing generic store_settings
+     * table (key='ai_agent_enabled') rather than a dedicated settings
+     * table — see database/sql/chunk30.sql and
+     * Tenant\SettingController::aiAgent() for the write side. No row for a
+     * tenant means disabled; this is what keeps every existing tenant
+     * silent by default after this feature deploys.
+     */
+    protected function isAiAgentEnabled(int $tenantId): bool
+    {
+        return StoreSetting::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('key', 'ai_agent_enabled')
+            ->value('value') === '1';
     }
 
     /**

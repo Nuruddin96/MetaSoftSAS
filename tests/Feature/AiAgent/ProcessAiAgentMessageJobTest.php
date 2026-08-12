@@ -1,0 +1,166 @@
+<?php
+
+namespace Tests\Feature\AiAgent;
+
+use App\Jobs\ProcessAiAgentMessage;
+use App\Models\MessengerMessage;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Tests\Concerns\InteractsWithAiAgentSchema;
+use Tests\TestCase;
+
+/**
+ * Covers App\Jobs\ProcessAiAgentMessage's own behavior once dispatched —
+ * distinct from MessengerAiDispatchTest, which only covers whether the
+ * webhook decides to dispatch it at all. QUEUE_CONNECTION=sync in
+ * phpunit.xml means ::dispatch() below runs the job body inline, so no
+ * Queue::fake()/queue:work is needed here — the OpenAI and Messenger Send
+ * API calls are the things faked instead (NEVER a real OpenAI call).
+ */
+class ProcessAiAgentMessageJobTest extends TestCase
+{
+    use InteractsWithAiAgentSchema;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->setUpAiAgentSchema();
+    }
+
+    /** Inserts an inbound MessengerMessage row + its 'pending' ai_agent_message_jobs row, mirroring what the webhook would have written. */
+    protected function seedPendingInboundMessage(int $tenantId, string $psid, string $mid, string $text): int
+    {
+        $messageId = DB::table('messenger_messages')->insertGetId([
+            'tenant_id' => $tenantId,
+            'sender_psid' => $psid,
+            'mid' => $mid,
+            'message_text' => $text,
+            'direction' => 'in',
+            'status' => 'new',
+            'created_at' => now(),
+        ]);
+
+        DB::table('ai_agent_message_jobs')->insert([
+            'tenant_id' => $tenantId,
+            'messenger_message_id' => $messageId,
+            'status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $messageId;
+    }
+
+    public function test_a_successful_run_sends_one_reply_and_records_it(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-1', ['is_active' => 1]);
+        $this->enableAiAgent($tenant->id);
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-1', 'mid-in-1', 'দাম কত?');
+
+        Http::fake([
+            '*/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'দাম ৫০০ টাকা।']]],
+            ]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-ai-reply-1']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'me/messages'));
+
+        $reply = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-ai-reply-1')->first();
+        $this->assertNotNull($reply, 'the AI reply must be recorded as an outgoing MessengerMessage');
+        $this->assertSame('out', $reply->direction);
+        $this->assertSame('দাম ৫০০ টাকা।', $reply->message_text);
+
+        $this->assertSame(
+            'completed',
+            DB::table('ai_agent_message_jobs')->where('messenger_message_id', $messageId)->value('status')
+        );
+    }
+
+    public function test_job_re_checks_the_setting_and_stops_if_ai_was_turned_off_after_dispatch(): void
+    {
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-2', ['is_active' => 1]);
+        // Note: AI is NOT enabled here — simulates the tenant having
+        // turned it back off between the webhook dispatching this job and
+        // a worker actually picking it up.
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-2', 'mid-in-2', 'আছে?');
+
+        Http::fake(); // any call at all here is a bug — nothing should be requested
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertNothingSent();
+        $this->assertSame(
+            0,
+            MessengerMessage::withoutGlobalScopes()->where('direction', 'out')->where('tenant_id', $tenant->id)->count()
+        );
+    }
+
+    public function test_openai_failure_does_not_crash_and_sends_no_reply(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-3', ['is_active' => 1]);
+        $this->enableAiAgent($tenant->id);
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-3', 'mid-in-3', 'হ্যালো');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['error' => ['type' => 'server_error', 'message' => 'boom']], 500),
+        ]);
+
+        // The whole point: this must not throw.
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'me/messages'), 'no reply must ever be sent when OpenAI fails');
+        $this->assertSame(
+            0,
+            MessengerMessage::withoutGlobalScopes()->where('direction', 'out')->where('tenant_id', $tenant->id)->count()
+        );
+        $this->assertSame(
+            'failed',
+            DB::table('ai_agent_message_jobs')->where('messenger_message_id', $messageId)->value('status')
+        );
+    }
+
+    public function test_a_retried_or_duplicate_execution_does_not_send_a_second_reply(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-4', ['is_active' => 1]);
+        $this->enableAiAgent($tenant->id);
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-4', 'mid-in-4', 'স্টকে আছে?');
+
+        Http::fake([
+            '*/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'জি, স্টকে আছে।']]],
+            ]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-ai-reply-4']),
+        ]);
+
+        // First execution — the legitimate one.
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+        // A second execution for the exact same message — simulates a
+        // Laravel-level retry, or the same job being run twice for any
+        // other reason. The AiAgentMessageJob::claim() guard (status is
+        // already 'completed', not 'pending') must make this a no-op.
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSentCount(2); // exactly one chat/completions + one me/messages call, from the first execution only
+
+        $this->assertSame(
+            1,
+            MessengerMessage::withoutGlobalScopes()->where('direction', 'out')->where('tenant_id', $tenant->id)->count(),
+            'a retried/duplicate job execution must never result in a second outgoing message'
+        );
+    }
+}

@@ -191,6 +191,29 @@ class SettingController extends Controller
         return back()->with('success', 'স্টোর সেটিংস সেভ হয়েছে।');
     }
 
+    /**
+     * AI Customer Support Agent ON/OFF toggle (Phase 1/2). Reuses
+     * store_settings the same way store() above does for delivery charges
+     * — no dedicated table for a single boolean. StoreSetting's
+     * BelongsToTenant scope (and updateOrCreate's own tenant_id auto-fill
+     * on create) is what makes this tenant-isolated: this method never
+     * needs to name a tenant_id itself, and there is no way for this
+     * request to reach or modify another tenant's row.
+     */
+    public function aiAgent(Request $request)
+    {
+        $data = $request->validate([
+            'ai_agent_enabled' => 'nullable|boolean',
+        ]);
+
+        StoreSetting::updateOrCreate(
+            ['key' => 'ai_agent_enabled'],
+            ['value' => $request->boolean('ai_agent_enabled') ? '1' : '0']
+        );
+
+        return back()->with('success', 'AI এজেন্ট সেটিংস সেভ হয়েছে।');
+    }
+
     /** Tenant requests their own domain (e.g. myshop.com); super admin approves manually. */
     public function requestDomain(Request $request)
     {

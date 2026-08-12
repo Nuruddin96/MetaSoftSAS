@@ -327,6 +327,7 @@ $tenantRoutes = function () {
             Route::post('settings/messenger', [SettingController::class, 'messenger'])->name('settings.messenger');
             Route::post('settings/courier', [SettingController::class, 'courier'])->name('settings.courier');
             Route::post('settings/store', [SettingController::class, 'store'])->name('settings.store');
+            Route::post('settings/ai-agent', [SettingController::class, 'aiAgent'])->name('settings.ai-agent');
 
             // Facebook OAuth "Connect Facebook" (Phase 1). The callback these
             // redirect out to is registered separately, outside this tenant

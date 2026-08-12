@@ -311,6 +311,20 @@
             <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
         </form>
     </x-ui.collapsible-card>
+
+    <x-ui.collapsible-card title="🤖 AI কাস্টমার এজেন্ট" :open="true">
+        <x-slot:status>
+            @if (($store['ai_agent_enabled'] ?? '0') === '1')<x-ui.badge tone="leaf">চালু</x-ui.badge>@endif
+        </x-slot:status>
+        <p class="text-xs text-mute -mt-2 mb-1">চালু থাকলে, Messenger-এ নতুন কাস্টমার মেসেজ আসলে AI স্বয়ংক্রিয়ভাবে রিপ্লাই দেবে। বন্ধ থাকলে আগের মতোই শুধু আপনি নিজে রিপ্লাই দিতে পারবেন।</p>
+        <form method="POST" action="{{ route('tenant.settings.ai-agent') }}">
+            @csrf
+            <label class="flex items-center gap-2 text-sm mb-3">
+                <input type="checkbox" name="ai_agent_enabled" value="1" @checked(($store['ai_agent_enabled'] ?? '0') === '1')> চালু
+            </label>
+            <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
+        </form>
+    </x-ui.collapsible-card>
 </div>
 
 @push('scripts')
