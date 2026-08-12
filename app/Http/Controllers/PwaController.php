@@ -41,11 +41,19 @@ class PwaController extends Controller
             'theme_color' => '#128155',
             'lang' => 'bn',
             'dir' => 'ltr',
+            // Dedicated launcher-icon assets (solid #1877F2 background, white
+            // M mark, nothing else) — deliberately NOT icon-192.png/icon-512.png,
+            // which stay exactly as they are because brand-mark.blade.php and
+            // the landing page still render them as the normal colored logo
+            // everywhere else in the app. Same separation already established
+            // for splash.blade.php's splash-logo.png. Maskable variants keep
+            // the mark inside Android's adaptive-icon safe zone so it isn't
+            // clipped by circular/squircle launcher masks.
             'icons' => [
-                ['src' => asset('images/icons/icon-192.png'), 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
-                ['src' => asset('images/icons/icon-512.png'), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
-                ['src' => asset('images/icons/icon-maskable-192.png'), 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'maskable'],
-                ['src' => asset('images/icons/icon-maskable-512.png'), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
+                ['src' => asset('images/icons/app-icon-192.png'), 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+                ['src' => asset('images/icons/app-icon-512.png'), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
+                ['src' => asset('images/icons/app-icon-maskable-192.png'), 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'maskable'],
+                ['src' => asset('images/icons/app-icon-maskable-512.png'), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
             ],
         ], 200, ['Content-Type' => 'application/manifest+json']);
     }

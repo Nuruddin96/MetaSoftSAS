@@ -42,6 +42,15 @@ class PwaServiceWorkerBuilder
         $shellUrls[] = asset('images/icons/icon-512.png');
         $shellUrls[] = asset('images/icons/apple-touch-icon.png');
 
+        // Manifest launcher-icon assets (see PwaController::manifest()) —
+        // precached separately from icon-192/icon-512 above, which remain
+        // the general MetaSoft brand mark used elsewhere and are not the
+        // installed-app icon.
+        $shellUrls[] = asset('images/icons/app-icon-192.png');
+        $shellUrls[] = asset('images/icons/app-icon-512.png');
+        $shellUrls[] = asset('images/icons/app-icon-maskable-192.png');
+        $shellUrls[] = asset('images/icons/app-icon-maskable-512.png');
+
         $cacheName = 'metasoft-shell-'.$version;
         $shellJson = json_encode(array_values(array_unique($shellUrls)));
 
