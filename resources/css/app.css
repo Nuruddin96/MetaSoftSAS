@@ -137,40 +137,17 @@
 
 /*
  * Branded startup splash (components/ui/splash.blade.php). Logo does a
- * single subtle fade+scale-in on appear; the three-dot pulse is the "still
- * working" cue for the (normally very brief) gap until app.js hides the
- * screen. #appSplash.is-hidden is toggled by JS the instant the page is
- * interactive — never on a timer, so there is no artificial delay.
+ * single subtle fade+scale-in on appear. #appSplash.is-hidden is toggled
+ * by JS the instant the page is interactive — never on a timer, so there
+ * is no artificial delay.
  */
 .splash-logo {
     animation: splashLogoIn .5s ease both;
 }
 
-.splash-label {
-    animation: splashFadeIn .5s ease .1s both;
-}
-
-.splash-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 9999px;
-    background: var(--color-leaf);
-    animation: splashPulse 1.1s ease-in-out infinite;
-}
-
 @keyframes splashLogoIn {
     from { opacity: 0; transform: scale(.85); }
     to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes splashFadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-@keyframes splashPulse {
-    0%, 100% { opacity: .25; transform: scale(.8); }
-    50% { opacity: 1; transform: scale(1); }
 }
 
 .splash-screen {
