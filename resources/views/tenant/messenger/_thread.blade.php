@@ -14,11 +14,23 @@
 @endphp
 <div id="threadMessages" data-last-id="{{ $lastMessageId }}" class="space-y-1.5 {{ $fillHeight ? 'h-full' : 'max-h-[500px]' }} overflow-y-auto overflow-x-hidden px-1">
     @foreach ($messages as $m)
-        @php $msgDate = $m->created_at?->toDateString(); @endphp
+        {{--
+            created_at is stored/retrieved in UTC (config('app.timezone'))
+            — converted to Asia/Dhaka here, at the display boundary only,
+            same "convert where it's shown, not where it's stored" pattern
+            AdvertisingBalanceService::today() already uses for billing.
+            ->copy() first since Carbon's setTimezone() mutates in place
+            and $m->created_at is the same cached attribute read three
+            times below (date-divider grouping, isToday/isYesterday, and
+            the per-message clock time) — every one of those must agree,
+            so it's converted once per message and reused.
+        --}}
+        @php $localTime = $m->created_at?->copy()->setTimezone('Asia/Dhaka'); @endphp
+        @php $msgDate = $localTime?->toDateString(); @endphp
         @if ($msgDate && $msgDate !== $lastDate)
             @php $lastDate = $msgDate; @endphp
             <div class="flex justify-center my-3">
-                <span class="text-[11px] font-medium bg-ink/5 text-mute px-2.5 py-1 rounded-pill">{{ $dateLabel($m->created_at) }}</span>
+                <span class="text-[11px] font-medium bg-ink/5 text-mute px-2.5 py-1 rounded-pill">{{ $dateLabel($localTime) }}</span>
             </div>
         @endif
         <div class="msg-bubble flex {{ $m->direction === 'out' ? 'justify-end' : 'justify-start' }} mb-1.5" data-id="{{ $m->id }}">
@@ -27,7 +39,7 @@
                 @if ($m->attachment_url)
                     @include('tenant.messenger._attachment', ['url' => $m->attachment_url, 'type' => $m->attachment_type, 'name' => $m->attachment_name])
                 @endif
-                <p class="text-[10px] mt-1 opacity-70">{{ $m->created_at?->format('d M, h:i A') }}</p>
+                <p class="text-[10px] mt-1 opacity-70">{{ $localTime?->format('d M, h:i A') }}</p>
             </div>
         </div>
     @endforeach
