@@ -15,9 +15,23 @@ use Illuminate\Support\Facades\Log;
  *
  * Never throws and never lets a Facebook failure erase a previously-good
  * identity — a webhook handling an actual customer message must never be
- * blocked or corrupted by this. Every write path only sets fields Graph
- * actually returned this time; a stale/expired token or a temporary Graph
- * outage degrades to "keep whatever we already had," never to null.
+ * blocked or corrupted by this. Every write path only sets name/photo
+ * fields Graph actually returned this time; a stale/expired token or a
+ * temporary Graph outage degrades to "keep whatever we already had for
+ * those fields," never to null.
+ *
+ * IMPORTANT (see PROJECT_KNOWLEDGE.md / the production identity-sync
+ * incident this fixes): persistence of the PSID record itself
+ * (tenant_id/facebook_page_id/psid/identity_fetched_at) is UNCONDITIONAL —
+ * it happens on every call, regardless of whether Graph succeeds, returns
+ * a permission/token error (code 190, code 100/subcode 33, or anything
+ * else), or the HTTP call throws outright. Only the name/photo fields are
+ * conditional on Graph actually returning them. This is deliberate: a
+ * customer whose profile Meta will never let us read must still exist as
+ * a known PSID (so the inbox can show *something* other than silently
+ * losing them), and identity_fetched_at still advances on failure so
+ * needsRefresh() naturally backs off a permanently-failing PSID instead of
+ * re-querying Graph on every single incoming message.
  */
 class FacebookMessengerCustomerService
 {
@@ -44,12 +58,12 @@ class FacebookMessengerCustomerService
 
     /**
      * Fetches from Graph and persists. Returns the up-to-date identity
-     * record, or the unchanged existing one if the fetch failed, or null
-     * only when database/sql/chunk28.sql hasn't been imported yet on this
-     * environment. withoutGlobalScopes()+explicit tenant_id throughout,
-     * same reasoning as every other identity-adjacent write in this
-     * codebase (e.g. WhatsAppSendService) — callers include the webhook,
-     * which never has app('currentTenant') bound.
+     * record — including on a Graph failure, see the class docblock — or
+     * null only when database/sql/chunk28.sql hasn't been imported yet on
+     * this environment. withoutGlobalScopes()+explicit tenant_id
+     * throughout, same reasoning as every other identity-adjacent write in
+     * this codebase (e.g. WhatsAppSendService) — callers include the
+     * webhook, which never has app('currentTenant') bound.
      */
     public function syncCustomerProfile(int $tenantId, ?int $facebookPageId, string $psid, string $pageAccessToken): ?MessengerCustomer
     {
@@ -60,30 +74,48 @@ class FacebookMessengerCustomerService
         $identity = MessengerCustomer::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)->where('psid', $psid)->first();
 
+        // Always attempted regardless of what Graph does — see class
+        // docblock. facebook_page_id/identity_fetched_at are the minimum
+        // record of "this PSID messaged us via this Page at this time,"
+        // independent of whether Graph ever tells us who they are.
+        $baseAttributes = [
+            'facebook_page_id' => $facebookPageId,
+            'identity_fetched_at' => now(),
+        ];
+
         try {
-            $profile = $this->api->getProfile($psid, $pageAccessToken);
+            $response = $this->api->getProfile($psid, $pageAccessToken);
         } catch (\Throwable $e) {
             // Same "never log $e->getMessage()" caution used throughout this
             // codebase's Graph API error handling — a transport exception's
             // message can echo request details (e.g. the access token in a
             // failed request's URI, depending on the underlying HTTP client).
-            Log::warning('Messenger identity sync: profile fetch failed.', [
+            Log::warning('Messenger identity sync: profile fetch failed (transport error).', [
                 'tenant_id' => $tenantId,
                 'psid' => $psid,
                 'exception' => get_class($e),
             ]);
 
-            return $identity;
+            return $this->persistIdentity($tenantId, $psid, $baseAttributes, $identity);
         }
 
-        if (! $profile) {
-            Log::warning('Messenger identity sync: Graph API returned an unsuccessful response (invalid/expired token, permission error, or rate limit).', [
+        if (! $response->successful()) {
+            $error = $response->json('error') ?? [];
+
+            Log::warning('Messenger identity sync: Graph API returned an unsuccessful response.', [
                 'tenant_id' => $tenantId,
                 'psid' => $psid,
+                'http_status' => $response->status(),
+                'error_code' => $error['code'] ?? null,
+                'error_type' => $error['type'] ?? null,
+                'error_message' => $error['message'] ?? null,
+                'error_subcode' => $error['error_subcode'] ?? null,
             ]);
 
-            return $identity;
+            return $this->persistIdentity($tenantId, $psid, $baseAttributes, $identity);
         }
+
+        $profile = $response->json();
 
         $firstName = is_string($profile['first_name'] ?? null) ? $profile['first_name'] : null;
         $lastName = is_string($profile['last_name'] ?? null) ? $profile['last_name'] : null;
@@ -102,27 +134,30 @@ class FacebookMessengerCustomerService
 
         // array_filter drops nulls — a field Graph didn't return this time
         // never overwrites a previously-stored value for that same field.
-        // A 200 response is still a definitive answer even when it carries
-        // no usable name/photo (a customer who genuinely has neither), so
-        // identity_fetched_at always advances here — that's what stops
-        // needsRefresh() from retrying every single message for such a
-        // customer; only a thrown exception or a failed HTTP response
-        // (the two return-early branches above) leave it untouched so a
-        // transient failure gets retried on the next message instead.
-        $attributes = array_filter([
-            'facebook_page_id' => $facebookPageId,
+        $attributes = $baseAttributes + array_filter([
             'first_name' => $firstName,
             'last_name' => $lastName,
             'name' => $name,
             'profile_pic_url' => $profilePic,
         ], fn ($v) => $v !== null);
 
-        $attributes['identity_fetched_at'] = now();
-
         if ($profilePic) {
             $attributes['profile_pic_fetched_at'] = now();
         }
 
+        return $this->persistIdentity($tenantId, $psid, $attributes, $identity);
+    }
+
+    /**
+     * The single write path every syncCustomerProfile() exit funnels
+     * through — success, Graph error, or transport exception all reach
+     * this with whatever attributes are known at that point (at minimum
+     * $baseAttributes). $fallback is only returned if the write itself
+     * fails (e.g. a DB outage), matching the previous behavior of never
+     * losing a prior identity to a transient persistence failure.
+     */
+    protected function persistIdentity(int $tenantId, string $psid, array $attributes, ?MessengerCustomer $fallback): ?MessengerCustomer
+    {
         try {
             return MessengerCustomer::withoutGlobalScopes()->updateOrCreate(
                 ['tenant_id' => $tenantId, 'psid' => $psid],
@@ -135,7 +170,7 @@ class FacebookMessengerCustomerService
                 'exception' => get_class($e),
             ]);
 
-            return $identity;
+            return $fallback;
         }
     }
 }

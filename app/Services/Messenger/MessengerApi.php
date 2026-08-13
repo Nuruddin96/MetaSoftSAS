@@ -2,6 +2,7 @@
 
 namespace App\Services\Messenger;
 
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
 /** Thin wrapper around Meta's Graph API for Messenger. */
@@ -20,15 +21,21 @@ class MessengerApi
      * richer response from the one already being made (see
      * FacebookMessengerCustomerService, the identity system's canonical
      * caller of this method).
+     *
+     * Returns the raw Response rather than a plain array/null — Meta always
+     * sends a JSON body, success or error, as long as the HTTP call itself
+     * completed, and callers that need to log/inspect a failure (see
+     * FacebookMessengerCustomerService::syncCustomerProfile()) need the
+     * status code and error payload, not just a boolean "it failed." Still
+     * throws on a genuine transport-level failure (DNS/timeout/TLS), same
+     * as before — callers already wrap this in try/catch for that.
      */
-    public function getProfile(string $psid, string $pageAccessToken): ?array
+    public function getProfile(string $psid, string $pageAccessToken): Response
     {
-        $response = Http::get("{$this->base}/{$psid}", [
+        return Http::get("{$this->base}/{$psid}", [
             'fields' => 'first_name,last_name,profile_pic',
             'access_token' => $pageAccessToken,
         ]);
-
-        return $response->successful() ? $response->json() : null;
     }
 
     public function sendMessage(string $psid, string $text, string $pageAccessToken): array

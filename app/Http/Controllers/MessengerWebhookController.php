@@ -188,10 +188,11 @@ class MessengerWebhookController extends Controller
 
                 if (! $name) {
                     try {
-                        $profile = $api->getProfile($psid, $owner->page_access_token);
-                        $name = trim(($profile['first_name'] ?? '').' '.($profile['last_name'] ?? '')) ?: null;
+                        $response = $api->getProfile($psid, $owner->page_access_token);
+                        $profile = $response->successful() ? $response->json() : null;
+                        $name = $profile ? (trim(($profile['first_name'] ?? '').' '.($profile['last_name'] ?? '')) ?: null) : null;
 
-                        if (! $name) {
+                        if ($profile && ! $name) {
                             Log::info('Messenger webhook: profile fetch returned no usable name.', [
                                 'tenant_id' => $owner->tenant_id,
                                 'psid' => $psid,
@@ -209,6 +210,15 @@ class MessengerWebhookController extends Controller
                     }
                 }
             }
+
+            // Neutral, final fallback — messenger_messages.customer_name
+            // should carry a real value rather than NULL whenever possible
+            // (MessengerCustomer name -> first+last -> a prior resolved
+            // name elsewhere in this conversation, all already handled
+            // above), so a customer we genuinely can't identify at all
+            // still reads as "Messenger Customer" rather than leaving the
+            // "অজানা কাস্টমার" placeholder to the view layer alone.
+            $name = $name ?: self::DEFAULT_CUSTOMER_NAME;
         }
 
         // Only the first attachment is used, matching the pre-existing
