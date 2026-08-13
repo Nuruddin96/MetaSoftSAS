@@ -29,8 +29,17 @@ use Illuminate\Support\Str;
  */
 class MessengerWebhookController extends Controller
 {
-    /** Placeholder customer name used until a real name is extracted from the conversation. */
-    protected const DEFAULT_CUSTOMER_NAME = 'Messenger Customer';
+    /**
+     * Placeholder customer name used until a real name is extracted from the
+     * conversation. Public (not protected) because the Inbox list-building
+     * code (MessengerInboxController::applyResolvedIdentities(),
+     * UnifiedInboxService::fetchMessengerCandidates()) needs to recognize
+     * and exclude this exact literal when it appears as
+     * messenger_messages.customer_name — that placeholder must never be
+     * mistaken for a genuinely resolved identity when falling through to
+     * the Order->Customer display-name lookup.
+     */
+    public const DEFAULT_CUSTOMER_NAME = 'Messenger Customer';
 
     /** Meta calls this once (GET) to verify the webhook URL. */
     public function verify(Request $request)

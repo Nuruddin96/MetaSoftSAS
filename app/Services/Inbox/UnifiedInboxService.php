@@ -2,8 +2,10 @@
 
 namespace App\Services\Inbox;
 
+use App\Http\Controllers\MessengerWebhookController;
 use App\Models\MessengerCustomer;
 use App\Models\MessengerMessage;
+use App\Models\Order;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
 use Illuminate\Support\Collection;
@@ -135,18 +137,59 @@ class UnifiedInboxService
             ? MessengerCustomer::whereIn('psid', $psids)->get()->keyBy('psid')
             : collect();
 
+        // Fallback rung below Graph identity / genuine resolved message name:
+        // the business Customer name recorded on this psid's most recent
+        // Order that captured a real BD phone number — see
+        // MessengerInboxController::resolveOrderNames()'s docblock (mirrored
+        // here) for why this filters on customer_name (not customer_id —
+        // that can go NULL independently via ON DELETE SET NULL while the
+        // NOT NULL customer_name snapshot stays valid) excluding the literal
+        // DEFAULT_CUSTOMER_NAME placeholder, why no status filter applies,
+        // and why this never merges psids. Batched the same way as
+        // $resolvedNames/$identities/$unreadCounts — one query for the whole
+        // page, not one per conversation. Explicit tenant_id filter is
+        // redundant with BelongsToTenant's global scope (already active —
+        // this class's own docblock: "Nothing here ever calls
+        // withoutGlobalScopes()") but kept as defense-in-depth, matching
+        // MessengerInboxController::resolveOrderNames()'s identical query.
+        $orderNames = Order::whereIn('messenger_psid', $psids)
+            ->where('tenant_id', app('currentTenant')->id)
+            ->whereNotNull('customer_name')
+            ->where('customer_name', '!=', MessengerWebhookController::DEFAULT_CUSTOMER_NAME)
+            ->orderByDesc('id')
+            ->get(['messenger_psid', 'customer_name'])
+            ->unique('messenger_psid')
+            ->pluck('customer_name', 'messenger_psid');
+
         $unreadCounts = MessengerMessage::whereIn('sender_psid', $psids)
             ->where('status', 'new')->where('direction', 'in')
             ->selectRaw('sender_psid, COUNT(*) as c')->groupBy('sender_psid')->pluck('c', 'sender_psid');
 
-        return $candidates->map(function ($c) use ($rows, $resolvedNames, $identities, $unreadCounts) {
+        return $candidates->map(function ($c) use ($rows, $resolvedNames, $identities, $orderNames, $unreadCounts) {
             $row = $rows->get($c->latest_id);
             $identity = $identities->get($c->sender_psid);
+
+            // A resolved messenger_messages.customer_name equal to the
+            // placeholder MessengerWebhookController writes when nothing
+            // resolved is not an identity signal — see
+            // MessengerInboxController::excludePlaceholder() (same rule,
+            // applied independently here since this service never depends
+            // on that controller for its own name resolution).
+            $fromMessages = $resolvedNames->get($c->sender_psid);
+            $fromMessages = $fromMessages !== MessengerWebhookController::DEFAULT_CUSTOMER_NAME ? $fromMessages : null;
+
+            // Second, defense-in-depth exclusion pass on the Order-sourced
+            // name — the query above already filters the placeholder out at
+            // the SQL level, but this mirrors MessengerInboxController's
+            // belt-and-suspenders posture rather than trusting the query
+            // alone to never regress.
+            $fromOrder = $orderNames->get($c->sender_psid);
+            $fromOrder = $fromOrder !== MessengerWebhookController::DEFAULT_CUSTOMER_NAME ? $fromOrder : null;
 
             return new UnifiedConversation(
                 channel: 'messenger',
                 externalCustomerId: $c->sender_psid,
-                customerName: $identity?->display_name ?: ($resolvedNames->get($c->sender_psid) ?: $row->customer_name),
+                customerName: $identity?->display_name ?: ($fromMessages ?: ($fromOrder ?: $row->customer_name)),
                 avatarUrl: $identity?->profile_pic_url,
                 lastMessageText: $row->message_text,
                 lastMessageAttachmentType: $row->attachment_type, // null-safe: missing column just reads as null, same as everywhere else this project reads it

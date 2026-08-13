@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\MessengerWebhookController;
 use App\Models\Customer;
 use App\Models\FacebookPage;
 use App\Models\MessengerCustomer;
@@ -100,16 +101,35 @@ class MessengerInboxController extends Controller
 
     /**
      * Overwrites customer_name (and sets profile_pic_url) on each
-     * conversation in the given collection with the actual resolved
-     * identity for its psid — see MessengerMessage::resolvedNameFor()'s
-     * docblock for why the source row's own customer_name can't be trusted
-     * directly, and MessengerCustomer::displayNameFor() for the canonical
-     * name-resolution order this mirrors. Mutates the collection's models
-     * in place — used by index() and updates(), which both build their
-     * conversation list the same "latest row per psid" way.
+     * conversation in the given collection with the best identity known for
+     * its psid — see MessengerMessage::resolvedNameFor()'s docblock for why
+     * the source row's own customer_name can't be trusted directly.
+     * Mutates the collection's models in place — used by index() and
+     * updates(), which both build their conversation list the same "latest
+     * row per psid" way.
      *
-     * Both lookups are batched (one query each for all psids in the
-     * collection, not one per conversation) to avoid an N+1 on this list,
+     * Resolution order (display-only — never changes which psid a
+     * conversation belongs to, never touches messenger_customers/orders):
+     *   1. MessengerCustomer Graph identity (name/first+last).
+     *   2. A genuinely resolved messenger_messages.customer_name — EXCLUDING
+     *      MessengerWebhookController::DEFAULT_CUSTOMER_NAME. That literal
+     *      is a placeholder handleEvent() writes when nothing else
+     *      resolved, not an identity signal; whereNotNull() alone can't
+     *      tell the two apart; see resolveOrderNames()'s docblock for why
+     *      this is a required step, not a change from '?: null' to '?:
+     *      "safer default"'.
+     *   3. The business Customer name recorded on this psid's most recent
+     *      Order that has a genuine, non-placeholder customer_name
+     *      (resolveOrderNames() below) — a customer who typed a real BD
+     *      phone number in this conversation, per
+     *      MessengerWebhookController::maybeCreatePendingOrder(), even
+     *      though Meta could never resolve their Graph profile.
+     *   4. Left as whatever the row's own customer_name already is
+     *      (ultimately DEFAULT_CUSTOMER_NAME or the অজানা কাস্টমার view
+     *      fallback), same as before this method existed.
+     *
+     * All three lookups are batched (one query each for every psid in the
+     * collection, never one per conversation) to avoid an N+1 on this list,
      * which is polled every few seconds while the inbox is open.
      */
     protected function applyResolvedIdentities($conversations): void
@@ -131,9 +151,13 @@ class MessengerInboxController extends Controller
             ? MessengerCustomer::whereIn('psid', $psids)->get()->keyBy('psid')
             : collect();
 
+        $orderNames = $this->resolveOrderNames($psids);
+
         foreach ($conversations as $c) {
             $identity = $identities->get($c->sender_psid);
-            $resolved = $identity?->display_name ?: $resolvedNames->get($c->sender_psid);
+            $fromMessages = $this->excludePlaceholder($resolvedNames->get($c->sender_psid));
+            $fromOrder = $this->excludePlaceholder($orderNames->get($c->sender_psid));
+            $resolved = $identity?->display_name ?: $fromMessages ?: $fromOrder;
 
             if ($resolved) {
                 $c->customer_name = $resolved;
@@ -141,6 +165,87 @@ class MessengerInboxController extends Controller
 
             $c->profile_pic_url = $identity?->profile_pic_url;
         }
+    }
+
+    /**
+     * A value equal to the literal placeholder name is treated as "no
+     * signal" rather than a resolved identity — see applyResolvedIdentities()
+     * step 2. Centralized here so index()/updates() (via
+     * applyResolvedIdentities()) and UnifiedInboxService's Messenger branch
+     * apply the exact same exclusion, never two independently-maintained
+     * copies of this comparison.
+     */
+    protected function excludePlaceholder(?string $name): ?string
+    {
+        return $name !== MessengerWebhookController::DEFAULT_CUSTOMER_NAME ? $name : null;
+    }
+
+    /**
+     * Batched (tenant-scoped, one query for every psid passed in) lookup of
+     * "the Customer this psid is known to belong to, via an Order it placed
+     * that captured a real BD phone number" — see
+     * MessengerWebhookController::maybeCreatePendingOrder(), the only place
+     * orders.messenger_psid/customer_id are ever written together. This is
+     * read-only and purely a display-name source: it never merges psids,
+     * never changes which conversation a message belongs to, and never
+     * writes to messenger_customers or orders.
+     *
+     * Filters on customer_name, not customer_id: customer_id can go NULL
+     * independently of the name (ON DELETE SET NULL when the linked
+     * Customer row is later deleted) while orders.customer_name — a NOT
+     * NULL snapshot column — remains a perfectly valid, still-meaningful
+     * value; filtering on customer_id would incorrectly discard a resolvable
+     * older order in that case. Conversely, orders.customer_name can itself
+     * legitimately equal MessengerWebhookController::DEFAULT_CUSTOMER_NAME
+     * (maybeCreatePendingOrder() writes $customer->name onto the order, and
+     * $customer->name is set to that same placeholder when a phone number
+     * arrives with no resolvable name at all) — excluded here by literal
+     * value for the same reason $resolvedNames' placeholder is excluded in
+     * applyResolvedIdentities(), and the caller applies excludePlaceholder()
+     * again on the returned value as a second, defense-in-depth pass.
+     *
+     * whereNotNull('customer_name') + orderByDesc('id') + unique('messenger_psid')
+     * is the same "DESC then unique() keeps the first (= latest) per key"
+     * trick already used for $resolvedNames above — one query, not one per
+     * conversation. A row whose own customer_name is the placeholder is
+     * skipped in favor of an OLDER order for the same psid that has a
+     * genuine one, rather than giving up — prefer the latest order that
+     * actually resolves, not unconditionally the latest order.
+     *
+     * No order status filter — a cancelled/returned order is still true
+     * evidence this psid and this phone number were associated in one real
+     * conversation; existing precedent (show()'s $linkedOrder lookup below)
+     * doesn't filter by status for this same purpose either.
+     *
+     * Explicit tenant_id filter is redundant with BelongsToTenant's global
+     * scope (already active on every query in this class — no
+     * withoutGlobalScopes() call anywhere here, unlike the webhook
+     * controller) but kept as defense-in-depth, same posture as
+     * resolveReplyToken()'s FacebookPage lookup below.
+     *
+     * If the same psid's orders carry more than one distinct customer_name
+     * over time (e.g. a later manual correction), this deliberately does
+     * NOT reconcile or vote across them — it always takes the single latest
+     * resolvable order and nothing else, so this feature can never merge
+     * two different real customers' identities on its own judgment.
+     *
+     * @param  \Illuminate\Support\Collection<int, string>  $psids
+     * @return \Illuminate\Support\Collection<string, string> customer_name keyed by messenger_psid
+     */
+    protected function resolveOrderNames($psids): \Illuminate\Support\Collection
+    {
+        if (! app()->bound('currentTenant')) {
+            return collect();
+        }
+
+        return Order::whereIn('messenger_psid', $psids)
+            ->where('tenant_id', app('currentTenant')->id)
+            ->whereNotNull('customer_name')
+            ->where('customer_name', '!=', MessengerWebhookController::DEFAULT_CUSTOMER_NAME)
+            ->orderByDesc('id')
+            ->get(['messenger_psid', 'customer_name'])
+            ->unique('messenger_psid')
+            ->pluck('customer_name', 'messenger_psid');
     }
 
     public function reply(Request $request, string $psid, MessengerApi $api)
