@@ -86,6 +86,27 @@ trait InteractsWithCommerceSchema
             });
         }
 
+        // Mirrors database/sql/chunk28.sql — see InteractsWithFacebookSchema
+        // for the full rationale. Needed here too because
+        // maybeCreatePendingOrder()'s Facebook-name resolution reads this
+        // table directly.
+        if (! Schema::hasTable('messenger_customers')) {
+            Schema::create('messenger_customers', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('facebook_page_id')->nullable();
+                $table->string('psid', 100);
+                $table->string('first_name', 100)->nullable();
+                $table->string('last_name', 100)->nullable();
+                $table->string('name', 150)->nullable();
+                $table->string('profile_pic_url', 500)->nullable();
+                $table->timestamp('profile_pic_fetched_at')->nullable();
+                $table->timestamp('identity_fetched_at')->nullable();
+                $table->timestamps();
+                $table->unique(['tenant_id', 'psid']);
+            });
+        }
+
         // layouts/panel.blade.php (rendered by every real panel page) queries
         // this unconditionally for the notification-bell badge count.
         if (! Schema::hasTable('incomplete_orders')) {

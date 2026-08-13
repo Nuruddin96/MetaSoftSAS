@@ -3,6 +3,7 @@
 namespace Tests\Feature\Messenger;
 
 use App\Models\Customer;
+use App\Models\MessengerCustomer;
 use App\Models\Order;
 use Illuminate\Support\Facades\Http;
 use Tests\Concerns\InteractsWithCommerceSchema;
@@ -194,6 +195,52 @@ class AutoPendingOrderTest extends TestCase
 
         $customer = Customer::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
         $this->assertSame('Apo Rahman', $customer->name);
+    }
+
+    /**
+     * Test 6 (Phase 1.1 identity spec) — the Facebook name is the default/
+     * primary customer name, and stays fully independent of phone/address:
+     * given Facebook name "Rahim Ahmed", phone "01700000000", and address
+     * "Dhaka" arriving separately in the conversation, the resulting
+     * customer/order must show exactly those three values in their own
+     * fields — never the phone or address concatenated into the name.
+     * Uses the canonical messenger_customers identity (chunk28.sql,
+     * FacebookMessengerCustomerService) via the real webhook path, not the
+     * older message-level resolvedNameFor() fallback this file's other
+     * "cached Facebook profile name" test already covers.
+     */
+    public function test_facebook_name_is_the_primary_name_independent_of_phone_and_address(): void
+    {
+        Http::fake([
+            'graph.facebook.com/*' => Http::response(['first_name' => 'Rahim', 'last_name' => 'Ahmed']),
+        ]);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-1');
+
+        // First message: no phone, no typed name — resolves and persists
+        // the Facebook identity onto messenger_customers.
+        $this->postWebhook($this->payload('page-1', 'mid-1', 'psid-1', 'দাম কত?'))->assertOk();
+
+        $identity = MessengerCustomer::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)->where('psid', 'psid-1')->first();
+        $this->assertSame('Rahim Ahmed', $identity->name);
+
+        // Phone and address arrive later, as their own separate messages —
+        // never typed as part of a "name" line.
+        $this->postWebhook($this->payload('page-1', 'mid-2', 'psid-1', '01700000000'))->assertOk();
+        $this->postWebhook($this->payload('page-1', 'mid-3', 'psid-1', 'ঠিকানা: Dhaka'))->assertOk();
+
+        $customer = Customer::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('Rahim Ahmed', $customer->name, 'the Facebook name must be used as-is, not appended to or replaced by phone/address');
+        $this->assertSame('01700000000', $customer->phone);
+        $this->assertStringContainsString('Dhaka', (string) $customer->address);
+        $this->assertStringNotContainsString('01700000000', $customer->name);
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('Rahim Ahmed', $order->customer_name);
+        $this->assertSame('01700000000', $order->customer_phone);
+        $this->assertStringNotContainsString('01700000000', $order->customer_name);
     }
 
     public function test_explicitly_typed_name_still_wins_over_the_facebook_profile_name(): void

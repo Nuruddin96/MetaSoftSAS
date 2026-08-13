@@ -45,6 +45,7 @@ trait InteractsWithFacebookSchema
         bool $includeFacebookOauthTables = true,
         bool $includeFacebookPageIdColumn = true,
         bool $includeAttachmentColumns = true,
+        bool $includeMessengerCustomersTable = true,
     ): void {
         if (! Schema::hasTable('tenants')) {
             Schema::create('tenants', function (Blueprint $table) {
@@ -230,6 +231,28 @@ trait InteractsWithFacebookSchema
                 $table->string('direction', 10)->default('in');
                 $table->string('status', 20)->default('new');
                 $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        // Mirrors database/sql/chunk28.sql — see that file's header comment
+        // for the UNIQUE(tenant_id, psid) / nullable facebook_page_id
+        // rationale. No real FK constraint here (SQLite test schema
+        // convention throughout this file), just the column shape
+        // FacebookMessengerCustomerService/MessengerCustomer touch.
+        if ($includeMessengerCustomersTable && ! Schema::hasTable('messenger_customers')) {
+            Schema::create('messenger_customers', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('facebook_page_id')->nullable();
+                $table->string('psid', 100);
+                $table->string('first_name', 100)->nullable();
+                $table->string('last_name', 100)->nullable();
+                $table->string('name', 150)->nullable();
+                $table->string('profile_pic_url', 500)->nullable();
+                $table->timestamp('profile_pic_fetched_at')->nullable();
+                $table->timestamp('identity_fetched_at')->nullable();
+                $table->timestamps();
+                $table->unique(['tenant_id', 'psid']);
             });
         }
     }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\FacebookPage;
+use App\Models\MessengerCustomer;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\Order;
@@ -29,9 +30,9 @@ class MessengerInboxController extends Controller
         // customer_name is only ever set on inbound messages — so reading
         // it straight off that row showed "অজানা কাস্টমার" for customers
         // whose Facebook name WAS already resolved earlier in the same
-        // conversation. Look up the actual resolved name per psid instead
-        // of trusting whichever row happens to be latest.
-        $this->applyResolvedNames($conversations->getCollection());
+        // conversation. Look up the actual resolved identity per psid
+        // instead of trusting whichever row happens to be latest.
+        $this->applyResolvedIdentities($conversations->getCollection());
 
         return view('tenant.messenger.index', [
             'conversations' => $conversations,
@@ -54,9 +55,17 @@ class MessengerInboxController extends Controller
         $customer = $messages->last();
         $resolvedName = $messages->pluck('customer_name')->filter()->last();
 
-        if ($resolvedName) {
-            $customer->customer_name = $resolvedName;
-        }
+        // Canonical Facebook identity (name + photo) for this psid, when
+        // the messenger_customers table (database/sql/chunk28.sql) is
+        // imported and a record exists — takes priority over the
+        // message-level customer_name for display, same resolution order
+        // as MessengerCustomer::displayNameFor()'s docblock.
+        $identity = MessengerCustomer::tablesReady()
+            ? MessengerCustomer::where('psid', $psid)->first()
+            : null;
+
+        $customer->customer_name = $identity?->display_name ?: ($resolvedName ?: $customer->customer_name);
+        $customer->profile_pic_url = $identity?->profile_pic_url;
 
         $linkedOrder = Order::where('messenger_psid', $psid)->latest()->first();
 
@@ -90,15 +99,20 @@ class MessengerInboxController extends Controller
     }
 
     /**
-     * Overwrites customer_name on each conversation in the given
-     * collection with the actual resolved name for its psid (see
-     * MessengerMessage::resolvedNameFor()'s docblock for why the source
-     * row's own customer_name can't be trusted directly). Mutates the
-     * collection's models in place — used by index() and updates(), which
-     * both build their conversation list the same "latest row per psid"
-     * way.
+     * Overwrites customer_name (and sets profile_pic_url) on each
+     * conversation in the given collection with the actual resolved
+     * identity for its psid — see MessengerMessage::resolvedNameFor()'s
+     * docblock for why the source row's own customer_name can't be trusted
+     * directly, and MessengerCustomer::displayNameFor() for the canonical
+     * name-resolution order this mirrors. Mutates the collection's models
+     * in place — used by index() and updates(), which both build their
+     * conversation list the same "latest row per psid" way.
+     *
+     * Both lookups are batched (one query each for all psids in the
+     * collection, not one per conversation) to avoid an N+1 on this list,
+     * which is polled every few seconds while the inbox is open.
      */
-    protected function applyResolvedNames($conversations): void
+    protected function applyResolvedIdentities($conversations): void
     {
         $psids = $conversations->pluck('sender_psid')->unique();
 
@@ -113,12 +127,19 @@ class MessengerInboxController extends Controller
             ->unique('sender_psid')
             ->pluck('customer_name', 'sender_psid');
 
+        $identities = MessengerCustomer::tablesReady()
+            ? MessengerCustomer::whereIn('psid', $psids)->get()->keyBy('psid')
+            : collect();
+
         foreach ($conversations as $c) {
-            $resolved = $resolvedNames->get($c->sender_psid);
+            $identity = $identities->get($c->sender_psid);
+            $resolved = $identity?->display_name ?: $resolvedNames->get($c->sender_psid);
 
             if ($resolved) {
                 $c->customer_name = $resolved;
             }
+
+            $c->profile_pic_url = $identity?->profile_pic_url;
         }
     }
 
@@ -305,13 +326,14 @@ class MessengerInboxController extends Controller
             $latestPerPsid = MessengerMessage::whereIn('id', $latestIds)->get();
 
             // Same "latest row might be outbound and never carries
-            // customer_name" fix as index()/show() — see applyResolvedNames().
-            $this->applyResolvedNames($latestPerPsid);
+            // customer_name" fix as index()/show() — see applyResolvedIdentities().
+            $this->applyResolvedIdentities($latestPerPsid);
 
             $conversations = $latestPerPsid
                 ->map(fn ($c) => [
                     'psid' => $c->sender_psid,
                     'customer_name' => $c->customer_name,
+                    'profile_pic_url' => $c->profile_pic_url,
                     'message_text' => $c->message_text,
                     'has_attachment' => (bool) $c->attachment_url,
                     'attachment_type' => $c->attachment_type,

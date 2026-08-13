@@ -14,7 +14,8 @@
     data-show-url-template="{{ route('tenant.messenger.show', '__PSID__') }}">
     @forelse ($conversations as $c)
         <a id="conv-{{ $c->sender_psid }}" href="{{ route('tenant.messenger.show', $c->sender_psid) }}"
-           class="conv-row flex items-center justify-between px-5 py-4 hover:bg-paper/60 transition {{ $c->status === 'new' ? 'bg-leaf/5' : '' }}">
+           class="conv-row flex items-center gap-3 justify-between px-5 py-4 hover:bg-paper/60 transition {{ $c->status === 'new' ? 'bg-leaf/5' : '' }}">
+            <x-ui.avatar :name="$c->customer_name" :url="$c->profile_pic_url ?? null" size="default" class="shrink-0" />
             <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
                     <p class="conv-name font-medium">{{ $c->customer_name ?: 'অজানা কাস্টমার' }}</p>
@@ -65,6 +66,7 @@
             row.id = 'conv-' + c.psid;
             row.href = showUrlTemplate.replace('__PSID__', c.psid);
             row.innerHTML = `
+                <span class="conv-avatar shrink-0 inline-flex items-center justify-center rounded-full font-bold w-11 h-11 text-sm bg-ink/5 text-ink"></span>
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
                         <p class="conv-name font-medium"></p>
@@ -78,7 +80,19 @@
                 </div>`;
         }
 
-        row.className = 'conv-row flex items-center justify-between px-5 py-4 hover:bg-paper/60 transition' + (c.status === 'new' ? ' bg-leaf/5' : '');
+        row.className = 'conv-row flex items-center gap-3 justify-between px-5 py-4 hover:bg-paper/60 transition' + (c.status === 'new' ? ' bg-leaf/5' : '');
+
+        // Mirrors the ui.avatar Blade component's photo-with-initials-fallback
+        // behavior for rows appended by polling — a broken/expired photo URL
+        // degrades to the initial, never a broken-image icon.
+        const avatarEl = row.querySelector('.conv-avatar');
+        const initial = (c.customer_name || '').trim().charAt(0).toUpperCase() || '?';
+        if (c.profile_pic_url) {
+            avatarEl.innerHTML = `<img src="${c.profile_pic_url}" alt="" loading="lazy" class="rounded-full object-cover w-full h-full" onerror="this.replaceWith(document.createTextNode('${initial}'))">`;
+        } else {
+            avatarEl.textContent = initial;
+        }
+
         row.querySelector('.conv-name').textContent = c.customer_name || 'অজানা কাস্টমার';
         row.querySelector('.conv-msg').textContent = (c.direction === 'out' ? 'আপনি: ' : '') + (c.message_text || attachmentPreview[c.attachment_type] || '📎 ফাইল পাঠিয়েছে');
         row.querySelector('.conv-time').textContent = c.time_label;

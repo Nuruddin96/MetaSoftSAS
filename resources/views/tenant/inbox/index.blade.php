@@ -49,8 +49,8 @@
         row.dataset.conversationKey = c.conversation_key;
         row.className = 'conv-row flex items-center gap-3 px-4 py-3 hover:bg-paper/60 transition';
         row.innerHTML = `
-            <span class="relative shrink-0">
-                <span class="inline-flex items-center justify-center rounded-full font-bold shrink-0 w-11 h-11 text-sm bg-ink/5 text-ink"></span>
+            <span class="relative shrink-0 inline-block w-11 h-11">
+                <span class="conv-avatar inline-flex items-center justify-center rounded-full font-bold shrink-0 w-11 h-11 text-sm bg-ink/5 text-ink"></span>
                 <span class="absolute -bottom-0.5 -right-0.5 text-[10px] leading-none bg-white rounded-full"></span>
             </span>
             <div class="min-w-0 flex-1">
@@ -64,7 +64,17 @@
                 </div>
             </div>`;
 
-        row.querySelector('.rounded-full.font-bold').textContent = initials(c.customer_name);
+        // Mirrors the ui.avatar Blade component's photo-with-initials-fallback
+        // behavior for rows appended by "load more" — a broken/expired photo
+        // URL degrades to the initial, never a broken-image icon.
+        const avatarEl = row.querySelector('.conv-avatar');
+        const initial = initials(c.customer_name);
+        if (c.avatar_url) {
+            avatarEl.innerHTML = `<img src="${c.avatar_url}" alt="" loading="lazy" class="rounded-full object-cover w-full h-full" onerror="this.replaceWith(document.createTextNode('${initial}'))">`;
+        } else {
+            avatarEl.textContent = initial;
+        }
+
         row.querySelector('span.absolute').textContent = channelBadge[c.channel] || '';
         row.querySelector('.conv-name').textContent = c.customer_name || 'অজানা কাস্টমার';
         row.querySelector('.conv-name').className = 'conv-name truncate ' + (c.unread_count > 0 ? 'font-bold text-ink' : 'font-medium text-ink/90');

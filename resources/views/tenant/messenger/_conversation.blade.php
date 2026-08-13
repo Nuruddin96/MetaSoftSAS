@@ -14,7 +14,7 @@
             <a href="{{ route('tenant.inbox') }}" class="lg:hidden shrink-0 w-8 h-8 -ml-1 grid place-items-center rounded-full text-mute hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2" aria-label="তালিকায় ফিরুন">
                 <i data-lucide="arrow-left" class="w-5 h-5"></i>
             </a>
-            <x-ui.avatar :name="$customer->customer_name" size="sm" />
+            <x-ui.avatar :name="$customer->customer_name" :url="$customer->profile_pic_url ?? null" size="sm" />
             <div class="min-w-0">
                 <p class="font-bold text-sm truncate leading-tight">{{ $customer->customer_name ?: 'অজানা কাস্টমার' }}</p>
                 <p class="text-[11px] text-mute truncate leading-tight">🔵 Messenger</p>

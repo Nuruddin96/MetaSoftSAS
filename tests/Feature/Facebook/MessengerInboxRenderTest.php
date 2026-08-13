@@ -147,7 +147,9 @@ class MessengerInboxRenderTest extends FacebookFeatureTestCase
         $html = $response->getContent();
         $rowStart = strpos($html, 'id="conv-psid-latest-out-1"');
         $this->assertNotFalse($rowStart, 'conversation row not found');
-        $row = substr($html, $rowStart, 600);
+        // Window widened from 600: Phase 1.1 added an <x-ui.avatar> before
+        // the name paragraph in this row's markup.
+        $row = substr($html, $rowStart, 900);
 
         $this->assertStringContainsString('Apo', $row);
         $this->assertStringNotContainsString('অজানা কাস্টমার', $row);

@@ -22,6 +22,7 @@ final class UnifiedConversation
         public readonly string $channel, // 'messenger' | 'whatsapp'
         public readonly string $externalCustomerId,
         public readonly ?string $customerName,
+        public readonly ?string $avatarUrl, // Messenger profile photo (messenger_customers.profile_pic_url) — always null for WhatsApp, which has no photo source
         public readonly ?string $lastMessageText,
         public readonly ?string $lastMessageAttachmentType,
         public readonly string $lastMessageDirection, // 'in' | 'out'
@@ -50,6 +51,7 @@ final class UnifiedConversation
             'channel' => $this->channel,
             'conversation_key' => $this->conversationKey(),
             'customer_name' => $this->customerName,
+            'avatar_url' => $this->avatarUrl,
             'message_text' => $this->lastMessageText,
             'attachment_type' => $this->lastMessageAttachmentType,
             'direction' => $this->lastMessageDirection,

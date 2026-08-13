@@ -75,7 +75,7 @@
                data-conversation-key="{{ $c->conversationKey() }}"
                class="conv-row flex items-center gap-3 px-4 py-3 hover:bg-paper/60 transition {{ $isActive ? 'bg-leaf/10' : '' }}">
                 <span class="relative shrink-0">
-                    <x-ui.avatar :name="$c->customerName" size="default" />
+                    <x-ui.avatar :name="$c->customerName" :url="$c->avatarUrl" size="default" />
                     <span class="absolute -bottom-0.5 -right-0.5 text-[10px] leading-none bg-white rounded-full" title="{{ $isWhatsapp ? 'WhatsApp' : 'Messenger' }}">{{ $channelBadge }}</span>
                 </span>
                 <div class="min-w-0 flex-1">

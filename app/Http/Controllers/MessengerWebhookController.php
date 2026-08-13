@@ -6,11 +6,13 @@ use App\Jobs\ProcessAiAgentMessage;
 use App\Models\AiAgentMessageJob;
 use App\Models\Customer;
 use App\Models\FacebookPage;
+use App\Models\MessengerCustomer;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\Order;
 use App\Models\StoreSetting;
 use App\Services\Messenger\CustomerInfoExtractor;
+use App\Services\Messenger\FacebookMessengerCustomerService;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -42,7 +44,7 @@ class MessengerWebhookController extends Controller
     }
 
     /** Meta calls this (POST) every time a message/event happens. */
-    public function receive(Request $request, MessengerApi $api)
+    public function receive(Request $request, MessengerApi $api, FacebookMessengerCustomerService $customerService)
     {
         if (! $this->hasValidSignature($request)) {
             Log::warning('Messenger webhook: rejected request with invalid or missing X-Hub-Signature-256.', [
@@ -67,7 +69,7 @@ class MessengerWebhookController extends Controller
             } // page not connected to any tenant — ignore
 
             foreach (($entry['messaging'] ?? []) as $event) {
-                $this->handleEvent($event, $owner, $api);
+                $this->handleEvent($event, $owner, $api, $customerService);
             }
         }
 
@@ -116,7 +118,7 @@ class MessengerWebhookController extends Controller
         return null;
     }
 
-    protected function handleEvent(array $event, object $owner, MessengerApi $api): void
+    protected function handleEvent(array $event, object $owner, MessengerApi $api, FacebookMessengerCustomerService $customerService): void
     {
         // Meta sets message.is_echo=true when a message was sent FROM the
         // Page — by us via the Send API (MessengerInboxController::reply())
@@ -156,46 +158,55 @@ class MessengerWebhookController extends Controller
         $name = null;
 
         if (! $isEcho) {
-            // resolve customer's display name once, reuse for later messages
-            $name = MessengerMessage::resolvedNameFor($owner->tenant_id, $psid);
+            if (MessengerCustomer::tablesReady()) {
+                // Canonical identity path (database/sql/chunk28.sql) — one
+                // Graph call fetches name AND profile photo together and
+                // persists both to messenger_customers, gated by
+                // needsRefresh() so ordinary message traffic doesn't call
+                // Graph on every single message once an identity is known.
+                // syncCustomerProfile() never throws and never erases a
+                // previously-good identity on failure (see its docblock),
+                // so a Graph outage here degrades to "keep whatever we
+                // already had," never to a broken webhook.
+                $identity = MessengerCustomer::withoutGlobalScopes()
+                    ->where('tenant_id', $owner->tenant_id)->where('psid', $psid)->first();
 
-            if (! $name) {
-                try {
-                    $profile = $api->getProfile($psid, $owner->page_access_token);
-                    $name = trim(($profile['first_name'] ?? '').' '.($profile['last_name'] ?? '')) ?: null;
+                if ($customerService->needsRefresh($identity)) {
+                    $identity = $customerService->syncCustomerProfile(
+                        $owner->tenant_id, $owner->facebook_page_id, $psid, $owner->page_access_token
+                    ) ?? $identity;
+                }
 
-                    // A 200 response with no usable first_name/last_name is
-                    // otherwise indistinguishable from "Facebook genuinely
-                    // has no name" — this is the "অজানা কাস্টমার persists
-                    // even though Facebook has a name" failure mode, and
-                    // without this it's invisible: nothing before this
-                    // logged the difference between "no name" and "name
-                    // fetch didn't return one," so there was no way to tell
-                    // a stale/invalid page_access_token or a Graph API
-                    // permission issue apart from a customer who truly has
-                    // no Facebook name set.
-                    if (! $name) {
-                        Log::info('Messenger webhook: profile fetch returned no usable name.', [
+                $name = $identity?->display_name ?: MessengerMessage::resolvedNameFor($owner->tenant_id, $psid);
+            } else {
+                // chunk28.sql not imported on this environment yet — same
+                // inline getProfile()-based resolution this controller used
+                // before the MessengerCustomer identity system existed, kept
+                // so an un-migrated environment still resolves a name (just
+                // without the richer, persisted identity record or photo).
+                $name = MessengerMessage::resolvedNameFor($owner->tenant_id, $psid);
+
+                if (! $name) {
+                    try {
+                        $profile = $api->getProfile($psid, $owner->page_access_token);
+                        $name = trim(($profile['first_name'] ?? '').' '.($profile['last_name'] ?? '')) ?: null;
+
+                        if (! $name) {
+                            Log::info('Messenger webhook: profile fetch returned no usable name.', [
+                                'tenant_id' => $owner->tenant_id,
+                                'psid' => $psid,
+                                'response_had_first_name' => isset($profile['first_name']),
+                                'response_had_last_name' => isset($profile['last_name']),
+                            ]);
+                        }
+                    } catch (\Throwable $e) {
+                        Log::warning('Messenger webhook: profile fetch failed while resolving customer name.', [
                             'tenant_id' => $owner->tenant_id,
                             'psid' => $psid,
-                            'response_had_first_name' => isset($profile['first_name']),
-                            'response_had_last_name' => isset($profile['last_name']),
+                            'exception' => get_class($e),
                         ]);
+                        $name = null;
                     }
-                } catch (\Throwable $e) {
-                    // Same "never log $e->getMessage()" caution used
-                    // throughout this codebase's Graph API error handling
-                    // (e.g. WhatsAppSendService) — a Graph exception's
-                    // message can echo request details. Logging the
-                    // exception class + psid is enough to distinguish
-                    // "the profile call is failing" (investigate the Page's
-                    // token/permissions) from "no name was ever available."
-                    Log::warning('Messenger webhook: profile fetch failed while resolving customer name.', [
-                        'tenant_id' => $owner->tenant_id,
-                        'psid' => $psid,
-                        'exception' => get_class($e),
-                    ]);
-                    $name = null;
                 }
             }
         }
@@ -404,13 +415,20 @@ class MessengerWebhookController extends Controller
         }
 
         // CustomerInfoExtractor only finds a name when the customer typed
-        // one explicitly (e.g. "Name: Apo") — the normal case is they never
-        // do, since Facebook already knows who they are. handleEvent()
-        // already resolved and cached that real name via getProfile() onto
-        // this psid's messenger_messages rows the moment the conversation
-        // started; reuse it here instead of falling through to the
-        // DEFAULT_CUSTOMER_NAME placeholder.
-        $resolvedName = $info['name'] ?: MessengerMessage::resolvedNameFor($tenantId, $psid);
+        // one explicitly (e.g. "Name: Apo") — an explicit typed name is
+        // treated as a deliberate correction and always wins when present
+        // (see AutoPendingOrderTest::test_explicitly_typed_name_still_wins_
+        // over_the_facebook_profile_name). Absent that, the customer's
+        // Facebook identity is the default: prefer the canonical
+        // messenger_customers record (name + photo, kept fresh by
+        // handleEvent()'s syncCustomerProfile() call) and fall back to the
+        // older per-message resolvedNameFor() cache only when that table
+        // isn't imported yet or has no record for this psid.
+        $identity = MessengerCustomer::tablesReady()
+            ? MessengerCustomer::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('psid', $psid)->first()
+            : null;
+
+        $resolvedName = $info['name'] ?: ($identity?->display_name ?: MessengerMessage::resolvedNameFor($tenantId, $psid));
 
         DB::transaction(function () use ($tenantId, $psid, $info, $resolvedName) {
             $customer = Customer::withoutGlobalScopes()->firstOrCreate(

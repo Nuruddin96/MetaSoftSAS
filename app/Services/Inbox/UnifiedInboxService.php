@@ -2,6 +2,7 @@
 
 namespace App\Services\Inbox;
 
+use App\Models\MessengerCustomer;
 use App\Models\MessengerMessage;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
@@ -121,23 +122,32 @@ class UnifiedInboxService
 
         // Same "don't trust the latest row's own customer_name — it might
         // be an outbound row that never carries one" reasoning as
-        // MessengerInboxController::applyResolvedNames().
+        // MessengerInboxController::applyResolvedIdentities().
         $resolvedNames = MessengerMessage::whereIn('sender_psid', $psids)
             ->whereNotNull('customer_name')->orderByDesc('id')
             ->get(['sender_psid', 'customer_name'])->unique('sender_psid')
             ->pluck('customer_name', 'sender_psid');
 
+        // Canonical Facebook identity (name + photo) — batched into one
+        // query for every psid on this page, same "no N+1 on a list that
+        // gets polled/paginated" reasoning as $resolvedNames/$unreadCounts.
+        $identities = MessengerCustomer::tablesReady()
+            ? MessengerCustomer::whereIn('psid', $psids)->get()->keyBy('psid')
+            : collect();
+
         $unreadCounts = MessengerMessage::whereIn('sender_psid', $psids)
             ->where('status', 'new')->where('direction', 'in')
             ->selectRaw('sender_psid, COUNT(*) as c')->groupBy('sender_psid')->pluck('c', 'sender_psid');
 
-        return $candidates->map(function ($c) use ($rows, $resolvedNames, $unreadCounts) {
+        return $candidates->map(function ($c) use ($rows, $resolvedNames, $identities, $unreadCounts) {
             $row = $rows->get($c->latest_id);
+            $identity = $identities->get($c->sender_psid);
 
             return new UnifiedConversation(
                 channel: 'messenger',
                 externalCustomerId: $c->sender_psid,
-                customerName: $resolvedNames->get($c->sender_psid) ?: $row->customer_name,
+                customerName: $identity?->display_name ?: ($resolvedNames->get($c->sender_psid) ?: $row->customer_name),
+                avatarUrl: $identity?->profile_pic_url,
                 lastMessageText: $row->message_text,
                 lastMessageAttachmentType: $row->attachment_type, // null-safe: missing column just reads as null, same as everywhere else this project reads it
                 lastMessageDirection: $row->direction,
@@ -192,6 +202,7 @@ class UnifiedInboxService
                 channel: 'whatsapp',
                 externalCustomerId: $c->wa_id,
                 customerName: $resolvedNames->get($c->wa_id) ?: $row->customer_name,
+                avatarUrl: null, // WhatsApp has no profile-photo source in this integration
                 lastMessageText: $row->message_text,
                 lastMessageAttachmentType: $row->attachment_type,
                 lastMessageDirection: $row->direction,
