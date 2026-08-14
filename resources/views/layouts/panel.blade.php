@@ -254,6 +254,57 @@
         </header>
 
         <main class="flex-1 p-4 lg:p-8 pb-24 lg:pb-8">
+            {{-- Persistent-login tip: shown once, purely client-side
+                 (localStorage, no backend state). Android OEM battery /
+                 autostart managers (Xiaomi, Vivo, Oppo, Realme — common on
+                 this product's target devices) routinely clear an installed
+                 PWA's cookies in the background, forcing an unexpected
+                 re-login that no server-side session/cookie fix alone can
+                 prevent. See the mobile audit, Part B, for the full
+                 reasoning — this banner is the user-education half of that
+                 mitigation. --}}
+            <div id="signinTip" class="hidden mb-6">
+                <x-ui.card padding="sm">
+                    <div class="flex items-start gap-3 text-sm">
+                        <i data-lucide="shield-check" class="w-4 h-4 text-leafdk shrink-0 mt-0.5"></i>
+                        <div class="flex-1">
+                            <p class="font-semibold mb-1">সবসময় লগইন থাকতে</p>
+                            <p class="text-mute">ফোনের Settings → Apps → Chrome-এ গিয়ে <b>Autostart</b> চালু বা <b>Battery optimization</b> বন্ধ করে দিন — তাহলে অ্যাপ বন্ধ করলে বা ফোন রিস্টার্ট করলেও বারবার লগইন করতে হবে না।</p>
+                        </div>
+                        <button id="signinTipDismiss" type="button" class="shrink-0 text-mute hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 rounded" aria-label="বন্ধ করুন">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </x-ui.card>
+            </div>
+
+            {{-- Notification-permission value-prop banner (mobile audit,
+                 Part 4/Phase 4): never trigger the native browser permission
+                 prompt on page load. This is our own dismissible card —
+                 only the "নোটিফিকেশন চালু করুন" button click (a real user
+                 gesture, which browsers require anyway for the native
+                 prompt to have any effect) calls Notification.requestPermission()
+                 in resources/js/app.js's push-notifications section.
+                 data-* attributes carry only public, non-secret values —
+                 the VAPID *public* key is meant to ship to the browser (it's
+                 how the browser proves a subscription belongs to this app's
+                 private key, not a credential in itself). --}}
+            <div id="pushPromptTip" class="hidden mb-6">
+                <x-ui.card padding="sm">
+                    <div class="flex items-start gap-3 text-sm">
+                        <i data-lucide="bell-ring" class="w-4 h-4 text-leafdk shrink-0 mt-0.5"></i>
+                        <div class="flex-1">
+                            <p class="font-semibold mb-1">নোটিফিকেশন চালু করুন</p>
+                            <p class="text-mute mb-2.5">নতুন অর্ডার, কাস্টমার মেসেজ এবং জরুরি বিজনেস আপডেট সম্পর্কে সাথে সাথে জানতে পারবেন।</p>
+                            <div class="flex gap-2">
+                                <button id="pushPromptAllow" type="button" class="text-xs font-semibold bg-leaf text-white px-3.5 py-1.5 rounded-pill hover:bg-leafdk transition">নোটিফিকেশন চালু করুন</button>
+                                <button id="pushPromptLater" type="button" class="text-xs font-semibold text-mute hover:text-ink px-3.5 py-1.5">পরে করব</button>
+                            </div>
+                        </div>
+                    </div>
+                </x-ui.card>
+            </div>
+
             @yield('content')
         </main>
     </div>
@@ -312,6 +363,19 @@
     window.__flashMessages = @js(array_values($flashMessages));
     window.__swUrl = @js(route('tenant.pwa.sw'));
 
+    {{-- Consumed by the "Push notifications" section of resources/js/app.js
+    — reused as-is by both the dismissible banner above and the manual
+    "notification enable" control on the Settings → Notifications page, so
+    there's exactly one subscribe() implementation. vapidKey is a *public*
+    key (safe to ship to the browser, not a credential); null until VAPID
+    keys are generated in production — app.js treats null as "push isn't
+    configured yet" and simply never shows the banner. --}}
+    window.__push = {
+        vapidKey: @js(config('services.vapid.public_key')),
+        subscribeUrl: @js(route('tenant.push.subscribe')),
+        csrf: @js(csrf_token()),
+    };
+
     {{-- Splash hide: fires the instant this synchronous script runs (right
     after the DOM above it has parsed), never waiting on the deferred
     module or a timer — "hide as soon as ready" with no artificial delay.
@@ -319,6 +383,27 @@
     depends on app.js loading successfully to get the splash out of the way. --}}
     document.getElementById('appSplash')?.classList.add('is-hidden');
     setTimeout(() => document.getElementById('appSplash')?.remove(), 300);
+
+    {{-- Show the persistent-login tip once, ever, per browser — dismissing
+    it (or having already seen it) is remembered in localStorage only, so
+    there's no server round-trip and no per-user DB state to add for a
+    purely cosmetic, skippable hint. --}}
+    (function () {
+        var tip = document.getElementById('signinTip');
+        if (!tip) return;
+        var key = 'ms_signin_tip_dismissed';
+        try {
+            if (!localStorage.getItem(key)) {
+                tip.classList.remove('hidden');
+            }
+            document.getElementById('signinTipDismiss')?.addEventListener('click', function () {
+                tip.classList.add('hidden');
+                localStorage.setItem(key, '1');
+            });
+        } catch (e) {
+            // Private-browsing/storage-blocked: fail silently, tip just stays hidden.
+        }
+    })();
 </script>
 @stack('scripts')
 </body>

@@ -116,6 +116,63 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
     if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
+
+// Web Push (VAPID) — see App\Services\Notifications\WebPushService for the
+// server side. Payload is plain JSON built by that service, never anything
+// containing a secret (push payloads are visible to the push service
+// operator's infrastructure in transit, encrypted per-subscription, but
+// still not the place for anything sensitive beyond what a system
+// notification banner already shows). `tag` lets the OS collapse/replace
+// a still-visible notification instead of stacking duplicates — used for
+// same-conversation messages so "Rahim sent 3 new messages" replaces
+// rather than piles up (see WebPushService::send()'s dedup handling).
+self.addEventListener('push', (event) => {
+    let payload = {};
+    try {
+        payload = event.data ? event.data.json() : {};
+    } catch (e) {
+        payload = { title: 'MetaSoft', body: event.data ? event.data.text() : '' };
+    }
+
+    const title = payload.title || 'MetaSoft';
+    const options = {
+        body: payload.body || '',
+        icon: payload.icon || '/images/icons/app-icon-192.png',
+        badge: payload.badge || '/images/icons/app-icon-192.png',
+        tag: payload.tag || undefined,
+        renotify: !!payload.tag,
+        requireInteraction: !!payload.requireInteraction,
+        vibrate: payload.silent ? [] : [200, 100, 200],
+        data: { url: payload.url || '/panel' },
+    };
+
+    event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Deep-link on click: focus an already-open MetaSoft tab and navigate it
+// if one exists (avoids piling up duplicate tabs), otherwise open a new
+// one — covers foreground, background, and fully-closed PWA alike, which
+// is the whole point of using the OS notification rather than in-page UI
+// for this. Tenant/user authorization for the target URL is enforced the
+// normal way by the server when the navigation actually loads (auth:tenant
+// + BelongsToTenant scoping) — this handler only ever opens a URL, it
+// never grants access to it.
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const targetUrl = (event.notification.data && event.notification.data.url) || '/panel';
+
+    event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+            for (const client of list) {
+                if (client.url && new URL(client.url).origin === self.location.origin && 'focus' in client) {
+                    client.navigate(targetUrl);
+                    return client.focus();
+                }
+            }
+            return self.clients.openWindow(targetUrl);
+        })
+    );
+});
 JS;
     }
 

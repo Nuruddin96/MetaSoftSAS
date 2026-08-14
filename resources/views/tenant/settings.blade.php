@@ -5,6 +5,14 @@
 @section('content')
 <h1 class="font-disp font-bold text-2xl mb-6">সেটিংস</h1>
 
+<a href="{{ route('tenant.notifications.preferences') }}" class="block mb-6 max-w-5xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 rounded-card">
+    <x-ui.card hoverable padding="sm" class="flex items-center gap-3">
+        <i data-lucide="bell" class="w-4 h-4 text-leafdk shrink-0"></i>
+        <span class="flex-1 text-sm font-semibold">🔔 নোটিফিকেশন</span>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-mute shrink-0"></i>
+    </x-ui.card>
+</a>
+
 <div class="grid lg:grid-cols-2 gap-6 max-w-5xl">
 
     <x-ui.collapsible-card title="🚚 Steadfast কুরিয়ার">

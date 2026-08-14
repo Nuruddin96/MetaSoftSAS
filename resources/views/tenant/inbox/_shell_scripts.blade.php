@@ -39,6 +39,66 @@
         });
     }
 
+    // Was the reader already at (or very near) the bottom of the thread
+    // before this poll tick's messages were appended? Only that case should
+    // auto-scroll — otherwise appending steals the scroll position out from
+    // under someone reading older history. 48px covers sub-pixel rounding
+    // and the last bubble's own padding without being loose enough to
+    // trigger while genuinely scrolled up.
+    function isNearBottom(el) {
+        return el.scrollHeight - el.scrollTop - el.clientHeight <= 48;
+    }
+
+    // "↓ N new messages" pill, floated above the composer. One live
+    // instance per open thread — created lazily inside the thread's
+    // scroll-parent (not the scrolling element itself, so it stays fixed
+    // in place while #threadMessages/#waThreadMessages scrolls under it)
+    // and torn down whenever a new thread is initialized (desktop swap or
+    // a fresh page load both call init*ThreadPolling again from scratch).
+    function ensureNewMessagesPill(thread) {
+        const container = thread.parentElement;
+        if (!container) return null;
+        container.querySelector('.new-msg-pill')?.remove();
+        if (getComputedStyle(container).position === 'static') {
+            container.classList.add('relative');
+        }
+
+        const pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = 'new-msg-pill hidden absolute bottom-3 left-1/2 -translate-x-1/2 z-10 items-center gap-1.5 bg-ink text-white text-xs font-semibold px-3.5 py-2 rounded-pill shadow-lg active:scale-95 transition';
+        pill.dataset.count = '0';
+        pill.innerHTML = '<span class="pill-count"></span><span>নতুন মেসেজ</span> ↓';
+
+        function hide() {
+            pill.classList.add('hidden');
+            pill.classList.remove('flex');
+            pill.dataset.count = '0';
+        }
+
+        pill.addEventListener('click', () => {
+            thread.scrollTo({ top: thread.scrollHeight, behavior: 'smooth' });
+            hide();
+        });
+
+        // Reader scrolled back to the bottom themselves — no need to keep
+        // nudging them, so the pill dismisses on its own.
+        thread.addEventListener('scroll', () => {
+            if (isNearBottom(thread)) hide();
+        });
+
+        container.appendChild(pill);
+
+        return {
+            bump(newCount) {
+                const total = parseInt(pill.dataset.count || '0', 10) + newCount;
+                pill.dataset.count = String(total);
+                pill.querySelector('.pill-count').textContent = total + ' ';
+                pill.classList.remove('hidden');
+                pill.classList.add('flex');
+            },
+        };
+    }
+
     window.initWhatsAppThreadPolling = function (root) {
         const thread = root.querySelector('#waThreadMessages');
         if (!thread) return;
@@ -51,6 +111,7 @@
         // the conversation's flex layout), so without this it would default
         // to showing the OLDEST messages first on every open/swap.
         thread.scrollTop = thread.scrollHeight;
+        const newMsgPill = ensureNewMessagesPill(thread);
 
         let afterId = parseInt(thread.dataset.lastId || '0', 10);
         const waId = root.dataset.externalId;
@@ -133,12 +194,18 @@
 
         async function poll() {
             try {
+                const wasNearBottom = isNearBottom(thread);
                 const res = await fetch(`${updatesUrl}?after_id=${afterId}&wa_id=${encodeURIComponent(waId)}`, { headers: { Accept: 'application/json' } });
                 if (!res.ok) return;
                 const data = await res.json();
                 afterId = data.latest_id;
                 (data.messages || []).forEach(appendBubble);
-                if ((data.messages || []).length) thread.scrollTop = thread.scrollHeight;
+                const added = (data.messages || []).length;
+                if (added && wasNearBottom) {
+                    thread.scrollTop = thread.scrollHeight;
+                } else if (added) {
+                    newMsgPill?.bump(added);
+                }
             } catch (e) { /* silent — next tick tries again */ }
         }
 
@@ -152,6 +219,7 @@
         window.clearInboxPoll();
 
         thread.scrollTop = thread.scrollHeight;
+        const newMsgPill = ensureNewMessagesPill(thread);
 
         let afterId = parseInt(thread.dataset.lastId || '0', 10);
         const psid = root.dataset.externalId;
@@ -224,12 +292,18 @@
 
         async function poll() {
             try {
+                const wasNearBottom = isNearBottom(thread);
                 const res = await fetch(`${updatesUrl}?after_id=${afterId}&psid=${encodeURIComponent(psid)}`, { headers: { Accept: 'application/json' } });
                 if (!res.ok) return;
                 const data = await res.json();
                 afterId = data.latest_id;
                 (data.messages || []).forEach(appendBubble);
-                if ((data.messages || []).length) thread.scrollTop = thread.scrollHeight;
+                const added = (data.messages || []).length;
+                if (added && wasNearBottom) {
+                    thread.scrollTop = thread.scrollHeight;
+                } else if (added) {
+                    newMsgPill?.bump(added);
+                }
             } catch (e) { /* silent */ }
         }
 

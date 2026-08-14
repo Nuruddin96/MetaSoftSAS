@@ -97,27 +97,30 @@
      doesn't compute a vs-yesterday comparison, so nothing is shown rather
      than fabricating one.
 
-     Mobile sizing/coloring (base classes) is intentionally denser and uses
-     a per-category pastel icon tone, app-tile-like; every lg: class below
-     reproduces the pre-redesign desktop values exactly (p-6 / w-9 h-9 /
-     rounded-lg / 18px icon / text-3xl / bg-paper text-mute or the existing
-     leaf accent on the revenue tile), so desktop is pixel-for-pixel
-     unchanged — only the mobile breakpoint gets the new look.
+     Mobile: 3 cards per row (grid-cols-3), not 2 — every mobile dimension
+     below is scaled down proportionally from the previous 2-up tile, not
+     just squeezed into a narrower column: 28px icon box (was 32px), 16px
+     icon (was 20px), 8px card radius (was 11px), 10px padding (was 14px),
+     18px bold number (was 20px), 12px label (was 15px). Every lg: class
+     below is untouched from before this pass and still reproduces the
+     original desktop values exactly (p-6 / w-9 h-9 / rounded-lg / 18px icon
+     / text-3xl / bg-paper text-mute or the existing leaf accent on the
+     revenue tile) — desktop is pixel-for-pixel unchanged, only the mobile
+     breakpoint's density changed to fit 3 across. `truncate` on the number
+     line guards the longest current values (e.g. "কুরিয়ারে পেন্ডিং"'s
+     count, বিক্রি/খরচ with a ৳ suffix) against overflow at this width on
+     the smallest supported phones rather than wrapping the tile taller than
+     its neighbors.
 
-     Sizing follows the reference-UI analysis spec precisely: 32px icon box
-     (8-10px radius), 18-20px icon, 11px card radius, 12-14px padding,
-     20-22px bold number, 15px label — icon-then-NUMBER-then-label order
-     (a flex-column with per-item `order-*`, not a DOM reorder, so desktop
-     can keep its original label-then-number visual order via lg:order-*
-     without any duplicated markup). Every lg: class below reproduces the
-     pre-redesign desktop values exactly (p-6 / w-9 h-9 / rounded-lg /
-     rounded-card / 18px icon / text-3xl / label-before-number / bg-paper
-     text-mute or the existing leaf accent on the revenue tile) — desktop
-     is pixel-for-pixel unchanged. Each tile links to the existing list
-     page it summarizes, using the exact same routes/params already used
-     elsewhere on this page (e.g. the pending-orders link matches the
-     "today's to-do" list below verbatim) — no new routes. --}}
-<div class="grid grid-cols-2 lg:grid-cols-6 gap-2.5 lg:gap-4">
+     Sizing follows the same reference-UI spec discipline as the previous
+     pass: icon-then-NUMBER-then-label order (a flex-column with per-item
+     `order-*`, not a DOM reorder, so desktop keeps its original
+     label-then-number visual order via lg:order-* without duplicated
+     markup). Each tile links to the existing list page it summarizes, using
+     the exact same routes/params already used elsewhere on this page (e.g.
+     the pending-orders link matches the "today's to-do" list below
+     verbatim) — no new routes. --}}
+<div class="grid grid-cols-3 lg:grid-cols-6 gap-2 lg:gap-4">
     @php
         $stats = [
             ['আজকের অর্ডার', $todayOrders, 'receipt', false, 'bg-amber-50 text-amber-600 lg:bg-paper lg:text-mute', route('tenant.orders.index')],
@@ -133,13 +136,13 @@
         ];
     @endphp
     @foreach ($stats as [$label, $value, $icon, $isRevenue, $iconTone, $link])
-        <a href="{{ $link }}" class="block rounded-[11px] lg:rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
-            <x-ui.card hoverable padding="none" radius="none" class="flex flex-col rounded-[11px] lg:rounded-card p-3.5 lg:p-6 active:scale-[0.97] h-full">
-                <div class="order-1 w-8 h-8 lg:w-9 lg:h-9 rounded-[9px] lg:rounded-lg grid place-items-center {{ $iconTone }}">
-                    <i data-lucide="{{ $icon }}" class="w-5 h-5 lg:w-[18px] lg:h-[18px]"></i>
+        <a href="{{ $link }}" class="block rounded-[8px] lg:rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+            <x-ui.card hoverable padding="none" radius="none" class="flex flex-col rounded-[8px] lg:rounded-card p-2.5 lg:p-6 active:scale-[0.97] h-full">
+                <div class="order-1 w-7 h-7 lg:w-9 lg:h-9 rounded-[7px] lg:rounded-lg grid place-items-center {{ $iconTone }}">
+                    <i data-lucide="{{ $icon }}" class="w-4 h-4 lg:w-[18px] lg:h-[18px]"></i>
                 </div>
-                <p class="order-2 lg:order-3 font-disp font-extrabold text-xl lg:text-3xl mt-2 lg:mt-1 {{ $isRevenue ? 'text-leafdk' : '' }}">{{ $value }}</p>
-                <p class="order-3 lg:order-2 text-mute text-[15px] lg:text-xs font-medium lg:font-normal mt-0.5 lg:mt-3 leading-tight">{{ $label }}</p>
+                <p class="order-2 lg:order-3 font-disp font-extrabold text-lg lg:text-3xl mt-1.5 lg:mt-1 truncate {{ $isRevenue ? 'text-leafdk' : '' }}">{{ $value }}</p>
+                <p class="order-3 lg:order-2 text-mute text-[12px] lg:text-xs font-medium lg:font-normal mt-0.5 lg:mt-3 leading-tight">{{ $label }}</p>
             </x-ui.card>
         </a>
     @endforeach

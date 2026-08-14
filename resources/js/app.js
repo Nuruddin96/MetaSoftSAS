@@ -151,6 +151,100 @@ if ('serviceWorker' in navigator && window.__swUrl) {
     });
 }
 
+// ---- Push notifications: permission value-prop + subscribe
+// (layouts/panel.blade.php, #pushPromptTip, window.__push) ----
+// Never call Notification.requestPermission() on page load — only from a
+// real click on "নোটিফিকেশন চালু করুন" below, same rule the mobile audit's
+// Part 6 calls out (a cold native prompt on first open reliably gets
+// denied and is hard to walk back). window.metasoftEnablePush is exposed
+// so the Settings → Notifications page can reuse this exact flow for
+// someone who dismissed the banner and wants to opt in later, instead of
+// a second, drifting copy of the same subscribe logic.
+(function () {
+    const push = window.__push;
+    const tip = document.getElementById('pushPromptTip');
+    const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = atob(base64);
+        return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+    }
+
+    async function subscribe() {
+        if (!push?.vapidKey) return false;
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            const subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(push.vapidKey),
+            });
+
+            const response = await fetch(push.subscribeUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': push.csrf },
+                body: JSON.stringify({
+                    subscription: subscription.toJSON(),
+                    device_name: navigator.platform || null,
+                }),
+            });
+
+            // The browser-side subscription can succeed while the server
+            // fails to record it (validation error, table not imported
+            // yet, tenant/cross-device edge case) — fetch() only rejects
+            // on a network failure, never on a non-2xx status, so this
+            // must be checked explicitly. Reporting "enabled" here without
+            // it would mean a push silently never arrives with no way to
+            // tell why (see the pre-production review, B.4).
+            return response.ok;
+        } catch (e) {
+            // Denied mid-flow, unsupported browser quirk, network error —
+            // Settings → Notifications still offers a manual retry either way.
+            return false;
+        }
+    }
+
+    // Never surfaces response bodies, status codes, or anything else that
+    // could leak server internals — a single, fixed, non-technical message,
+    // shown at most once per click (not a recurring/nagging popup: reuses
+    // the existing showToast(), which already auto-dismisses).
+    window.metasoftEnablePush = async function metasoftEnablePush() {
+        if (!supported) return false;
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return false;
+
+        const ok = await subscribe();
+        if (!ok) {
+            window.showToast?.('নোটিফিকেশন চালু করা গেল না। কিছুক্ষণ পর আবার চেষ্টা করুন।', 'error');
+        }
+        return ok;
+    };
+
+    if (!tip || !supported || !push?.vapidKey) return;
+
+    const dismissKey = 'ms_push_prompt_dismissed';
+    try {
+        if (!localStorage.getItem(dismissKey) && Notification.permission === 'default') {
+            tip.classList.remove('hidden');
+        }
+    } catch (e) {
+        // Storage blocked (private mode, locked-down browser) — just skip
+        // the banner rather than risk showing it on every single page load.
+    }
+
+    document.getElementById('pushPromptAllow')?.addEventListener('click', async () => {
+        tip.classList.add('hidden');
+        try { localStorage.setItem(dismissKey, '1'); } catch (e) { /* ignore */ }
+        await window.metasoftEnablePush();
+    });
+
+    document.getElementById('pushPromptLater')?.addEventListener('click', () => {
+        tip.classList.add('hidden');
+        try { localStorage.setItem(dismissKey, '1'); } catch (e) { /* ignore */ }
+    });
+})();
+
 // ---- "Install App" button (central/landing.blade.php, #pwaInstallBanner) ----
 // Guarded on the button's existence like every other feature block in this
 // file — this only runs on the landing page, a no-op everywhere else.

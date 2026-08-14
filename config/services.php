@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    // Web Push (VAPID) — see App\Services\Notifications\WebPushService.
+    // Generate once per environment (never share the private key across
+    // environments/tenants) and set as env vars; VAPID_SUBJECT is a
+    // contact URI/mailto the push services may use to reach the sender
+    // about a misbehaving subscriber, per the Web Push spec.
+    'vapid' => [
+        'public_key' => env('VAPID_PUBLIC_KEY'),
+        'private_key' => env('VAPID_PRIVATE_KEY'),
+        'subject' => env('VAPID_SUBJECT', 'mailto:support@metasoftbd.com'),
+    ],
+
 ];

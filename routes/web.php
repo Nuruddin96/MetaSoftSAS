@@ -40,11 +40,13 @@ use App\Http\Controllers\Tenant\InboxController;
 use App\Http\Controllers\Tenant\InventoryController;
 use App\Http\Controllers\Tenant\MessengerInboxController;
 use App\Http\Controllers\Tenant\NotificationController;
+use App\Http\Controllers\Tenant\NotificationPreferenceController;
 use App\Http\Controllers\Tenant\OrderController;
 use App\Http\Controllers\Tenant\PosController;
 use App\Http\Controllers\Tenant\ProductController;
 use App\Http\Controllers\Tenant\ProductImportController;
 use App\Http\Controllers\Tenant\ProductSourceController;
+use App\Http\Controllers\Tenant\PushSubscriptionController;
 use App\Http\Controllers\Tenant\PwaController as TenantPwaController;
 use App\Http\Controllers\Tenant\ReportController;
 use App\Http\Controllers\Tenant\SettingController;
@@ -206,6 +208,14 @@ $tenantRoutes = function () {
 
             // Notification bell "mark seen" beacon (session-based, see NotificationController)
             Route::post('notifications/seen', [NotificationController::class, 'markSeen'])->name('notifications.seen');
+
+            // Web Push (VAPID) — subscribe/unsubscribe this browser, and the
+            // per-category preferences screen. See App\Services\Notifications
+            // and the mobile audit's Part C-H for the full architecture.
+            Route::post('push/subscribe', [PushSubscriptionController::class, 'store'])->name('push.subscribe');
+            Route::post('push/unsubscribe', [PushSubscriptionController::class, 'destroy'])->name('push.unsubscribe');
+            Route::get('notifications/preferences', [NotificationPreferenceController::class, 'edit'])->name('notifications.preferences');
+            Route::post('notifications/preferences', [NotificationPreferenceController::class, 'update'])->name('notifications.preferences.update');
 
             // Billing
             Route::get('billing', [BillingController::class, 'index'])->name('billing');

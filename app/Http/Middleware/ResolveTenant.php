@@ -66,9 +66,12 @@ class ResolveTenant
 
         abort_if(! $tenant, 404, 'Store not found');
 
-        // Separate session cookie per tenant only needed in subdomain mode
-        config(['session.cookie' => 'sess_'.$tenant->id]);
-
+        // Per-tenant session cookie naming (subdomain mode) now happens in
+        // App\Http\Middleware\ResolveTenantSessionCookie, which is prepended
+        // ahead of routing/StartSession instead of running here as route
+        // middleware — setting config('session.cookie') at this point is too
+        // late for StartSession to have used it on this request. See that
+        // middleware's docblock for the full mechanism.
         $this->bind($tenant);
 
         return $next($request);
