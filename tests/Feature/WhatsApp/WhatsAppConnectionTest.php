@@ -484,6 +484,283 @@ class WhatsAppConnectionTest extends WhatsAppFeatureTestCase
         $response->assertDontSee('super-secret-token-value');
     }
 
+    // --- token exchange / expiry handling (System User / never-expiring token support) ---------------
+
+    /**
+     * WhatsAppOAuthService::exchangeForLongLivedToken() must return the
+     * expires_in Meta actually sent — no fabricated fallback. This is a
+     * direct unit-level check on the service, independent of the full
+     * connect flow below.
+     */
+    public function test_exchange_for_long_lived_token_returns_the_real_expires_in_when_present(): void
+    {
+        Http::fake(['*/oauth/access_token*' => Http::response(['access_token' => 'tok', 'expires_in' => 5184000])]);
+
+        $result = (new WhatsAppOAuthService)->exchangeForLongLivedToken('some-short-lived-token');
+
+        $this->assertSame('tok', $result['access_token']);
+        $this->assertSame(5184000, $result['expires_in']);
+    }
+
+    /**
+     * The bug this fix addresses: when Meta's response has no expires_in at
+     * all (a non-expiring token), exchangeForLongLivedToken() must return
+     * null — never a fabricated 5184000 (~60 day) fallback.
+     */
+    public function test_exchange_for_long_lived_token_returns_null_expires_in_when_meta_omits_it(): void
+    {
+        Http::fake(['*/oauth/access_token*' => Http::response(['access_token' => 'never-expiring-token'])]);
+
+        $result = (new WhatsAppOAuthService)->exchangeForLongLivedToken('some-token');
+
+        $this->assertSame('never-expiring-token', $result['access_token']);
+        $this->assertNull($result['expires_in'], 'a missing expires_in must never be replaced with a guessed value');
+    }
+
+    /**
+     * End-to-end: the code exchange itself returns expires_in (a classic
+     * short-lived USER token) — exchangeForLongLivedToken() must be called
+     * to promote it, and the SECOND call's token/expiry (not the first
+     * call's) is what actually gets persisted. Http::sequence() gives two
+     * distinct responses to the two calls hitting the same oauth/access_token
+     * endpoint so this is provable, not assumed.
+     */
+    public function test_connect_promotes_to_long_lived_token_when_expires_in_is_present(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $service = new WhatsAppOAuthService;
+
+        Http::fake([
+            '*/oauth/access_token*' => Http::sequence()
+                ->push(['access_token' => 'short-lived-token', 'expires_in' => 3600])   // exchangeCodeForAccessToken()
+                ->push(['access_token' => 'long-lived-token', 'expires_in' => 5184000]), // exchangeForLongLivedToken()
+            '*/waba-1/phone_numbers*' => Http::response(['data' => [
+                ['id' => 'phone-1', 'display_phone_number' => '+8801700000000', 'verified_name' => 'My Shop', 'quality_rating' => 'GREEN'],
+            ]]),
+            '*/waba-1/subscribed_apps*' => Http::response(['success' => true]),
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->post(
+            $this->panelUrl($tenant, 'whatsapp/connect'),
+            $this->completePayload($service, $tenant, $user)
+        );
+
+        $response->assertSessionHas('success');
+
+        $account = WhatsAppBusinessAccount::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('long-lived-token', $account->user_access_token, 'must store the PROMOTED (second call) token, not the short-lived first one');
+        $this->assertNotNull($account->token_expires_at);
+        $this->assertTrue(
+            $account->token_expires_at->betweenIncluded(now()->addSeconds(5184000)->subMinute(), now()->addSeconds(5184000)->addMinute()),
+            'token_expires_at must be computed from the long-lived exchange\'s own expires_in (~60 days out)'
+        );
+    }
+
+    /**
+     * End-to-end: the code exchange returns NO expires_in at all — matching
+     * a System User / never-expiring token issued directly by this Embedded
+     * Signup Configuration. exchangeForLongLivedToken() must NOT be called
+     * (the single-entry Http::sequence() below throws if a second request
+     * hits the oauth/access_token endpoint — proving this, not just
+     * asserting a count), the token is stored as-is, and token_expires_at
+     * is NULL.
+     */
+    public function test_connect_does_not_call_long_lived_exchange_and_stores_null_expiry_when_expires_in_is_absent(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $service = new WhatsAppOAuthService;
+
+        Http::fake([
+            // Exactly ONE response queued — a second call to this endpoint
+            // (i.e. an unwanted exchangeForLongLivedToken() call) throws
+            // OutOfBoundsException from the exhausted sequence rather than
+            // silently reusing a response.
+            '*/oauth/access_token*' => Http::sequence()
+                ->push(['access_token' => 'system-user-token']),
+            '*/waba-1/phone_numbers*' => Http::response(['data' => [
+                ['id' => 'phone-1', 'display_phone_number' => '+8801700000000', 'verified_name' => 'My Shop', 'quality_rating' => 'GREEN'],
+            ]]),
+            '*/waba-1/subscribed_apps*' => Http::response(['success' => true]),
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->post(
+            $this->panelUrl($tenant, 'whatsapp/connect'),
+            $this->completePayload($service, $tenant, $user)
+        );
+
+        $response->assertSessionHas('success');
+
+        $account = WhatsAppBusinessAccount::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('system-user-token', $account->user_access_token, 'the single non-expiring token must be used as-is');
+        $this->assertNull($account->token_expires_at, 'a token Meta never said expires must never be recorded with a guessed expiry');
+    }
+
+    // --- WhatsApp Business App Coexistence -------------------------------------------------------
+
+    /**
+     * The real shape a coexistence completion POST arrives in: settings.blade.php's
+     * form builder always includes the phone_number_id hidden input, but its
+     * value is '' when signupResult.phoneNumberId is null (FINISH_WHATSAPP_
+     * BUSINESS_APP_ONBOARDING never supplies one) — never a genuinely absent key.
+     */
+    protected function coexistenceCompletePayload(WhatsAppOAuthService $service, Tenant $tenant, $user, array $overrides = []): array
+    {
+        return $this->completePayload($service, $tenant, $user, array_merge(['phone_number_id' => ''], $overrides));
+    }
+
+    public function test_coexistence_completion_without_phone_number_id_discovers_it_via_graph(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $service = new WhatsAppOAuthService;
+
+        Http::fake([
+            '*/oauth/access_token*' => Http::response(['access_token' => 'coexistence-token', 'expires_in' => 5184000]),
+            '*/waba-coex/phone_numbers*' => Http::response(['data' => [
+                ['id' => 'discovered-phone', 'display_phone_number' => '+8801711111111', 'verified_name' => 'Coexistence Shop', 'quality_rating' => 'GREEN'],
+            ]]),
+            '*/waba-coex/subscribed_apps*' => Http::response(['success' => true]),
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->post(
+            $this->panelUrl($tenant, 'whatsapp/connect'),
+            $this->coexistenceCompletePayload($service, $tenant, $user, ['waba_id' => 'waba-coex'])
+        );
+
+        $response->assertSessionHas('success');
+
+        $account = WhatsAppBusinessAccount::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertNotNull($account);
+        $this->assertSame('waba-coex', $account->waba_id);
+
+        $phone = WhatsAppPhoneNumber::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertNotNull($phone, 'the phone number must be discovered server-side, never required from the browser for a coexistence completion');
+        $this->assertSame('discovered-phone', $phone->phone_number_id);
+        $this->assertSame('+8801711111111', $phone->display_phone_number);
+        $this->assertSame('active', $phone->status);
+    }
+
+    public function test_coexistence_completion_with_zero_phone_numbers_on_waba_is_rejected(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $service = new WhatsAppOAuthService;
+
+        Http::fake([
+            '*/oauth/access_token*' => Http::response(['access_token' => 'tok', 'expires_in' => 5184000]),
+            '*/waba-empty/phone_numbers*' => Http::response(['data' => []]),
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->post(
+            $this->panelUrl($tenant, 'whatsapp/connect'),
+            $this->coexistenceCompletePayload($service, $tenant, $user, ['waba_id' => 'waba-empty'])
+        );
+
+        $response->assertSessionHas('error');
+        $this->assertSame(0, WhatsAppBusinessAccount::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count());
+    }
+
+    public function test_coexistence_completion_with_multiple_phone_numbers_on_waba_is_rejected_not_guessed(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $service = new WhatsAppOAuthService;
+
+        Http::fake([
+            '*/oauth/access_token*' => Http::response(['access_token' => 'tok', 'expires_in' => 5184000]),
+            '*/waba-multi/phone_numbers*' => Http::response(['data' => [
+                ['id' => 'phone-x', 'display_phone_number' => '+8801700000001'],
+                ['id' => 'phone-y', 'display_phone_number' => '+8801700000002'],
+            ]]),
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->post(
+            $this->panelUrl($tenant, 'whatsapp/connect'),
+            $this->coexistenceCompletePayload($service, $tenant, $user, ['waba_id' => 'waba-multi'])
+        );
+
+        $response->assertSessionHas('error');
+        $this->assertSame(
+            0,
+            WhatsAppPhoneNumber::withoutGlobalScopes()->whereIn('phone_number_id', ['phone-x', 'phone-y'])->count(),
+            'must never guess which of several numbers to connect'
+        );
+    }
+
+    public function test_coexistence_discovered_phone_number_already_claimed_by_another_tenant_is_rejected(): void
+    {
+        $tenantA = $this->makeTenant();
+        $userA = $this->makeUser($tenantA->id);
+        $accountA = WhatsAppBusinessAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantA->id, 'connected_by_user_id' => $userA->id,
+            'waba_id' => 'waba-a-coex', 'user_access_token' => 'tok-a',
+        ]);
+        WhatsAppPhoneNumber::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantA->id, 'whatsapp_business_account_id' => $accountA->id,
+            'phone_number_id' => 'already-claimed-phone', 'is_active' => 1,
+        ]);
+
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+        $service = new WhatsAppOAuthService;
+
+        Http::fake([
+            '*/oauth/access_token*' => Http::response(['access_token' => 'tok-b', 'expires_in' => 5184000]),
+            '*/waba-b-coex/phone_numbers*' => Http::response(['data' => [
+                ['id' => 'already-claimed-phone', 'display_phone_number' => '+8801799999999'],
+            ]]),
+        ]);
+
+        $response = $this->actingAs($userB, 'tenant')->post(
+            $this->panelUrl($tenantB, 'whatsapp/connect'),
+            $this->coexistenceCompletePayload($service, $tenantB, $userB, ['waba_id' => 'waba-b-coex'])
+        );
+
+        $response->assertSessionHas('error');
+        $this->assertSame(
+            $tenantA->id,
+            WhatsAppPhoneNumber::withoutGlobalScopes()->where('phone_number_id', 'already-claimed-phone')->first()->tenant_id,
+            'server-side-discovered phone numbers must go through the same cross-tenant hijack check as browser-claimed ones'
+        );
+    }
+
+    /**
+     * The actual real-world target scenario: a Coexistence completion whose
+     * token exchange also returns no expires_in (e.g. a System User access
+     * token) — both fixes must compose correctly together.
+     */
+    public function test_coexistence_completion_with_never_expiring_token_stores_null_expiry(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $service = new WhatsAppOAuthService;
+
+        Http::fake([
+            '*/oauth/access_token*' => Http::sequence()
+                ->push(['access_token' => 'system-user-token']), // no expires_in — single response, second call would throw
+            '*/waba-su/phone_numbers*' => Http::response(['data' => [
+                ['id' => 'su-phone', 'display_phone_number' => '+8801722222222'],
+            ]]),
+            '*/waba-su/subscribed_apps*' => Http::response(['success' => true]),
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->post(
+            $this->panelUrl($tenant, 'whatsapp/connect'),
+            $this->coexistenceCompletePayload($service, $tenant, $user, ['waba_id' => 'waba-su'])
+        );
+
+        $response->assertSessionHas('success');
+
+        $account = WhatsAppBusinessAccount::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('system-user-token', $account->user_access_token);
+        $this->assertNull($account->token_expires_at, 'a coexistence completion with a never-expiring token must still store NULL, not a guessed expiry');
+
+        $phone = WhatsAppPhoneNumber::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('su-phone', $phone->phone_number_id);
+    }
+
     // --- cross-tenant read isolation on the Settings page -------------------------------------------
 
     public function test_settings_page_only_shows_the_current_tenants_own_whatsapp_connection(): void

@@ -47,7 +47,12 @@ class WhatsAppConnectController extends Controller
             'state' => 'required|string',
             'code' => 'required|string',
             'waba_id' => 'required|string|max:64',
-            'phone_number_id' => 'required|string|max:64',
+            // nullable, not required: a WhatsApp Business App Coexistence
+            // completion (FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING) supplies
+            // no phone_number_id at all — see settings.blade.php's message
+            // listener docblock. Handled below by discovering it server-side
+            // via a fresh Graph API call instead of trusting a browser value.
+            'phone_number_id' => 'nullable|string|max:64',
             'business_id' => 'nullable|string|max:64',
         ]);
 
@@ -83,7 +88,24 @@ class WhatsAppConnectController extends Controller
 
         try {
             $shortLived = $wa->exchangeCodeForAccessToken($data['code']);
-            $longLived = $wa->exchangeForLongLivedToken($shortLived['access_token']);
+
+            // Only promote to a long-lived token when Meta's code exchange
+            // actually returned an expires_in — meaning this really was a
+            // classic short-lived USER token. This Embedded Signup
+            // Configuration can instead issue a token directly from the code
+            // exchange that has no expires_in at all (e.g. a System User
+            // access token) — that token doesn't follow the same lifecycle
+            // fb_exchange_token exists to extend, so it's used as-is rather
+            // than run through that grant unconditionally. See
+            // WhatsAppOAuthService::exchangeForLongLivedToken()'s docblock.
+            if (isset($shortLived['expires_in'])) {
+                $exchanged = $wa->exchangeForLongLivedToken($shortLived['access_token']);
+                $token = $exchanged['access_token'];
+                $tokenExpiresIn = $exchanged['expires_in'];
+            } else {
+                $token = $shortLived['access_token'];
+                $tokenExpiresIn = null;
+            }
         } catch (WhatsAppGraphException $e) {
             Log::error('WhatsApp connect: token exchange failed.', [
                 'tenant_id' => $tenant->id,
@@ -101,15 +123,45 @@ class WhatsAppConnectController extends Controller
             return redirect()->route('tenant.settings')->with('error', 'WhatsApp-এর সাথে সংযোগ করা যায়নি, একটু পর আবার চেষ্টা করুন।');
         }
 
-        $token = $longLived['access_token'];
-
         // The security-critical check this phase exists to enforce: never
         // trust that phone_number_id actually belongs to waba_id just
         // because the browser/postMessage event said so — re-fetch the
         // WABA's real phone numbers from Meta with the token just obtained
         // and confirm the claimed id is genuinely among them.
+        //
+        // When phone_number_id IS present (standard Embedded Signup),
+        // that's exactly what happens below, unchanged from before
+        // Coexistence support existed.
+        //
+        // When it's ABSENT (WhatsApp Business App Coexistence completion —
+        // see the validation rule above), there is nothing browser-supplied
+        // to verify at all — instead the WABA's own phone numbers are
+        // listed fresh from Meta and the single registered number is used.
+        // This is not a weaker check than the standard path: it's the same
+        // "trust only what Meta's Graph API says right now" posture, just
+        // with no client-claimed id in the loop to begin with.
         try {
-            $phoneDetails = $wa->findPhoneNumber($data['waba_id'], $data['phone_number_id'], $token);
+            if (! empty($data['phone_number_id'])) {
+                $phoneDetails = $wa->findPhoneNumber($data['waba_id'], $data['phone_number_id'], $token);
+            } else {
+                $phones = $wa->listPhoneNumbers($data['waba_id'], $token);
+
+                if (count($phones) > 1) {
+                    // Ambiguous — a coexistence completion is only ever
+                    // expected to have exactly one number already
+                    // registered under this WABA. Refuse to guess which one
+                    // rather than silently picking the first.
+                    Log::warning('WhatsApp connect: coexistence completion found more than one phone number on the WABA, refusing to guess.', [
+                        'tenant_id' => $tenant->id,
+                        'waba_id' => $data['waba_id'],
+                        'phone_count' => count($phones),
+                    ]);
+
+                    return redirect()->route('tenant.settings')->with('error', 'এই Business Account-এ একাধিক নম্বর পাওয়া গেছে — কোনটি কানেক্ট করবেন তা নির্ধারণ করা যায়নি। আবার চেষ্টা করুন।');
+                }
+
+                $phoneDetails = $phones[0] ?? null;
+            }
         } catch (WhatsAppGraphException $e) {
             Log::error('WhatsApp connect: phone number verification failed.', [
                 'tenant_id' => $tenant->id,
@@ -124,14 +176,20 @@ class WhatsAppConnectController extends Controller
         }
 
         if (! $phoneDetails) {
-            Log::warning('WhatsApp connect: claimed phone_number_id is not actually a member of the claimed waba_id.', [
+            Log::warning('WhatsApp connect: no verifiable phone number for this connection attempt.', [
                 'tenant_id' => $tenant->id,
                 'waba_id' => $data['waba_id'],
-                'phone_number_id' => $data['phone_number_id'],
+                'phone_number_id' => $data['phone_number_id'] ?? null,
             ]);
 
             return redirect()->route('tenant.settings')->with('error', 'এই WhatsApp নম্বরটি নির্বাচিত Business Account-এ পাওয়া যায়নি।');
         }
+
+        // From here on, $phoneNumberId is the ONLY trusted phone number id
+        // — either the browser-claimed one Meta just confirmed, or the one
+        // discovered directly from Meta for a coexistence completion. Never
+        // $data['phone_number_id'] again below (it may be null).
+        $phoneNumberId = $phoneDetails['id'];
 
         // Cross-tenant hijack checks (defense-in-depth ahead of the DB's own
         // UNIQUE(waba_id)/UNIQUE(phone_number_id) constraints, same pattern
@@ -142,7 +200,7 @@ class WhatsAppConnectController extends Controller
             ->where('tenant_id', '!=', $tenant->id)
             ->exists();
         $phoneClaimedElsewhere = WhatsAppPhoneNumber::withoutGlobalScopes()
-            ->where('phone_number_id', $data['phone_number_id'])
+            ->where('phone_number_id', $phoneNumberId)
             ->where('tenant_id', '!=', $tenant->id)
             ->exists();
 
@@ -168,13 +226,13 @@ class WhatsAppConnectController extends Controller
                     'business_id' => $data['business_id'] ?? null,
                     'business_name' => $businessName,
                     'user_access_token' => $token,
-                    'token_expires_at' => isset($longLived['expires_in']) ? now()->addSeconds($longLived['expires_in']) : null,
+                    'token_expires_at' => $tokenExpiresIn !== null ? now()->addSeconds($tokenExpiresIn) : null,
                     'granted_scopes' => 'whatsapp_business_management,whatsapp_business_messaging',
                 ]
             );
 
             $phoneNumber = WhatsAppPhoneNumber::withoutGlobalScopes()->updateOrCreate(
-                ['phone_number_id' => $data['phone_number_id']],
+                ['phone_number_id' => $phoneNumberId],
                 [
                     'tenant_id' => $tenant->id,
                     'whatsapp_business_account_id' => $account->id,

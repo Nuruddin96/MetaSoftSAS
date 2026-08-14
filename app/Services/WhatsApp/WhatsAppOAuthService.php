@@ -144,12 +144,23 @@ class WhatsAppOAuthService
     }
 
     /**
-     * Harmless even when the token from exchangeCodeForAccessToken() is
-     * already long-lived — re-exchanging a long-lived token just returns
-     * another long-lived token, not an error — kept for consistency with
-     * how every other token in this codebase gets this same treatment
-     * rather than relying on undocumented Embedded Signup token-lifetime
-     * behavior varying by WABA setup.
+     * ONLY call this when exchangeCodeForAccessToken() actually returned an
+     * expires_in — i.e. the code exchange yielded a classic short-lived USER
+     * token that genuinely needs promoting to a long-lived one via Meta's
+     * fb_exchange_token grant. Do NOT call this unconditionally: this
+     * Embedded Signup Configuration can be set to issue a System User
+     * access token directly from the code exchange (no expires_in at all —
+     * see exchangeCodeForAccessToken()'s docblock), and fb_exchange_token is
+     * defined for user-token lifecycle semantics, not System User tokens —
+     * its behavior on that input is not something this codebase can assume
+     * is a safe no-op. The caller (WhatsAppConnectController::complete())
+     * enforces this by branching on whether expires_in was present.
+     *
+     * expires_in is returned exactly as Meta sends it — null when absent,
+     * never a fabricated fallback value. A token this codebase cannot prove
+     * expires must never be recorded as if it does; see
+     * WhatsAppConnectController::complete() for how a null here becomes
+     * token_expires_at = NULL, not a guessed date.
      */
     public function exchangeForLongLivedToken(string $token): array
     {
@@ -162,9 +173,11 @@ class WhatsAppOAuthService
 
         $this->throwIfFailed($response);
 
+        $expiresIn = $response->json('expires_in');
+
         return [
             'access_token' => $response->json('access_token'),
-            'expires_in' => (int) $response->json('expires_in', 5184000), // ~60 days fallback, same as FacebookOAuthService
+            'expires_in' => $expiresIn !== null ? (int) $expiresIn : null,
         ];
     }
 
@@ -225,6 +238,55 @@ class WhatsAppOAuthService
         }
 
         return null;
+    }
+
+    /**
+     * WhatsApp Business App Coexistence support: Meta's documented
+     * FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING postMessage event supplies
+     * only a waba_id, not a phone_number_id — the flow's whole purpose is
+     * onboarding a number that's already registered with the WhatsApp
+     * Business App, so the registration step (and the id it would normally
+     * hand back) is skipped. This is the server-side discovery counterpart:
+     * lists every phone number actually registered under $wabaId, fetched
+     * fresh from Meta with the token just obtained — never anything
+     * client-supplied, same "never trust the browser, re-verify via Graph"
+     * posture as findPhoneNumber() above, just without a specific id to
+     * filter by. WhatsAppConnectController::complete() is expected to use
+     * the sole result when there's exactly one (the normal coexistence
+     * case) and treat more/fewer than one as a condition to report rather
+     * than guess at.
+     *
+     * @return array<int, array{id:string, display_phone_number?:string, verified_name?:string, quality_rating?:string}>
+     */
+    public function listPhoneNumbers(string $wabaId, string $accessToken): array
+    {
+        $url = "{$this->base}/{$wabaId}/phone_numbers";
+        $query = [
+            'fields' => 'id,display_phone_number,verified_name,quality_rating',
+            'access_token' => $accessToken,
+            'limit' => 100,
+        ];
+
+        $results = [];
+
+        for ($i = 0; $i < self::MAX_PAGE_LISTING_PAGES; $i++) {
+            $response = $query !== null ? Http::get($url, $query) : Http::get($url);
+
+            $this->throwIfFailed($response);
+
+            $results = array_merge($results, $response->json('data', []));
+
+            $next = $response->json('paging.next');
+
+            if (! $next) {
+                break;
+            }
+
+            $url = $next;
+            $query = null;
+        }
+
+        return $results;
     }
 
     public function subscribeWabaToWebhook(string $wabaId, string $accessToken): bool

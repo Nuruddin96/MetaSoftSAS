@@ -342,7 +342,15 @@
     if (!config.appId || !config.configId) return; // not configured yet — nothing to wire up
 
     let popupResult = null; // {code} from FB.login's callback
-    let signupResult = null; // {wabaId, phoneNumberId, businessId} from the postMessage event
+    // {wabaId, phoneNumberId, businessId} from the postMessage event.
+    // phoneNumberId is null for a WhatsApp Business App Coexistence
+    // completion (FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING) — Meta's
+    // documented payload for that event carries only waba_id, since the
+    // whole point of that flow is "skip phone number registration, it's
+    // already registered." WhatsAppConnectController::complete() discovers
+    // the phone number server-side via a fresh Graph API call in that case
+    // — never invented or guessed here.
+    let signupResult = null;
 
     function trySubmit() {
         if (!popupResult || !signupResult) return;
@@ -389,10 +397,27 @@
 
         if (data.type !== 'WA_EMBEDDED_SIGNUP') return;
 
-        if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA') {
+        // FINISH / FINISH_ONLY_WABA: standard (non-coexistence) Embedded
+        // Signup — Meta's documented payload for these carries phone_number_id
+        // directly (absent/undefined for FINISH_ONLY_WABA, since no number was
+        // set up in that case — same as before this change).
+        //
+        // FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING: the WhatsApp Business App
+        // Coexistence completion event — Meta's documented payload for this
+        // one is { data: { waba_id } } only, no phone_number_id, because the
+        // flow's entire purpose is onboarding a number that's already
+        // registered with the WhatsApp Business App (registration is skipped).
+        // Never invented/guessed here — phoneNumberId stays null and the
+        // backend discovers it via a fresh Graph API call scoped to this
+        // waba_id (see WhatsAppConnectController::complete()).
+        if (
+            data.event === 'FINISH'
+            || data.event === 'FINISH_ONLY_WABA'
+            || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'
+        ) {
             signupResult = {
                 wabaId: data.data?.waba_id,
-                phoneNumberId: data.data?.phone_number_id,
+                phoneNumberId: data.data?.phone_number_id ?? null,
                 businessId: data.data?.business_id,
             };
             trySubmit();
@@ -425,7 +450,19 @@
             config_id: btn.dataset.configId,
             response_type: 'code',
             override_default_response_type: true,
-            extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+            // featureType: 'whatsapp_business_app_onboarding' is Meta's
+            // documented value for enabling WhatsApp Business App
+            // Coexistence within Embedded Signup — a tenant already using
+            // the WhatsApp Business App can connect that same number
+            // without migrating off it. sessionInfoVersion: '3' was already
+            // correct (required to receive waba_id in the postMessage
+            // event) and is unchanged. This does not remove the standard
+            // new-number flow — both FINISH (standard) and
+            // FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING (coexistence) are
+            // handled by the message listener above; whichever path the
+            // tenant actually takes inside the popup, this app's code
+            // handles the resulting event correctly.
+            extras: { setup: {}, featureType: 'whatsapp_business_app_onboarding', sessionInfoVersion: '3' },
         });
     }));
 })();
