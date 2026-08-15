@@ -39,7 +39,7 @@ class AiCreditController extends Controller
         return view('super.ai-credit.show', [
             'tenant' => $tenant,
             'account' => $account,
-            'ledger' => $account ? $this->service->ledger($tenant->id, perPage: 30) : null,
+            'ledger' => $this->service->ledger($tenant->id, perPage: 30),
         ]);
     }
 
