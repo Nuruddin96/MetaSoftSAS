@@ -28,10 +28,10 @@ trait InteractsWithWhatsAppSchema
 {
     /**
      * @param  bool  $includeAllTables  Pass false to simulate an environment
-     *   where database/sql/chunk26.sql hasn't been imported at all —
-     *   tenants/users still get created, but none of the four WhatsApp
-     *   tables exist, exactly as WhatsAppPhoneNumber::tablesReady() is
-     *   meant to detect.
+     *                                  where database/sql/chunk26.sql hasn't been imported at all —
+     *                                  tenants/users still get created, but none of the four WhatsApp
+     *                                  tables exist, exactly as WhatsAppPhoneNumber::tablesReady() is
+     *                                  meant to detect.
      */
     protected function setUpWhatsAppSchema(bool $includeAllTables = true): void
     {
@@ -260,6 +260,83 @@ trait InteractsWithWhatsAppSchema
                 $table->timestamp('created_at')->nullable();
             });
         }
+
+        // AI Agent credit/wallet (chunk32.sql) — needed for any test that
+        // exercises the AiCreditService gate. Same simplified-for-sqlite
+        // shape InteractsWithAiAgentSchema already uses.
+        if (! Schema::hasTable('ai_credit_accounts')) {
+            Schema::create('ai_credit_accounts', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id')->unique();
+                $table->decimal('balance', 12, 4)->default(0);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('ai_usage_ledger')) {
+            Schema::create('ai_usage_ledger', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('type', 20);
+                $table->decimal('credit_amount', 12, 4);
+                $table->decimal('balance_after', 12, 4);
+                $table->unsignedInteger('input_tokens')->nullable();
+                $table->unsignedInteger('output_tokens')->nullable();
+                $table->string('model', 100)->nullable();
+                $table->decimal('estimated_cost_usd', 10, 6)->nullable();
+                $table->string('context_type', 50)->nullable();
+                $table->unsignedBigInteger('context_id')->nullable();
+                $table->string('note', 255)->nullable();
+                $table->unsignedBigInteger('created_by')->nullable();
+                $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        // See database/sql/chunk35.sql (WhatsApp AI Auto Reply) for the
+        // real (MySQL) definition — the WhatsApp counterpart of
+        // ai_agent_message_jobs.
+        if (! Schema::hasTable('ai_whatsapp_message_jobs')) {
+            Schema::create('ai_whatsapp_message_jobs', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('whatsapp_message_id')->unique();
+                $table->string('status', 20)->default('pending');
+                $table->timestamps();
+            });
+        }
+    }
+
+    protected function enableAiAgent(int $tenantId): void
+    {
+        DB::table('store_settings')->updateOrInsert(
+            ['tenant_id' => $tenantId, 'key' => 'ai_agent_enabled'],
+            ['value' => '1', 'created_at' => now(), 'updated_at' => now()]
+        );
+    }
+
+    /** Independent of enableAiAgent() — see WhatsAppWebhookController::maybeDispatchAiAgent()'s docblock. */
+    protected function enableWhatsAppAutoReply(int $tenantId): void
+    {
+        DB::table('store_settings')->updateOrInsert(
+            ['tenant_id' => $tenantId, 'key' => 'whatsapp_ai_auto_reply_enabled'],
+            ['value' => '1', 'created_at' => now(), 'updated_at' => now()]
+        );
+    }
+
+    /** Both toggles at once — the common case for tests exercising the full dispatch/job pipeline rather than the toggles themselves. */
+    protected function enableAiAgentAndWhatsAppAutoReply(int $tenantId): void
+    {
+        $this->enableAiAgent($tenantId);
+        $this->enableWhatsAppAutoReply($tenantId);
+    }
+
+    /** Directly seeds an ai_credit_accounts row — bypasses AiCreditService for tests that just need a starting balance. */
+    protected function allocateAiCredit(int $tenantId, float $balance): void
+    {
+        DB::table('ai_credit_accounts')->updateOrInsert(
+            ['tenant_id' => $tenantId],
+            ['balance' => $balance, 'created_at' => now(), 'updated_at' => now()]
+        );
     }
 
     /**

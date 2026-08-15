@@ -11,6 +11,7 @@ use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\Order;
 use App\Models\StoreSetting;
+use App\Services\AI\AiCreditService;
 use App\Services\Messenger\CustomerInfoExtractor;
 use App\Services\Messenger\FacebookMessengerCustomerService;
 use App\Services\Messenger\MessengerApi;
@@ -341,24 +342,39 @@ class MessengerWebhookController extends Controller
     }
 
     /**
-     * Phase 1/2 of the AI Customer Support Agent — purely additive on top
-     * of the message-storage flow above, never replacing any of it. Only
-     * ever reached for genuine inbound (non-echo) customer text messages:
-     * $isEcho already took the early-return path above for anything sent
-     * from the Page itself, and the caller only invokes this when $text is
-     * non-empty. That is the entire loop-prevention mechanism this needs —
-     * the AI's own outgoing send (see ProcessAiAgentMessage) is always
-     * recorded with direction='out', and the matching echo event Meta
-     * sends back for it always takes the $isEcho path above, never this
-     * one.
+     * AI Customer Support Agent (Messenger channel) — purely additive on
+     * top of the message-storage flow above, never replacing any of it.
+     * Only ever reached for genuine inbound (non-echo) customer text
+     * messages: $isEcho already took the early-return path above for
+     * anything sent from the Page itself, and the caller only invokes this
+     * when $text is non-empty. That is the entire loop-prevention
+     * mechanism this needs — the AI's own outgoing send (see
+     * ProcessAiAgentMessage) is always recorded with direction='out', and
+     * the matching echo event Meta sends back for it always takes the
+     * $isEcho path above, never this one.
      *
-     * Everything here is synchronous but cheap: one settings lookup, one
-     * insert. All AI processing — building context, calling OpenAI,
-     * sending the reply — happens inside the queued ProcessAiAgentMessage
-     * job, never in this webhook request. The 'pending' row this writes is
-     * what that job atomically claims before doing anything else; see
-     * AiAgentMessageJob's docblock for the full duplicate-reply guard this
-     * is part of.
+     * Gated by THREE independent checks, all of which must pass:
+     *  - ai_agent_enabled: the tenant's master AI switch (future channels/
+     *    tools beyond Messenger will share this same switch).
+     *  - messenger_ai_auto_reply_enabled: Messenger-specific. A tenant can
+     *    have the master switch on (e.g. for a future in-panel AI chat)
+     *    while leaving Messenger auto-reply off — inbound messages still
+     *    arrive and sit in the inbox exactly as before, just without an
+     *    automatic AI reply.
+     *  - AiCreditService::hasCredit(): checked here (not just inside the
+     *    job) purely as an optimization — skips queuing a job, and
+     *    writing the 'pending' tracking row for it, that would only
+     *    immediately no-op. The job re-checks all three again itself
+     *    (defense in depth against a race between this check and a worker
+     *    picking the job up) — see ProcessAiAgentMessage::process().
+     *
+     * Everything here is synchronous but cheap: two settings lookups, one
+     * balance read, one insert. All AI processing — building context,
+     * calling OpenAI, sending the reply — happens inside the queued
+     * ProcessAiAgentMessage job, never in this webhook request. The
+     * 'pending' row this writes is what that job atomically claims before
+     * doing anything else; see AiAgentMessageJob's docblock for the full
+     * duplicate-reply guard this is part of.
      */
     protected function maybeDispatchAiAgent(int $tenantId, MessengerMessage $message): void
     {
@@ -366,7 +382,11 @@ class MessengerWebhookController extends Controller
             return; // database/sql/chunk30.sql not imported on this environment yet
         }
 
-        if (! $this->isAiAgentEnabled($tenantId)) {
+        if (! $this->isAiAgentEnabled($tenantId) || ! $this->isMessengerAutoReplyEnabled($tenantId)) {
+            return;
+        }
+
+        if (! app(AiCreditService::class)->hasCredit($tenantId)) {
             return;
         }
 
@@ -380,9 +400,9 @@ class MessengerWebhookController extends Controller
     }
 
     /**
-     * The AI Agent ON/OFF toggle reuses the existing generic store_settings
-     * table (key='ai_agent_enabled') rather than a dedicated settings
-     * table — see database/sql/chunk30.sql and
+     * The AI Agent master ON/OFF toggle reuses the existing generic
+     * store_settings table (key='ai_agent_enabled') rather than a
+     * dedicated settings table — see database/sql/chunk30.sql and
      * Tenant\SettingController::aiAgent() for the write side. No row for a
      * tenant means disabled; this is what keeps every existing tenant
      * silent by default after this feature deploys.
@@ -392,6 +412,19 @@ class MessengerWebhookController extends Controller
         return StoreSetting::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('key', 'ai_agent_enabled')
+            ->value('value') === '1';
+    }
+
+    /**
+     * Messenger-channel-specific toggle, independent of the master switch
+     * above — see maybeDispatchAiAgent()'s docblock. Same store_settings/
+     * "no row = disabled" shape as isAiAgentEnabled().
+     */
+    protected function isMessengerAutoReplyEnabled(int $tenantId): bool
+    {
+        return StoreSetting::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('key', 'messenger_ai_auto_reply_enabled')
             ->value('value') === '1';
     }
 

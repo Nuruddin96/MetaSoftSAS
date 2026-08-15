@@ -24,6 +24,7 @@
                 ['super.clients.index', 'ক্লায়েন্ট', '🏢'],
                 ['super.clients.payments', 'রেগুলার ক্লায়েন্ট পেমেন্ট', '💵'],
                 ['super.advertising.index', 'অ্যাডভার্টাইজিং বিলিং', '📢'],
+                ['super.ai-credit.index', 'AI ক্রেডিট', '🤖'],
                 ['super.plans', 'প্ল্যান', '📋'],
                 ['super.source.products', 'সোর্স — পণ্য', '📦'],
                 ['super.source.orders', 'সোর্স — অর্ডার', '📥'],

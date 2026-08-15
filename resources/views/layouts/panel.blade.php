@@ -111,6 +111,7 @@
                 $groups = [
                     'সারসংক্ষেপ' => [
                         ['tenant.dashboard', 'ড্যাশবোর্ড', 'layout-dashboard'],
+                        ['tenant.ai-chat', 'AI এজেন্ট', 'bot'],
                     ],
                     'বিক্রি' => array_filter([
                         $tenant->plan?->allow_pos ? ['tenant.pos', 'POS বিক্রি', 'calculator'] : null,

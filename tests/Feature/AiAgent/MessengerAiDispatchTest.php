@@ -61,7 +61,8 @@ class MessengerAiDispatchTest extends TestCase
 
         $tenant = $this->makeTenant();
         $this->makeMessengerPage($tenant->id, 'page-on', ['is_active' => 1]);
-        $this->enableAiAgent($tenant->id);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
 
         $this->postSignedMessengerWebhook(
             $this->inboundMessengerPayload('page-on', 'cust-2', 'mid-on-1', 'হ্যালো, দাম কত?')
@@ -82,13 +83,74 @@ class MessengerAiDispatchTest extends TestCase
         );
     }
 
+    public function test_ai_agent_on_but_messenger_auto_reply_off_does_not_dispatch_the_ai_job(): void
+    {
+        // The master switch alone is not enough — the Messenger-specific
+        // toggle must ALSO be on. Simulates a tenant with AI enabled for
+        // some other (future) channel but Messenger auto-reply explicitly
+        // left off.
+        Queue::fake();
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-noauto', ['is_active' => 1]);
+        $this->enableAiAgent($tenant->id);
+        // No call to enableMessengerAutoReply().
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $this->postSignedMessengerWebhook(
+            $this->inboundMessengerPayload('page-noauto', 'cust-5', 'mid-noauto-1', 'হ্যালো, দাম কত?')
+        )->assertOk();
+
+        Queue::assertNotPushed(ProcessAiAgentMessage::class);
+
+        // The message itself is still stored and visible in the inbox —
+        // only the automatic AI reply is skipped.
+        $this->assertSame(
+            1,
+            MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-noauto-1')->count()
+        );
+    }
+
+    public function test_exhausted_credit_does_not_dispatch_the_ai_job(): void
+    {
+        Queue::fake();
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-nocredit', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 0); // exhausted, not "never allocated"
+
+        $this->postSignedMessengerWebhook(
+            $this->inboundMessengerPayload('page-nocredit', 'cust-6', 'mid-nocredit-1', 'হ্যালো, দাম কত?')
+        )->assertOk();
+
+        Queue::assertNotPushed(ProcessAiAgentMessage::class);
+    }
+
+    public function test_tenant_never_allocated_any_credit_does_not_dispatch_the_ai_job(): void
+    {
+        Queue::fake();
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-neverallocated', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        // No call to allocateAiCredit() at all — no ai_credit_accounts row exists.
+
+        $this->postSignedMessengerWebhook(
+            $this->inboundMessengerPayload('page-neverallocated', 'cust-7', 'mid-neveralloc-1', 'হ্যালো, দাম কত?')
+        )->assertOk();
+
+        Queue::assertNotPushed(ProcessAiAgentMessage::class);
+    }
+
     public function test_an_outgoing_echo_does_not_dispatch_the_ai_job(): void
     {
         Queue::fake();
 
         $tenant = $this->makeTenant();
         $this->makeMessengerPage($tenant->id, 'page-echo', ['is_active' => 1]);
-        $this->enableAiAgent($tenant->id);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
 
         // A reply sent from Meta Business Suite / our own Send API echoes
         // back with is_echo=true — this must never be mistaken for a new
@@ -113,7 +175,8 @@ class MessengerAiDispatchTest extends TestCase
 
         $tenant = $this->makeTenant();
         $this->makeMessengerPage($tenant->id, 'page-attach', ['is_active' => 1]);
-        $this->enableAiAgent($tenant->id);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
 
         $payload = [
             'object' => 'page',

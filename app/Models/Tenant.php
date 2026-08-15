@@ -63,6 +63,11 @@ class Tenant extends Model
         return $this->hasOne(AdBillingAccount::class);
     }
 
+    public function aiCreditAccount()
+    {
+        return $this->hasOne(AiCreditAccount::class);
+    }
+
     /** Plan limit check, e.g. isWithinLimit('max_products', $count) */
     public function isWithinLimit(string $limit, int $currentCount): bool
     {

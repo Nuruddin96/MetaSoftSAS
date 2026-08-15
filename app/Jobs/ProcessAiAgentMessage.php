@@ -9,6 +9,7 @@ use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
 use App\Services\AI\AiAgentService;
+use App\Services\AI\AiCreditService;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -62,7 +63,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         public readonly int $messengerMessageId,
     ) {}
 
-    public function handle(AiAgentService $ai, MessengerApi $api): void
+    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api): void
     {
         if (! AiAgentMessageJob::tablesReady()) {
             return;
@@ -77,7 +78,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         }
 
         try {
-            $sent = $this->process($ai, $api);
+            $sent = $this->process($ai, $credit, $api);
 
             if ($sent) {
                 AiAgentMessageJob::markCompleted($this->tenantId, $this->messengerMessageId);
@@ -111,12 +112,13 @@ class ProcessAiAgentMessage implements ShouldQueue
     /**
      * @return bool true only when a reply was actually generated and
      *              successfully sent — every other outcome (tenant/message gone, AI
-     *              toggled back off, OpenAI failure, Messenger send failure) returns
-     *              false without throwing, and the caller marks the job 'failed'
-     *              for any of them. None of these send a fallback/error message to
-     *              the customer, per this phase's spec.
+     *              or Messenger-auto-reply toggled back off, credit exhausted,
+     *              OpenAI failure, Messenger send failure) returns false without
+     *              throwing, and the caller marks the job 'failed' for any of
+     *              them. None of these send a fallback/error message to the
+     *              customer, per this phase's spec.
      */
-    protected function process(AiAgentService $ai, MessengerApi $api): bool
+    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api): bool
     {
         $tenant = Tenant::withoutGlobalScopes()->find($this->tenantId);
 
@@ -124,10 +126,25 @@ class ProcessAiAgentMessage implements ShouldQueue
             return false;
         }
 
-        // Re-check the toggle — the tenant may have switched AI back off
-        // after the webhook dispatched this job but before a worker
-        // picked it up. This is the "STOP without replying" requirement.
-        if (! $this->isAiAgentEnabled($this->tenantId)) {
+        // Re-check both toggles — the tenant may have switched either
+        // back off after the webhook dispatched this job but before a
+        // worker picked it up. This is the "STOP without replying"
+        // requirement. Two independent toggles (see
+        // MessengerWebhookController::maybeDispatchAiAgent()'s docblock):
+        // ai_agent_enabled is the master AI switch, messenger_ai_auto_reply_enabled
+        // is Messenger-channel-specific — both must be on for this
+        // Messenger-triggered call to proceed.
+        if (! $this->isAiAgentEnabled($this->tenantId) || ! $this->isMessengerAutoReplyEnabled($this->tenantId)) {
+            return false;
+        }
+
+        // Re-check credit — another concurrent message for this same
+        // tenant could have exhausted the balance between dispatch and
+        // this worker picking the job up. Exhausted credit must stop AI
+        // processing exactly like the toggle being off does, and must
+        // NEVER touch ai_agent_enabled/messenger_ai_auto_reply_enabled or
+        // any other configuration — see AiCreditAccount's docblock.
+        if (! $credit->hasCredit($this->tenantId)) {
             return false;
         }
 
@@ -144,12 +161,28 @@ class ProcessAiAgentMessage implements ShouldQueue
 
         $history = $this->recentHistory($this->tenantId, $psid, $message->id);
 
-        $reply = $ai->generateReply($tenant->store_name, $history, $message->message_text);
+        $result = $ai->generateReply($tenant->store_name, $history, $message->message_text);
 
-        if (! $reply) {
+        if (! $result) {
             // AiAgentService already logged why.
             return false;
         }
+
+        // Deduct credit / record token usage the moment the OpenAI call
+        // itself succeeded — the cost was incurred here regardless of
+        // whether the Messenger send below succeeds, so this must not
+        // wait on that later step (see AiCreditService::recordUsage()'s
+        // docblock).
+        $credit->recordUsage(
+            $this->tenantId,
+            $result['input_tokens'],
+            $result['output_tokens'],
+            $result['model'],
+            contextType: 'messenger_reply',
+            contextId: $message->id,
+        );
+
+        $reply = $result['reply'];
 
         $token = $this->resolveOutboundToken($this->tenantId, $psid);
 
@@ -157,15 +190,15 @@ class ProcessAiAgentMessage implements ShouldQueue
             return false;
         }
 
-        $result = $api->sendMessage($psid, $reply, $token);
+        $sendResult = $api->sendMessage($psid, $reply, $token);
 
-        if (isset($result['error'])) {
-            // Never log $result['error']['message'] — same "may echo
+        if (isset($sendResult['error'])) {
+            // Never log $sendResult['error']['message'] — same "may echo
             // request details" caution already applied throughout this
             // codebase's other Graph API error handling.
             Log::warning('AI agent job: Messenger send failed.', [
                 'tenant_id' => $this->tenantId,
-                'error_type' => $result['error']['type'] ?? null,
+                'error_type' => $sendResult['error']['type'] ?? null,
             ]);
 
             return false;
@@ -179,7 +212,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         MessengerMessage::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenantId,
             'sender_psid' => $psid,
-            'mid' => $result['message_id'] ?? null,
+            'mid' => $sendResult['message_id'] ?? null,
             'message_text' => $reply,
             'direction' => 'out',
             'status' => 'contacted',
@@ -193,6 +226,20 @@ class ProcessAiAgentMessage implements ShouldQueue
         return StoreSetting::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('key', 'ai_agent_enabled')
+            ->value('value') === '1';
+    }
+
+    /**
+     * Channel-specific toggle, independent of the master ai_agent_enabled
+     * switch above — see MessengerWebhookController::maybeDispatchAiAgent()'s
+     * docblock for the full reasoning. No row = disabled, same "no row =
+     * off" default every other tenant toggle in this codebase uses.
+     */
+    protected function isMessengerAutoReplyEnabled(int $tenantId): bool
+    {
+        return StoreSetting::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('key', 'messenger_ai_auto_reply_enabled')
             ->value('value') === '1';
     }
 

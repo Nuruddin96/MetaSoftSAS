@@ -11,6 +11,7 @@ use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
 use App\Models\WhatsAppBusinessAccount;
 use App\Models\WhatsAppPhoneNumber;
+use App\Services\AI\AiCreditService;
 use App\Services\Domain\DomainManager;
 use App\Services\WhatsApp\WhatsAppOAuthService;
 use Illuminate\Database\QueryException;
@@ -68,6 +69,11 @@ class SettingController extends Controller
             'domainTxtValue' => $tenant->custom_domain_verification_token
                 ? DomainManager::expectedTxtValue($tenant->custom_domain_verification_token)
                 : null,
+            // Read-only display only — the balance itself is only ever
+            // mutated by Super Admin via AiCreditService (see
+            // SuperAdmin\AiCreditController). null = never allocated any
+            // credit yet, distinct from "0" (allocated once, now spent).
+            'aiCreditBalance' => app(AiCreditService::class)->balance($tenant->id),
         ]);
     }
 
@@ -192,23 +198,46 @@ class SettingController extends Controller
     }
 
     /**
-     * AI Customer Support Agent ON/OFF toggle (Phase 1/2). Reuses
-     * store_settings the same way store() above does for delivery charges
-     * — no dedicated table for a single boolean. StoreSetting's
-     * BelongsToTenant scope (and updateOrCreate's own tenant_id auto-fill
-     * on create) is what makes this tenant-isolated: this method never
-     * needs to name a tenant_id itself, and there is no way for this
-     * request to reach or modify another tenant's row.
+     * AI Customer Support Agent ON/OFF toggles. Reuses store_settings the
+     * same way store() above does for delivery charges — no dedicated
+     * table for two booleans. StoreSetting's BelongsToTenant scope (and
+     * updateOrCreate's own tenant_id auto-fill on create) is what makes
+     * this tenant-isolated: this method never needs to name a tenant_id
+     * itself, and there is no way for this request to reach or modify
+     * another tenant's row.
+     *
+     * Three independent toggles, saved together from the same Settings
+     * card: ai_agent_enabled is the master AI switch (the panel chat and
+     * every channel below share it); messenger_ai_auto_reply_enabled and
+     * whatsapp_ai_auto_reply_enabled are each channel-specific — a tenant
+     * can leave the master switch on while turning either channel's
+     * auto-reply off, and inbound messages on that channel still arrive
+     * and sit in the inbox as normal, just without an automatic reply.
+     * See MessengerWebhookController::maybeDispatchAiAgent() and
+     * WhatsAppWebhookController::maybeDispatchAiAgent()'s docblocks for
+     * how each set of three is enforced together.
      */
     public function aiAgent(Request $request)
     {
         $data = $request->validate([
             'ai_agent_enabled' => 'nullable|boolean',
+            'messenger_ai_auto_reply_enabled' => 'nullable|boolean',
+            'whatsapp_ai_auto_reply_enabled' => 'nullable|boolean',
         ]);
 
         StoreSetting::updateOrCreate(
             ['key' => 'ai_agent_enabled'],
             ['value' => $request->boolean('ai_agent_enabled') ? '1' : '0']
+        );
+
+        StoreSetting::updateOrCreate(
+            ['key' => 'messenger_ai_auto_reply_enabled'],
+            ['value' => $request->boolean('messenger_ai_auto_reply_enabled') ? '1' : '0']
+        );
+
+        StoreSetting::updateOrCreate(
+            ['key' => 'whatsapp_ai_auto_reply_enabled'],
+            ['value' => $request->boolean('whatsapp_ai_auto_reply_enabled') ? '1' : '0']
         );
 
         return back()->with('success', 'AI এজেন্ট সেটিংস সেভ হয়েছে।');

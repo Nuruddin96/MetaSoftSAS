@@ -32,6 +32,14 @@ class AiAgentSettingTest extends TestCase
             ->value('value') === '1';
     }
 
+    protected function isKeyEnabled(int $tenantId, string $key): bool
+    {
+        return StoreSetting::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('key', $key)
+            ->value('value') === '1';
+    }
+
     public function test_new_tenants_have_ai_disabled_by_default(): void
     {
         $tenant = $this->makeTenant();
@@ -92,5 +100,47 @@ class AiAgentSettingTest extends TestCase
 
         $this->assertTrue($this->isEnabled($tenantA->id), "tenant A's own toggle must have taken effect");
         $this->assertTrue($this->isEnabled($tenantB->id), "tenant B's setting must be completely untouched by tenant A's request");
+    }
+
+    public function test_whatsapp_auto_reply_toggle_is_independent_of_the_master_switch_and_the_messenger_toggle(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+
+        // Turn the master switch AND WhatsApp on, but leave Messenger off
+        // (unchecked, so it's simply absent from the submitted fields).
+        $this->actingAs($user, 'tenant')
+            ->post('/shop/'.$tenant->subdomain.'/panel/settings/ai-agent', [
+                'ai_agent_enabled' => '1',
+                'whatsapp_ai_auto_reply_enabled' => '1',
+            ])
+            ->assertRedirect();
+
+        $this->assertTrue($this->isEnabled($tenant->id));
+        $this->assertTrue($this->isKeyEnabled($tenant->id, 'whatsapp_ai_auto_reply_enabled'));
+        $this->assertFalse($this->isKeyEnabled($tenant->id, 'messenger_ai_auto_reply_enabled'), 'unchecking Messenger must not be affected by checking WhatsApp');
+    }
+
+    public function test_turning_whatsapp_off_does_not_affect_messenger_or_the_master_switch(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->enableAiAgent($tenant->id);
+        StoreSetting::updateOrCreate(['tenant_id' => $tenant->id, 'key' => 'messenger_ai_auto_reply_enabled'], ['value' => '1']);
+        StoreSetting::updateOrCreate(['tenant_id' => $tenant->id, 'key' => 'whatsapp_ai_auto_reply_enabled'], ['value' => '1']);
+        app()->instance('currentTenant', $tenant);
+
+        // Submit with both ai_agent_enabled and messenger checked, WhatsApp unchecked/absent.
+        $this->actingAs($user, 'tenant')
+            ->post('/shop/'.$tenant->subdomain.'/panel/settings/ai-agent', [
+                'ai_agent_enabled' => '1',
+                'messenger_ai_auto_reply_enabled' => '1',
+            ])
+            ->assertRedirect();
+
+        $this->assertTrue($this->isEnabled($tenant->id));
+        $this->assertTrue($this->isKeyEnabled($tenant->id, 'messenger_ai_auto_reply_enabled'));
+        $this->assertFalse($this->isKeyEnabled($tenant->id, 'whatsapp_ai_auto_reply_enabled'));
     }
 }

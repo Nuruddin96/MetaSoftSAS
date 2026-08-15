@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessWhatsAppAiAgentMessage;
+use App\Models\AiWhatsAppMessageJob;
+use App\Models\StoreSetting;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
+use App\Services\AI\AiCreditService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -225,18 +229,124 @@ class WhatsAppWebhookController extends Controller
             'created_at' => $createdAt,
         ], $content);
 
+        $stored = null;
+
         try {
-            WhatsAppMessage::withoutGlobalScopes()->create($attributes);
+            $stored = WhatsAppMessage::withoutGlobalScopes()->create($attributes);
         } catch (QueryException $e) {
             if (! $this->isUniqueConstraintViolation($e)) {
                 throw $e;
             }
             // Race: a concurrent retry of this same wamid won the insert
             // first (between the exists() check above and this create()) —
-            // the message is already recorded, nothing else to do. Same
-            // shape as MessengerWebhookController::handleEvent()'s
+            // the message is already recorded, nothing else to do. $stored
+            // stays null: that concurrent request already owns any AI
+            // Agent dispatch for it, not this one — same shape as
+            // MessengerWebhookController::handleEvent()'s identical
             // try/catch around its own create().
         }
+
+        if ($stored && $type === 'text' && $content['message_text']) {
+            try {
+                $this->maybeDispatchAiAgent($owner->tenant_id, $stored);
+            } catch (\Throwable $e) {
+                // Additive convenience, must never take the webhook down —
+                // the message is already safely recorded regardless of
+                // what happens here. Same posture as
+                // MessengerWebhookController::handleEvent()'s identical
+                // try/catch around maybeDispatchAiAgent().
+                Log::warning('WhatsApp webhook: AI agent dispatch failed.', [
+                    'tenant_id' => $owner->tenant_id,
+                    'wa_id' => $waId,
+                    'exception' => get_class($e),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * AI Customer Support Agent (WhatsApp channel) — purely additive on
+     * top of the message-storage flow above, never replacing any of it.
+     * Only ever reached for a genuine inbound text message that was just
+     * stored fresh (not a duplicate-delivery race, see the caller): the
+     * Cloud API's webhook design itself is what prevents any loop risk
+     * here — unlike Messenger, WhatsApp never echoes the business's own
+     * outbound sends back through this 'messages' array (only through a
+     * separate 'statuses' event, routed to handleStatus() instead), and
+     * WhatsAppSendService — the only thing that ever creates an outbound
+     * whatsapp_messages row — is never reached from this controller at
+     * all. See ProcessWhatsAppAiAgentMessage::process()'s own
+     * direction==='in' re-check for the belt-and-suspenders layer anyway.
+     *
+     * Gated by THREE independent checks, mirroring
+     * MessengerWebhookController::maybeDispatchAiAgent() exactly:
+     *  - ai_agent_enabled: the tenant's master AI switch, shared with
+     *    Messenger/the panel chat.
+     *  - whatsapp_ai_auto_reply_enabled: WhatsApp-specific. A tenant can
+     *    have the master switch on while leaving WhatsApp auto-reply off
+     *    — inbound messages still arrive and sit in the inbox exactly as
+     *    before, just without an automatic AI reply.
+     *  - AiCreditService::hasCredit(): checked here (not just inside the
+     *    job) purely as an optimization — skips queuing a job, and
+     *    writing the 'pending' tracking row for it, that would only
+     *    immediately no-op. The job re-checks all three again itself
+     *    (defense in depth against a race between this check and a worker
+     *    picking the job up) — see ProcessWhatsAppAiAgentMessage::process().
+     *
+     * Everything here is synchronous but cheap: two settings lookups, one
+     * balance read, one insert. All AI processing — building context,
+     * calling OpenAI, sending the reply — happens inside the queued
+     * ProcessWhatsAppAiAgentMessage job, never in this webhook request.
+     */
+    protected function maybeDispatchAiAgent(int $tenantId, WhatsAppMessage $message): void
+    {
+        if (! AiWhatsAppMessageJob::tablesReady()) {
+            return; // database/sql/chunk35.sql not imported on this environment yet
+        }
+
+        if (! $this->isAiAgentEnabled($tenantId) || ! $this->isWhatsAppAutoReplyEnabled($tenantId)) {
+            return;
+        }
+
+        if (! app(AiCreditService::class)->hasCredit($tenantId)) {
+            return;
+        }
+
+        AiWhatsAppMessageJob::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantId,
+            'whatsapp_message_id' => $message->id,
+            'status' => 'pending',
+        ]);
+
+        ProcessWhatsAppAiAgentMessage::dispatch($tenantId, $message->id);
+    }
+
+    /**
+     * The AI Agent master ON/OFF toggle reuses the existing generic
+     * store_settings table (key='ai_agent_enabled') — shared with
+     * Messenger/the panel chat, same read as
+     * MessengerWebhookController::isAiAgentEnabled(). No row for a
+     * tenant means disabled.
+     */
+    protected function isAiAgentEnabled(int $tenantId): bool
+    {
+        return StoreSetting::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('key', 'ai_agent_enabled')
+            ->value('value') === '1';
+    }
+
+    /**
+     * WhatsApp-channel-specific toggle, independent of the master switch
+     * above — see maybeDispatchAiAgent()'s docblock. Same store_settings/
+     * "no row = disabled" shape as isAiAgentEnabled().
+     */
+    protected function isWhatsAppAutoReplyEnabled(int $tenantId): bool
+    {
+        return StoreSetting::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('key', 'whatsapp_ai_auto_reply_enabled')
+            ->value('value') === '1';
     }
 
     /**

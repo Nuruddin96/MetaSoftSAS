@@ -16,6 +16,7 @@ use App\Http\Controllers\Storefront\PageController as StorefrontPage;
 use App\Http\Controllers\Storefront\ProductController as StorefrontProduct;
 use App\Http\Controllers\SuperAdmin\AdvertisingController as SuperAdvertisingController;
 use App\Http\Controllers\SuperAdmin\AffiliateController as SuperAffiliateController;
+use App\Http\Controllers\SuperAdmin\AiCreditController as SuperAiCreditController;
 use App\Http\Controllers\SuperAdmin\AuthController;
 use App\Http\Controllers\SuperAdmin\ClientController;
 use App\Http\Controllers\SuperAdmin\ClientPaymentController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\SuperAdmin\SourceProductController;
 use App\Http\Controllers\SuperAdmin\TenantController;
 use App\Http\Controllers\TelegramController;
 use App\Http\Controllers\Tenant\AdvertisingController;
+use App\Http\Controllers\Tenant\AiChatController;
 use App\Http\Controllers\Tenant\BarcodeController;
 use App\Http\Controllers\Tenant\BillingController;
 use App\Http\Controllers\Tenant\CategoryController;
@@ -35,8 +37,8 @@ use App\Http\Controllers\Tenant\DashboardController;
 use App\Http\Controllers\Tenant\ExpenseController;
 use App\Http\Controllers\Tenant\FacebookConnectController;
 use App\Http\Controllers\Tenant\FraudCheckController;
-use App\Http\Controllers\Tenant\IncompleteOrderController;
 use App\Http\Controllers\Tenant\InboxController;
+use App\Http\Controllers\Tenant\IncompleteOrderController;
 use App\Http\Controllers\Tenant\InventoryController;
 use App\Http\Controllers\Tenant\MessengerInboxController;
 use App\Http\Controllers\Tenant\NotificationController;
@@ -152,6 +154,17 @@ Route::domain(config('app.central_domain'))->group(function () {
                 Route::post('{tenant}/adjustments', [SuperAdvertisingController::class, 'storeAdjustment'])->name('adjustments.store');
             });
 
+            // AI Agent credit/wallet — allocation and manual adjustment only;
+            // no "activate"/module-settings step, unlike Advertising above,
+            // since an AI credit wallet has no separate module-enabled
+            // switch — see AiCreditAccount's docblock.
+            Route::prefix('ai-credit')->name('ai-credit.')->group(function () {
+                Route::get('/', [SuperAiCreditController::class, 'index'])->name('index');
+                Route::get('{tenant}', [SuperAiCreditController::class, 'show'])->name('show');
+                Route::post('{tenant}/allocate', [SuperAiCreditController::class, 'allocate'])->name('allocate');
+                Route::post('{tenant}/adjustments', [SuperAiCreditController::class, 'adjust'])->name('adjustments.store');
+            });
+
             Route::get('source/products', [SourceProductController::class, 'index'])->name('source.products');
             Route::get('source/products/create', [SourceProductController::class, 'create'])->name('source.products.create');
             Route::post('source/products', [SourceProductController::class, 'store'])->name('source.products.store');
@@ -210,6 +223,18 @@ $tenantRoutes = function () {
         Route::middleware(['auth:tenant', 'check.subscription'])->group(function () {
 
             Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+            // AI Agent panel chat (Phase 4) — the first live consumer of
+            // the AI tool registry; see Tenant\AiChatController's docblock
+            // for why this is tenant-authenticated only, unlike the
+            // public Messenger auto-reply flow.
+            Route::get('ai-chat', [AiChatController::class, 'index'])->name('ai-chat');
+            Route::post('ai-chat/messages', [AiChatController::class, 'send'])->name('ai-chat.send');
+            // Phase 5 confirmation system — the only routes that ever
+            // trigger a mutating tool's actual execution (see
+            // AiChatController's docblock).
+            Route::post('ai-chat/actions/{pendingAction}/confirm', [AiChatController::class, 'confirm'])->name('ai-chat.actions.confirm');
+            Route::post('ai-chat/actions/{pendingAction}/reject', [AiChatController::class, 'reject'])->name('ai-chat.actions.reject');
 
             // Notification bell "mark seen" beacon (session-based, see NotificationController)
             Route::post('notifications/seen', [NotificationController::class, 'markSeen'])->name('notifications.seen');

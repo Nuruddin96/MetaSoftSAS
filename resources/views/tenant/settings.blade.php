@@ -324,11 +324,33 @@
         <x-slot:status>
             @if (($store['ai_agent_enabled'] ?? '0') === '1')<x-ui.badge tone="leaf">চালু</x-ui.badge>@endif
         </x-slot:status>
-        <p class="text-xs text-mute -mt-2 mb-1">চালু থাকলে, Messenger-এ নতুন কাস্টমার মেসেজ আসলে AI স্বয়ংক্রিয়ভাবে রিপ্লাই দেবে। বন্ধ থাকলে আগের মতোই শুধু আপনি নিজে রিপ্লাই দিতে পারবেন।</p>
+
+        {{-- Read-only — balance itself is only ever changed by Super Admin. --}}
+        <div class="flex items-center justify-between rounded-lg border border-ink/10 bg-paper/60 px-3 py-2.5 mb-3 text-sm">
+            <span class="text-mute">AI ক্রেডিট ব্যালেন্স</span>
+            @if (is_null($aiCreditBalance))
+                <span class="font-semibold text-mute">বরাদ্দ করা হয়নি</span>
+            @elseif ((float) $aiCreditBalance <= 0)
+                <span class="font-semibold text-red-600">০ (শেষ হয়ে গেছে)</span>
+            @else
+                <span class="font-semibold text-leafdk">{{ number_format((float) $aiCreditBalance, 2) }}</span>
+            @endif
+        </div>
+        @if (is_null($aiCreditBalance) || (float) $aiCreditBalance <= 0)
+            <p class="text-xs text-red-600 -mt-1 mb-3">ক্রেডিট শেষ হয়ে গেলে (অথবা কখনো বরাদ্দ না হলে) AI চালু থাকলেও কোনো রিপ্লাই পাঠাবে না, যতক্ষণ না সুপার অ্যাডমিন নতুন ক্রেডিট যোগ করেন। আপনার সেটিংস/কনফিগারেশন অপরিবর্তিত থাকে।</p>
+        @endif
+
+        <p class="text-xs text-mute mb-1">"AI এজেন্ট" মাস্টার সুইচ — বন্ধ থাকলে কোনো চ্যানেলেই AI কোনো OpenAI কল করবে না। "Messenger অটো রিপ্লাই" এবং "WhatsApp অটো রিপ্লাই" প্রতিটি চ্যানেলের জন্য আলাদা সুইচ — মাস্টার সুইচ এবং সংশ্লিষ্ট চ্যানেলের সুইচ দুটোই চালু থাকলে তবেই সেই চ্যানেলে স্বয়ংক্রিয় রিপ্লাই যাবে।</p>
         <form method="POST" action="{{ route('tenant.settings.ai-agent') }}">
             @csrf
+            <label class="flex items-center gap-2 text-sm mb-2">
+                <input type="checkbox" name="ai_agent_enabled" value="1" @checked(($store['ai_agent_enabled'] ?? '0') === '1')> AI এজেন্ট চালু <span class="text-mute">(মাস্টার সুইচ)</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm mb-2">
+                <input type="checkbox" name="messenger_ai_auto_reply_enabled" value="1" @checked(($store['messenger_ai_auto_reply_enabled'] ?? '0') === '1')> Messenger অটো রিপ্লাই চালু
+            </label>
             <label class="flex items-center gap-2 text-sm mb-3">
-                <input type="checkbox" name="ai_agent_enabled" value="1" @checked(($store['ai_agent_enabled'] ?? '0') === '1')> চালু
+                <input type="checkbox" name="whatsapp_ai_auto_reply_enabled" value="1" @checked(($store['whatsapp_ai_auto_reply_enabled'] ?? '0') === '1')> WhatsApp অটো রিপ্লাই চালু
             </label>
             <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
         </form>

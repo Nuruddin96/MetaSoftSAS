@@ -54,16 +54,18 @@ class ProcessAiAgentMessageJobTest extends TestCase
 
     public function test_a_successful_run_sends_one_reply_and_records_it(): void
     {
-        config(['ai.openai_api_key' => 'test-key']);
+        config(['ai.openai_api_key' => 'test-key', 'ai.credit_per_1k_tokens' => 1.0]);
 
         $tenant = $this->makeTenant();
         $this->makeMessengerPage($tenant->id, 'page-1', ['is_active' => 1]);
-        $this->enableAiAgent($tenant->id);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
         $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-1', 'mid-in-1', 'দাম কত?');
 
         Http::fake([
             '*/chat/completions' => Http::response([
                 'choices' => [['message' => ['content' => 'দাম ৫০০ টাকা।']]],
+                'usage' => ['prompt_tokens' => 40, 'completion_tokens' => 10, 'total_tokens' => 50],
             ]),
             '*/me/messages*' => Http::response(['message_id' => 'mid-ai-reply-1']),
         ]);
@@ -82,6 +84,20 @@ class ProcessAiAgentMessageJobTest extends TestCase
             'completed',
             DB::table('ai_agent_message_jobs')->where('messenger_message_id', $messageId)->value('status')
         );
+
+        // Usage/credit tracking: 50 total tokens @ 1.0 credit/1k = 0.05 credit deducted.
+        $this->assertEqualsWithDelta(
+            99.95,
+            (float) DB::table('ai_credit_accounts')->where('tenant_id', $tenant->id)->value('balance'),
+            0.0001
+        );
+
+        $usageRow = DB::table('ai_usage_ledger')->where('tenant_id', $tenant->id)->where('type', 'usage')->first();
+        $this->assertNotNull($usageRow, 'a usage ledger row must be recorded for the successful OpenAI call');
+        $this->assertSame(40, $usageRow->input_tokens);
+        $this->assertSame(10, $usageRow->output_tokens);
+        $this->assertSame('messenger_reply', $usageRow->context_type);
+        $this->assertSame($messageId, $usageRow->context_id);
     }
 
     public function test_job_re_checks_the_setting_and_stops_if_ai_was_turned_off_after_dispatch(): void
@@ -110,7 +126,8 @@ class ProcessAiAgentMessageJobTest extends TestCase
 
         $tenant = $this->makeTenant();
         $this->makeMessengerPage($tenant->id, 'page-3', ['is_active' => 1]);
-        $this->enableAiAgent($tenant->id);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
         $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-3', 'mid-in-3', 'হ্যালো');
 
         Http::fake([
@@ -129,6 +146,16 @@ class ProcessAiAgentMessageJobTest extends TestCase
             'failed',
             DB::table('ai_agent_message_jobs')->where('messenger_message_id', $messageId)->value('status')
         );
+
+        // No credit consumed for a call that never actually completed —
+        // AiCreditService::recordUsage() is only reached after a reply is
+        // successfully generated.
+        $this->assertEqualsWithDelta(
+            100.0,
+            (float) DB::table('ai_credit_accounts')->where('tenant_id', $tenant->id)->value('balance'),
+            0.0001
+        );
+        $this->assertSame(0, DB::table('ai_usage_ledger')->where('tenant_id', $tenant->id)->where('type', 'usage')->count());
     }
 
     public function test_a_retried_or_duplicate_execution_does_not_send_a_second_reply(): void
@@ -137,7 +164,8 @@ class ProcessAiAgentMessageJobTest extends TestCase
 
         $tenant = $this->makeTenant();
         $this->makeMessengerPage($tenant->id, 'page-4', ['is_active' => 1]);
-        $this->enableAiAgent($tenant->id);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
         $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-4', 'mid-in-4', 'স্টকে আছে?');
 
         Http::fake([
@@ -162,5 +190,78 @@ class ProcessAiAgentMessageJobTest extends TestCase
             MessengerMessage::withoutGlobalScopes()->where('direction', 'out')->where('tenant_id', $tenant->id)->count(),
             'a retried/duplicate job execution must never result in a second outgoing message'
         );
+
+        $this->assertSame(
+            1,
+            DB::table('ai_usage_ledger')->where('tenant_id', $tenant->id)->where('type', 'usage')->count(),
+            'a retried/duplicate job execution must never deduct credit twice'
+        );
+    }
+
+    public function test_exhausted_credit_stops_before_any_openai_call(): void
+    {
+        // The central requirement this covers: insufficient credit must
+        // prevent the OpenAI call from being made at all, not just fail
+        // gracefully after — Http::fake() with no matcher here means ANY
+        // request at all fails the assertion below.
+        config(['ai.openai_api_key' => 'test-key']);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-5', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 0); // exhausted
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-5', 'mid-in-5', 'দাম কত?');
+
+        Http::fake();
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertNothingSent();
+        $this->assertSame(
+            0,
+            MessengerMessage::withoutGlobalScopes()->where('direction', 'out')->where('tenant_id', $tenant->id)->count()
+        );
+        $this->assertSame(
+            'failed',
+            DB::table('ai_agent_message_jobs')->where('messenger_message_id', $messageId)->value('status')
+        );
+    }
+
+    public function test_credit_exhausted_between_dispatch_and_processing_still_stops_the_job(): void
+    {
+        // Simulates the race the docblock describes: credit was fine when
+        // the webhook queued this job, but another concurrent message for
+        // the same tenant burned the last of it before this worker ran.
+        config(['ai.openai_api_key' => 'test-key']);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-6', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 0); // already exhausted by the time this runs
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-6', 'mid-in-6', 'দাম কত?');
+
+        Http::fake();
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertNothingSent();
+    }
+
+    public function test_messenger_auto_reply_off_stops_the_job_even_if_master_switch_is_on(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-7', ['is_active' => 1]);
+        $this->enableAiAgent($tenant->id);
+        // No enableMessengerAutoReply() call — off.
+        $this->allocateAiCredit($tenant->id, 100);
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-7', 'mid-in-7', 'দাম কত?');
+
+        Http::fake();
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertNothingSent();
     }
 }

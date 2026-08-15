@@ -2,6 +2,7 @@
 
 namespace Tests\Concerns;
 
+use App\Models\SuperAdmin;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
@@ -147,6 +148,92 @@ trait InteractsWithAiAgentSchema
                 $table->timestamps();
             });
         }
+
+        if (! Schema::hasTable('super_admins')) {
+            Schema::create('super_admins', function (Blueprint $table) {
+                $table->id();
+                $table->string('name', 150);
+                $table->string('email', 150)->unique();
+                $table->string('password');
+                $table->rememberToken();
+                $table->timestamps();
+            });
+        }
+
+        // See database/sql/chunk32.sql for the real (MySQL) definition —
+        // the ENUM there becomes a plain string column here, same
+        // simplification every other schema trait in this suite makes.
+        if (! Schema::hasTable('ai_credit_accounts')) {
+            Schema::create('ai_credit_accounts', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id')->unique();
+                $table->decimal('balance', 12, 4)->default(0);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('ai_usage_ledger')) {
+            Schema::create('ai_usage_ledger', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('type', 20);
+                $table->decimal('credit_amount', 12, 4);
+                $table->decimal('balance_after', 12, 4);
+                $table->unsignedInteger('input_tokens')->nullable();
+                $table->unsignedInteger('output_tokens')->nullable();
+                $table->string('model', 100)->nullable();
+                $table->decimal('estimated_cost_usd', 10, 6)->nullable();
+                $table->string('context_type', 50)->nullable();
+                $table->unsignedBigInteger('context_id')->nullable();
+                $table->string('note', 255)->nullable();
+                $table->unsignedBigInteger('created_by')->nullable();
+                $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        // See database/sql/chunk33.sql (Phase 4 panel chat) for the real
+        // (MySQL) definition.
+        if (! Schema::hasTable('ai_conversations')) {
+            Schema::create('ai_conversations', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('user_id');
+                $table->timestamps();
+                $table->unique(['tenant_id', 'user_id']);
+            });
+        }
+
+        if (! Schema::hasTable('ai_conversation_messages')) {
+            Schema::create('ai_conversation_messages', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('conversation_id');
+                $table->string('role', 20);
+                $table->text('content');
+                $table->unsignedBigInteger('pending_action_id')->nullable();
+                $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        // See database/sql/chunk34.sql (Phase 5 mutating tools +
+        // confirmation system) for the real (MySQL) definition.
+        if (! Schema::hasTable('ai_pending_actions')) {
+            Schema::create('ai_pending_actions', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('user_id');
+                $table->unsignedBigInteger('conversation_id')->nullable();
+                $table->string('tool_name', 100);
+                $table->json('resolved_args');
+                $table->text('summary');
+                $table->string('status', 20)->default('pending');
+                $table->json('result')->nullable();
+                $table->string('error', 255)->nullable();
+                $table->timestamp('expires_at');
+                $table->timestamp('confirmed_at')->nullable();
+                $table->timestamps();
+            });
+        }
     }
 
     protected function makeTenant(array $attrs = []): Tenant
@@ -196,6 +283,40 @@ trait InteractsWithAiAgentSchema
         DB::table('store_settings')->updateOrInsert(
             ['tenant_id' => $tenantId, 'key' => 'ai_agent_enabled'],
             ['value' => '1', 'created_at' => now(), 'updated_at' => now()]
+        );
+    }
+
+    /** Independent of enableAiAgent() — see MessengerWebhookController::maybeDispatchAiAgent()'s docblock. */
+    protected function enableMessengerAutoReply(int $tenantId): void
+    {
+        DB::table('store_settings')->updateOrInsert(
+            ['tenant_id' => $tenantId, 'key' => 'messenger_ai_auto_reply_enabled'],
+            ['value' => '1', 'created_at' => now(), 'updated_at' => now()]
+        );
+    }
+
+    /** Both toggles at once — the common case for tests exercising the full dispatch/job pipeline rather than the toggles themselves. */
+    protected function enableAiAgentAndMessengerAutoReply(int $tenantId): void
+    {
+        $this->enableAiAgent($tenantId);
+        $this->enableMessengerAutoReply($tenantId);
+    }
+
+    protected function makeSuperAdmin(): SuperAdmin
+    {
+        return SuperAdmin::create([
+            'name' => 'Admin',
+            'email' => 'admin-'.Str::random(10).'@example.com',
+            'password' => bcrypt('password'),
+        ]);
+    }
+
+    /** Directly seeds an ai_credit_accounts row — bypasses AiCreditService for tests that just need a starting balance, not the allocation flow itself. */
+    protected function allocateAiCredit(int $tenantId, float $balance): void
+    {
+        DB::table('ai_credit_accounts')->updateOrInsert(
+            ['tenant_id' => $tenantId],
+            ['balance' => $balance, 'created_at' => now(), 'updated_at' => now()]
         );
     }
 
