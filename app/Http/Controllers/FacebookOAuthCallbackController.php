@@ -33,13 +33,51 @@ class FacebookOAuthCallbackController extends Controller
         try {
             $state = $fb->validateAndConsumeState(
                 $request->query('state'),
-                auth('tenant')->id()
+                null
             );
         } catch (FacebookOAuthException $e) {
             Log::warning('Facebook OAuth: state validation failed.', [
                 'reason' => $e->reason,
                 'ip' => $request->ip(),
             ]);
+
+            /*
+             * Mobile WebView/app flows can deliver the same OAuth callback
+             * more than once. The first callback atomically consumes the
+             * state and completes the Facebook connection; a duplicate
+             * callback then correctly reports "already_used".
+             *
+             * Do NOT disable single-use state protection. Instead, when the
+             * state was already consumed and the corresponding connection
+             * was successfully updated after that consumption, treat the
+             * callback as a harmless duplicate and continue to Page picker.
+             */
+            if ($e->reason === 'already_used') {
+                $stateRow = FacebookOauthState::where(
+                    'state',
+                    $request->query('state')
+                )->first();
+
+                if ($stateRow && $stateRow->used_at) {
+                    $connectionCompleted = FacebookConnection::withoutGlobalScopes()
+                        ->where('tenant_id', $stateRow->tenant_id)
+                        ->where('connected_by_user_id', $stateRow->user_id)
+                        ->where('updated_at', '>=', $stateRow->used_at)
+                        ->exists();
+
+                    if ($connectionCompleted) {
+                        $tenant = Tenant::find($stateRow->tenant_id);
+
+                        if ($tenant) {
+                            return $this->redirectToTenant(
+                                $tenant,
+                                'success',
+                                'Facebook কানেকশন সফল হয়েছে — এখন একটি Page বাছাই করুন।'
+                            );
+                        }
+                    }
+                }
+            }
 
             abort(403, 'This Facebook connection request could not be verified. Please start again from your panel.');
         }
