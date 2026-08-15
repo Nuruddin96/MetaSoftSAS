@@ -2,8 +2,12 @@
 
 namespace Tests\Concerns;
 
+use App\Models\Inventory;
+use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Models\Warehouse;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -81,6 +85,7 @@ trait InteractsWithCommerceSchema
                 $table->string('attachment_type', 20)->nullable();
                 $table->string('attachment_name', 255)->nullable();
                 $table->string('direction', 10)->default('in');
+                $table->string('sent_by', 10)->default('human');
                 $table->string('status', 20)->default('new');
                 $table->timestamp('created_at')->nullable();
             });
@@ -445,17 +450,17 @@ trait InteractsWithCommerceSchema
      * Creates one active product/variant/warehouse/inventory row for a
      * tenant — the minimum a test needs to exercise OrderController::complete().
      */
-    protected function makeSellableVariant(int $tenantId, array $variantAttrs = []): \App\Models\ProductVariant
+    protected function makeSellableVariant(int $tenantId, array $variantAttrs = []): ProductVariant
     {
-        app()->instance('currentTenant', \App\Models\Tenant::find($tenantId));
+        app()->instance('currentTenant', Tenant::find($tenantId));
 
-        $product = \App\Models\Product::create([
+        $product = Product::create([
             'tenant_id' => $tenantId,
             'name' => 'Test Product',
             'is_active' => 1,
         ]);
 
-        $variant = \App\Models\ProductVariant::create(array_merge([
+        $variant = ProductVariant::create(array_merge([
             'tenant_id' => $tenantId,
             'product_id' => $product->id,
             'variant_name' => 'Default',
@@ -463,13 +468,13 @@ trait InteractsWithCommerceSchema
             'purchase_price' => 300,
         ], $variantAttrs));
 
-        $warehouse = \App\Models\Warehouse::create([
+        $warehouse = Warehouse::create([
             'tenant_id' => $tenantId,
             'name' => 'Main Warehouse',
             'is_default' => 1,
         ]);
 
-        \App\Models\Inventory::create([
+        Inventory::create([
             'tenant_id' => $tenantId,
             'variant_id' => $variant->id,
             'warehouse_id' => $warehouse->id,

@@ -9,6 +9,7 @@ use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
 use App\Services\AI\AiAgentService;
+use App\Services\AI\AiConversationStyleService;
 use App\Services\AI\AiCreditService;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Bus\Queueable;
@@ -63,7 +64,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         public readonly int $messengerMessageId,
     ) {}
 
-    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api): void
+    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style): void
     {
         if (! AiAgentMessageJob::tablesReady()) {
             return;
@@ -78,7 +79,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         }
 
         try {
-            $sent = $this->process($ai, $credit, $api);
+            $sent = $this->process($ai, $credit, $api, $style);
 
             if ($sent) {
                 AiAgentMessageJob::markCompleted($this->tenantId, $this->messengerMessageId);
@@ -118,7 +119,7 @@ class ProcessAiAgentMessage implements ShouldQueue
      *              them. None of these send a fallback/error message to the
      *              customer, per this phase's spec.
      */
-    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api): bool
+    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style): bool
     {
         $tenant = Tenant::withoutGlobalScopes()->find($this->tenantId);
 
@@ -160,8 +161,14 @@ class ProcessAiAgentMessage implements ShouldQueue
         $psid = $message->sender_psid;
 
         $history = $this->recentHistory($this->tenantId, $psid, $message->id);
+        $styleExamples = $style->messengerStyleExamples($this->tenantId);
+        // Same "not just this row" resolution MessengerInboxController
+        // already relies on — a name resolved on an earlier message in
+        // this same conversation is still the best one known, even if
+        // this particular inbound message didn't carry it.
+        $customerName = MessengerMessage::resolvedNameFor($this->tenantId, $psid);
 
-        $result = $ai->generateReply($tenant->store_name, $history, $message->message_text);
+        $result = $ai->generateReply($tenant->store_name, $history, $message->message_text, $styleExamples, $customerName);
 
         if (! $result) {
             // AiAgentService already logged why.
@@ -209,14 +216,23 @@ class ProcessAiAgentMessage implements ShouldQueue
         // tenant's Messenger inbox, and so the mid-based dedup in
         // MessengerWebhookController::handleEvent() already finds it
         // recorded when the matching echo event for this send arrives.
-        MessengerMessage::withoutGlobalScopes()->create([
+        $attributes = [
             'tenant_id' => $this->tenantId,
             'sender_psid' => $psid,
             'mid' => $sendResult['message_id'] ?? null,
             'message_text' => $reply,
             'direction' => 'out',
             'status' => 'contacted',
-        ]);
+        ];
+
+        // sent_by='ai' is what keeps AiConversationStyleService's human-only
+        // style examples from ever learning from the AI's own past replies
+        // — see database/sql/chunk36.sql's docblock.
+        if (MessengerMessage::sentByColumnReady()) {
+            $attributes['sent_by'] = 'ai';
+        }
+
+        MessengerMessage::withoutGlobalScopes()->create($attributes);
 
         return true;
     }

@@ -184,6 +184,7 @@ trait InteractsWithWhatsAppSchema
                 $table->text('message_text')->nullable();
                 $table->string('attachment_url', 500)->nullable();
                 $table->string('direction', 10)->default('in');
+                $table->string('sent_by', 10)->default('human');
                 $table->string('status', 20)->default('new');
                 $table->timestamp('created_at')->nullable();
             });

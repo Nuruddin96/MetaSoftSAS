@@ -47,6 +47,19 @@ class MessengerMessage extends Model
     }
 
     /**
+     * True once database/sql/chunk36.sql's sent_by column exists — same
+     * additive-column guard as attachmentColumnsReady() above. Used both
+     * to gate writing 'sent_by' on create() and to gate reading it back
+     * for style learning (App\Services\AI\AiConversationStyleService),
+     * which must never assume every row has a reliable value until this
+     * column has actually been imported.
+     */
+    public static function sentByColumnReady(): bool
+    {
+        return Schema::hasColumn('messenger_messages', 'sent_by');
+    }
+
+    /**
      * The resolved Facebook display name for a conversation, if one has
      * ever been captured on any message row for this psid — not just the
      * most recent one. customer_name is only ever set on inbound messages

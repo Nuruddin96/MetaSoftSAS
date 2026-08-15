@@ -10,10 +10,12 @@ use App\Models\MessengerCustomer;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\Order;
+use App\Services\AI\AiConversationStyleService;
 use App\Services\ImageOptimizer;
 use App\Services\Inbox\UnifiedInboxService;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class MessengerInboxController extends Controller
 {
@@ -229,10 +231,10 @@ class MessengerInboxController extends Controller
      * resolvable order and nothing else, so this feature can never merge
      * two different real customers' identities on its own judgment.
      *
-     * @param  \Illuminate\Support\Collection<int, string>  $psids
-     * @return \Illuminate\Support\Collection<string, string> customer_name keyed by messenger_psid
+     * @param  Collection<int, string>  $psids
+     * @return Collection<string, string> customer_name keyed by messenger_psid
      */
-    protected function resolveOrderNames($psids): \Illuminate\Support\Collection
+    protected function resolveOrderNames($psids): Collection
     {
         if (! app()->bound('currentTenant')) {
             return collect();
@@ -248,7 +250,7 @@ class MessengerInboxController extends Controller
             ->pluck('customer_name', 'messenger_psid');
     }
 
-    public function reply(Request $request, string $psid, MessengerApi $api)
+    public function reply(Request $request, string $psid, MessengerApi $api, AiConversationStyleService $style)
     {
         $data = $request->validate([
             'message' => 'nullable|string|max:1000',
@@ -293,7 +295,7 @@ class MessengerInboxController extends Controller
                 return back()->with('error', 'মেসেজ পাঠানো যায়নি: '.($result['error']['message'] ?? 'Facebook API error'));
             }
 
-            MessengerMessage::create([
+            $textAttrs = [
                 'sender_psid' => $psid,
                 // Meta's Send API returns its own id for this message as
                 // message_id. Recording it as our mid now means that when the
@@ -305,7 +307,26 @@ class MessengerInboxController extends Controller
                 'message_text' => $message,
                 'direction' => 'out',
                 'status' => 'contacted',
-            ]);
+            ];
+
+            // sent_by='human' marks this as a genuine staff reply — see
+            // database/sql/chunk36.sql's docblock. Distinguishes it from
+            // ProcessAiAgentMessage's AI-generated replies, which is what
+            // lets AiConversationStyleService learn tone only from real
+            // human replies, never the AI's own past output.
+            if (MessengerMessage::sentByColumnReady()) {
+                $textAttrs['sent_by'] = 'human';
+            }
+
+            MessengerMessage::create($textAttrs);
+
+            // A genuine human reply — possibly a correction of something
+            // the AI got wrong — is exactly the high-value signal that
+            // should shape the very next AI reply, not sit unused for up
+            // to config('ai.style_cache_minutes'). See
+            // AiConversationStyleService::forgetMessengerStyleCache()'s
+            // docblock.
+            $style->forgetMessengerStyleCache(app('currentTenant')->id);
         }
 
         if ($request->hasFile('image')) {
@@ -338,6 +359,10 @@ class MessengerInboxController extends Controller
 
             if (MessengerMessage::attachmentColumnsReady()) {
                 $attrs['attachment_type'] = 'image';
+            }
+
+            if (MessengerMessage::sentByColumnReady()) {
+                $attrs['sent_by'] = 'human';
             }
 
             MessengerMessage::create($attrs);

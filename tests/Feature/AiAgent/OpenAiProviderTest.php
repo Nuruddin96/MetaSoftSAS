@@ -194,6 +194,52 @@ class OpenAiProviderTest extends TestCase
         });
     }
 
+    public function test_reasoning_effort_is_sent_for_a_reasoning_family_model(): void
+    {
+        config(['ai.openai_api_key' => 'test-key', 'ai.openai_model' => 'gpt-5-mini', 'ai.reasoning_effort' => 'low']);
+        Http::fake(['*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'ok']]]])]);
+
+        (new OpenAiProvider)->chat([['role' => 'user', 'content' => 'হাই']]);
+
+        Http::assertSent(fn ($request) => ($request->data()['reasoning_effort'] ?? null) === 'low');
+    }
+
+    public function test_reasoning_effort_is_never_sent_for_a_non_reasoning_model(): void
+    {
+        // Sending 'reasoning_effort' to a model that doesn't support it is
+        // itself an unsupported-parameter 400 -- the exact failure class
+        // max_completion_tokens already fixed once for 'max_tokens'.
+        config(['ai.openai_api_key' => 'test-key', 'ai.openai_model' => 'gpt-4o-mini', 'ai.reasoning_effort' => 'low']);
+        Http::fake(['*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'ok']]]])]);
+
+        (new OpenAiProvider)->chat([['role' => 'user', 'content' => 'হাই']]);
+
+        Http::assertSent(fn ($request) => ! array_key_exists('reasoning_effort', $request->data()));
+    }
+
+    public function test_a_response_that_exhausted_its_token_budget_on_reasoning_is_logged_with_safe_diagnostic_fields(): void
+    {
+        // The exact real-world shape observed in production: HTTP 200,
+        // finish_reason=length, no visible content, no tool calls -- the
+        // model spent its whole budget on invisible reasoning.
+        config(['ai.openai_api_key' => 'test-key']);
+        Log::spy();
+
+        Http::fake(['*/chat/completions' => Http::response([
+            'choices' => [['message' => ['content' => null], 'finish_reason' => 'length']],
+            'usage' => ['completion_tokens' => 500, 'completion_tokens_details' => ['reasoning_tokens' => 500]],
+        ])]);
+
+        $response = (new OpenAiProvider)->chat([['role' => 'user', 'content' => 'হাই']]);
+
+        $this->assertFalse($response->successful);
+        Log::shouldHaveReceived('warning')->withArgs(function (string $message, array $context) {
+            return $context['finish_reason'] === 'length'
+                && $context['reasoning_tokens'] === 500
+                && $context['completion_tokens'] === 500;
+        })->once();
+    }
+
     public function test_error_message_is_logged_for_an_ordinary_non_auth_failure(): void
     {
         // error.message is safe to log for an ordinary 400 (e.g. the

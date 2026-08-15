@@ -81,6 +81,7 @@ trait InteractsWithAiAgentSchema
                 $table->string('attachment_type', 20)->nullable();
                 $table->string('attachment_name', 255)->nullable();
                 $table->string('direction', 10)->default('in');
+                $table->string('sent_by', 10)->default('human');
                 $table->string('status', 20)->default('new');
                 $table->timestamp('created_at')->nullable();
             });

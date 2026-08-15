@@ -100,6 +100,92 @@ class ProcessAiAgentMessageJobTest extends TestCase
         $this->assertSame($messageId, $usageRow->context_id);
     }
 
+    public function test_a_successful_run_marks_the_recorded_reply_as_ai_generated(): void
+    {
+        // The correctness of AiConversationStyleService's human-only style
+        // learning depends entirely on this tag being set correctly here.
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-tag', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-tag', 'mid-in-tag', 'দাম কত?');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'দাম ৫০০ টাকা।']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-ai-reply-tag']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        $reply = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-ai-reply-tag')->first();
+        $this->assertNotNull($reply);
+        $this->assertSame('ai', $reply->sent_by);
+    }
+
+    public function test_real_human_style_examples_from_this_conversations_history_are_sent_to_the_provider(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-style', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        // Prior, unrelated human-written conversation for this same tenant
+        // — a different customer entirely, since style examples are
+        // tenant-wide, not limited to the current conversation.
+        DB::table('messenger_messages')->insert([
+            ['tenant_id' => $tenant->id, 'sender_psid' => 'cust-history', 'message_text' => 'ডেলিভারি কত?', 'direction' => 'in', 'sent_by' => 'human', 'status' => 'new', 'created_at' => now()->subMinutes(10)],
+            ['tenant_id' => $tenant->id, 'sender_psid' => 'cust-history', 'message_text' => 'ঢাকার ভিতরে ৬০ টাকা।', 'direction' => 'out', 'sent_by' => 'human', 'status' => 'contacted', 'created_at' => now()->subMinutes(9)],
+        ]);
+
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-new', 'mid-in-style', 'দাম কত?');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'দাম ৫০০ টাকা।']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-ai-reply-style']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(function ($request) {
+            $systemMessage = $request->data()['messages'][0]['content'] ?? '';
+
+            return str_contains($systemMessage, 'ঢাকার ভিতরে ৬০ টাকা।');
+        });
+    }
+
+    public function test_the_customers_resolved_name_is_sent_to_the_provider_when_known(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-name', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        // An earlier message in this conversation already carried the
+        // customer's resolved Facebook name — the current inbound message
+        // doesn't need to repeat it for it to still be known.
+        DB::table('messenger_messages')->insert([
+            'tenant_id' => $tenant->id, 'sender_psid' => 'cust-named', 'mid' => 'mid-earlier',
+            'customer_name' => 'Rahim Uddin', 'message_text' => 'হ্যালো', 'direction' => 'in', 'status' => 'new', 'created_at' => now()->subMinute(),
+        ]);
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-named', 'mid-in-name', 'দাম কত?');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'দাম ৫০০ টাকা।']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-ai-reply-name']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(function ($request) {
+            $systemMessage = $request->data()['messages'][0]['content'] ?? '';
+
+            return str_contains($systemMessage, 'Rahim Uddin');
+        });
+    }
+
     public function test_job_re_checks_the_setting_and_stops_if_ai_was_turned_off_after_dispatch(): void
     {
         $tenant = $this->makeTenant();

@@ -25,21 +25,21 @@ trait InteractsWithFacebookSchema
 {
     /**
      * @param  bool  $includeFacebookOauthTables  Pass false to simulate an
-     *   environment where database/sql/chunk23.sql hasn't been imported at
-     *   all — tenants/users/messenger_settings/messenger_messages still get
-     *   created (so the legacy flow has something to fall back to), but
-     *   facebook_oauth_states/facebook_connections/facebook_pages are left
-     *   absent, exactly as FacebookPage::tablesReady() is meant to detect.
+     *                                            environment where database/sql/chunk23.sql hasn't been imported at
+     *                                            all — tenants/users/messenger_settings/messenger_messages still get
+     *                                            created (so the legacy flow has something to fall back to), but
+     *                                            facebook_oauth_states/facebook_connections/facebook_pages are left
+     *                                            absent, exactly as FacebookPage::tablesReady() is meant to detect.
      * @param  bool  $includeFacebookPageIdColumn  Pass false to simulate a
-     *   PARTIAL chunk23.sql import: the three tables above exist, but the
-     *   trailing `ALTER TABLE messenger_messages ADD COLUMN facebook_page_id
-     *   ...` statement in that same file did not run. Independent of
-     *   $includeFacebookOauthTables so both failure modes can be tested on
-     *   their own.
+     *                                             PARTIAL chunk23.sql import: the three tables above exist, but the
+     *                                             trailing `ALTER TABLE messenger_messages ADD COLUMN facebook_page_id
+     *                                             ...` statement in that same file did not run. Independent of
+     *                                             $includeFacebookOauthTables so both failure modes can be tested on
+     *                                             their own.
      * @param  bool  $includeAttachmentColumns  Pass false to simulate
-     *   database/sql/chunk25.sql not having been imported yet — the
-     *   attachment_type/attachment_name columns are absent, exactly as
-     *   MessengerMessage::attachmentColumnsReady() is meant to detect.
+     *                                          database/sql/chunk25.sql not having been imported yet — the
+     *                                          attachment_type/attachment_name columns are absent, exactly as
+     *                                          MessengerMessage::attachmentColumnsReady() is meant to detect.
      */
     protected function setUpFacebookSchema(
         bool $includeFacebookOauthTables = true,
@@ -229,6 +229,7 @@ trait InteractsWithFacebookSchema
                     $table->string('attachment_name', 255)->nullable();
                 }
                 $table->string('direction', 10)->default('in');
+                $table->string('sent_by', 10)->default('human');
                 $table->string('status', 20)->default('new');
                 $table->timestamp('created_at')->nullable();
             });

@@ -80,4 +80,100 @@ class AiAgentServiceTest extends TestCase
 
         $this->assertNull($result);
     }
+
+    public function test_style_examples_are_included_in_the_system_prompt_when_provided(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply(
+            'Shop Basket',
+            [],
+            'দাম কত?',
+            "Customer: দাম কত?\nReply: আপু এটা ১২৫০ টাকা 😊"
+        );
+
+        $this->assertStringContainsString('আপু এটা ১২৫০ টাকা 😊', $seen[0]['content']);
+    }
+
+    public function test_no_style_examples_section_is_added_when_none_are_available(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null);
+
+        $this->assertStringNotContainsString('Customer:', $seen[0]['content']);
+    }
+
+    public function test_style_examples_are_explicitly_instructed_as_style_only_never_current_facts(): void
+    {
+        // Priority requirement: current conversation and real business
+        // data must always outrank a historical example's old facts (e.g.
+        // an outdated price mentioned in a past conversation).
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', 'Customer: X\nReply: Y');
+
+        $this->assertStringContainsString('never treat any price, availability, or other fact', $seen[0]['content']);
+    }
+
+    public function test_current_conversation_history_and_new_message_still_come_after_the_system_prompt_when_style_examples_are_present(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        $history = [['role' => 'user', 'content' => 'আগের মেসেজ']];
+
+        app(AiAgentService::class)->generateReply('Shop Basket', $history, 'নতুন মেসেজ', 'Customer: X\nReply: Y');
+
+        $this->assertSame('system', $seen[0]['role']);
+        $this->assertSame($history[0], $seen[1]);
+        $this->assertSame(['role' => 'user', 'content' => 'নতুন মেসেজ'], $seen[2]);
+    }
+
+    public function test_customer_name_is_included_when_provided(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, 'Rahim');
+
+        $this->assertStringContainsString('Rahim', $seen[0]['content']);
+    }
+
+    public function test_no_customer_name_line_is_added_when_the_name_is_unknown(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null);
+
+        $this->assertStringNotContainsString("The customer's name, if useful", $seen[0]['content']);
+    }
 }

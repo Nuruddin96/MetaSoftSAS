@@ -30,8 +30,10 @@ class OpenAiProvider implements AiProviderInterface
             return AiProviderResponse::failure();
         }
 
+        $model = (string) config('ai.openai_model');
+
         $payload = [
-            'model' => config('ai.openai_model'),
+            'model' => $model,
             'messages' => $messages,
             // 'max_tokens' is rejected outright (400 unsupported_parameter)
             // by newer models — gpt-5-mini among them — which require
@@ -44,6 +46,19 @@ class OpenAiProvider implements AiProviderInterface
 
         if ($tools) {
             $payload['tools'] = $tools;
+        }
+
+        // Reasoning-family models (gpt-5*, o1*, o3*, o4*) can spend an
+        // unpredictable, sometimes large share of max_completion_tokens on
+        // invisible reasoning before ever emitting a visible reply — for a
+        // short customer-support-style reply, an occasional spike can
+        // consume the entire budget and leave $reply empty (finish_reason
+        // "length", no content). 'reasoning_effort' curbs that at the
+        // source rather than just tolerating it with a bigger budget.
+        // Deliberately NOT sent for any other model — it's itself an
+        // unsupported parameter there, same failure class max_tokens was.
+        if ($this->isReasoningModel($model)) {
+            $payload['reasoning_effort'] = config('ai.reasoning_effort', 'low');
         }
 
         try {
@@ -109,7 +124,18 @@ class OpenAiProvider implements AiProviderInterface
         ], $response->json('choices.0.message.tool_calls') ?? []);
 
         if (! $hasReply && ! $toolCalls) {
-            Log::warning('AI provider (openai): response contained no usable reply text or tool calls.');
+            // finish_reason/reasoning_tokens are short, machine-readable
+            // diagnostic fields (never user content, never a credential —
+            // same safety rule as the error-response branch above).
+            // "length" here means the model's own reasoning consumed the
+            // entire max_completion_tokens budget before emitting any
+            // visible content — the exact failure reasoning_effort above
+            // exists to reduce, not a transport/auth/config problem.
+            Log::warning('AI provider (openai): response contained no usable reply text or tool calls.', [
+                'finish_reason' => $response->json('choices.0.finish_reason'),
+                'reasoning_tokens' => $response->json('usage.completion_tokens_details.reasoning_tokens'),
+                'completion_tokens' => $response->json('usage.completion_tokens'),
+            ]);
 
             return AiProviderResponse::failure();
         }
@@ -118,8 +144,25 @@ class OpenAiProvider implements AiProviderInterface
             $hasReply ? trim($reply) : null,
             (int) ($response->json('usage.prompt_tokens') ?? 0),
             (int) ($response->json('usage.completion_tokens') ?? 0),
-            (string) config('ai.openai_model'),
+            $model,
             $toolCalls,
         );
+    }
+
+    /**
+     * Reasoning-family models are the only ones that accept
+     * 'reasoning_effort' — sending it to any other model is itself an
+     * unsupported parameter (400), so this must stay a conservative
+     * allowlist of known prefixes, never a default-true guess.
+     */
+    protected function isReasoningModel(string $model): bool
+    {
+        foreach (['gpt-5', 'o1', 'o3', 'o4'] as $prefix) {
+            if (str_starts_with($model, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

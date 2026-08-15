@@ -8,6 +8,7 @@ use App\Models\FacebookPage;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\Tenant;
+use App\Services\AI\AiConversationStyleService;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -194,5 +195,33 @@ class MessengerReplyRoutingTest extends FacebookFeatureTestCase
         $response->assertRedirect();
         $response->assertSessionHas('error');
         Http::assertNothingSent();
+    }
+
+    public function test_a_human_panel_reply_immediately_invalidates_this_tenants_style_cache(): void
+    {
+        // The mechanism behind "human corrections are a high-value
+        // signal" (see AiConversationStyleService::forgetMessengerStyleCache())
+        // — a staff member's real reply must be visible to the AI's very
+        // next call, not wait out the cache window.
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+
+        MessengerSetting::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'page_id' => 'style-cache-page',
+            'page_access_token' => 'style-cache-token', 'is_active' => 1,
+        ]);
+        $this->incomingMessage($tenant, 'psid-style', 'mid-style-1', null);
+
+        $style = app(AiConversationStyleService::class);
+        // Pre-warm the cache so there's something to invalidate.
+        $style->messengerStyleExamples($tenant->id);
+
+        Http::fake(['*/me/messages*' => Http::response(['message_id' => 'm-style-1'])]);
+
+        $this->actingAs($user, 'tenant')
+            ->post($this->panelUrl($tenant, 'messenger/psid-style/reply'), ['message' => 'এইটা ৯৯৯ টাকা'])
+            ->assertRedirect();
+
+        $this->assertStringContainsString('এইটা ৯৯৯ টাকা', $style->messengerStyleExamples($tenant->id));
     }
 }
