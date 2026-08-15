@@ -33,7 +33,13 @@ class OpenAiProvider implements AiProviderInterface
         $payload = [
             'model' => config('ai.openai_model'),
             'messages' => $messages,
-            'max_tokens' => (int) config('ai.max_tokens', 500),
+            // 'max_tokens' is rejected outright (400 unsupported_parameter)
+            // by newer models — gpt-5-mini among them — which require
+            // 'max_completion_tokens' instead. OpenAI accepts
+            // max_completion_tokens across the whole current model lineup
+            // (including pre-reasoning models), so this is a single,
+            // unconditional switch rather than a per-model branch.
+            'max_completion_tokens' => (int) config('ai.max_tokens', 500),
         ];
 
         if ($tools) {
@@ -60,14 +66,28 @@ class OpenAiProvider implements AiProviderInterface
         }
 
         if ($response->failed()) {
-            // Never log $response->json('error.message') — OpenAI's own
-            // invalid-key error text echoes back a partial API key
-            // ("Incorrect API key provided: sk-...xyz"), so only the
-            // status/error type are safe to record.
-            Log::warning('AI provider (openai): API returned an error response.', [
+            // error.type/error.code/error.param are short, machine-readable
+            // enum-like strings (e.g. "invalid_request_error",
+            // "unsupported_parameter", "max_tokens") — never user content,
+            // never a credential, always safe to log. error.message is
+            // NOT always safe: OpenAI's invalid-API-key error (HTTP 401,
+            // error.code=invalid_api_key) echoes back a partial key
+            // ("Incorrect API key provided: sk-...xyz"), so it's only
+            // logged for non-401 responses, where OpenAI's error text is
+            // just a plain description of what was wrong with the request
+            // (bad parameter, bad model name, etc.), never the key.
+            $context = [
                 'status' => $response->status(),
                 'error_type' => $response->json('error.type'),
-            ]);
+                'error_code' => $response->json('error.code'),
+                'error_param' => $response->json('error.param'),
+            ];
+
+            if ($response->status() !== 401) {
+                $context['error_message'] = $response->json('error.message');
+            }
+
+            Log::warning('AI provider (openai): API returned an error response.', $context);
 
             return AiProviderResponse::failure();
         }

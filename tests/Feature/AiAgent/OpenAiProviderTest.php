@@ -5,6 +5,7 @@ namespace Tests\Feature\AiAgent;
 use App\Services\AI\Providers\OpenAiProvider;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 /**
@@ -171,5 +172,69 @@ class OpenAiProviderTest extends TestCase
         $response = (new OpenAiProvider)->chat([['role' => 'user', 'content' => 'হাই']]);
 
         $this->assertFalse($response->successful);
+    }
+
+    public function test_the_request_sends_max_completion_tokens_never_the_legacy_max_tokens_key(): void
+    {
+        // Regression test for the production 400 unsupported_parameter
+        // incident: newer models (gpt-5-mini among them) reject the
+        // legacy 'max_tokens' key outright. OpenAI accepts
+        // 'max_completion_tokens' across the whole current model lineup,
+        // so this must always be the key sent, never 'max_tokens'.
+        config(['ai.openai_api_key' => 'test-key', 'ai.max_tokens' => 500]);
+        Http::fake(['*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'ok']]]])]);
+
+        (new OpenAiProvider)->chat([['role' => 'user', 'content' => 'হাই']]);
+
+        Http::assertSent(function ($request) {
+            $data = $request->data();
+
+            return ($data['max_completion_tokens'] ?? null) === 500
+                && ! array_key_exists('max_tokens', $data);
+        });
+    }
+
+    public function test_error_message_is_logged_for_an_ordinary_non_auth_failure(): void
+    {
+        // error.message is safe to log for an ordinary 400 (e.g. the
+        // unsupported_parameter case that caused the production
+        // incident this test guards against) — it's just a plain
+        // description of what was wrong with the request, never a
+        // credential.
+        config(['ai.openai_api_key' => 'test-key']);
+        Log::spy();
+
+        Http::fake(['*/chat/completions' => Http::response([
+            'error' => ['type' => 'invalid_request_error', 'code' => 'unsupported_parameter', 'param' => 'max_tokens', 'message' => 'Unsupported parameter: max_tokens'],
+        ], 400)]);
+
+        (new OpenAiProvider)->chat([['role' => 'user', 'content' => 'হাই']]);
+
+        Log::shouldHaveReceived('warning')->withArgs(function (string $message, array $context) {
+            return $context['error_code'] === 'unsupported_parameter'
+                && $context['error_param'] === 'max_tokens'
+                && ($context['error_message'] ?? null) === 'Unsupported parameter: max_tokens';
+        })->once();
+    }
+
+    public function test_error_message_is_never_logged_for_a_401(): void
+    {
+        // OpenAI's invalid-API-key error text echoes back a partial key
+        // ("Incorrect API key provided: sk-...xyz") — that specific field
+        // must never be logged for a 401, even though the safe fields
+        // (type/code) still are.
+        config(['ai.openai_api_key' => 'test-key']);
+        Log::spy();
+
+        Http::fake(['*/chat/completions' => Http::response([
+            'error' => ['type' => 'invalid_request_error', 'code' => 'invalid_api_key', 'message' => 'Incorrect API key provided: sk-...xyz'],
+        ], 401)]);
+
+        (new OpenAiProvider)->chat([['role' => 'user', 'content' => 'হাই']]);
+
+        Log::shouldHaveReceived('warning')->withArgs(function (string $message, array $context) {
+            return $context['error_code'] === 'invalid_api_key'
+                && ! array_key_exists('error_message', $context);
+        })->once();
     }
 }
