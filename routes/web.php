@@ -196,15 +196,20 @@ $tenantRoutes = function () {
         Route::match(['get', 'post'], 'billing/callback/{gateway}', [BillingController::class, 'callback'])
             ->name('billing.callback')->withoutMiddleware([ValidateCsrfToken::class]);
 
+        // Public PWA endpoints — dynamic per-tenant (see PwaController docblock
+        // for why this can't be a static public/manifest.json under path
+        // tenancy). Deliberately OUTSIDE auth:tenant/check.subscription: the
+        // browser must be able to fetch these from the (unauthenticated)
+        // login page itself to discover/install the PWA before a session
+        // exists. Only 'resolve.tenant' (applied at the group above) is
+        // required — both handlers read app('currentTenant') alone and never
+        // touch session/auth state or tenant business data.
+        Route::get('manifest.json', [TenantPwaController::class, 'manifest'])->name('pwa.manifest');
+        Route::get('sw.js', [TenantPwaController::class, 'serviceWorker'])->name('pwa.sw');
+
         Route::middleware(['auth:tenant', 'check.subscription'])->group(function () {
 
             Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
-
-            // PWA manifest — dynamic per-tenant (see PwaController docblock
-            // for why this can't be a static public/manifest.json under
-            // path tenancy).
-            Route::get('manifest.json', [TenantPwaController::class, 'manifest'])->name('pwa.manifest');
-            Route::get('sw.js', [TenantPwaController::class, 'serviceWorker'])->name('pwa.sw');
 
             // Notification bell "mark seen" beacon (session-based, see NotificationController)
             Route::post('notifications/seen', [NotificationController::class, 'markSeen'])->name('notifications.seen');

@@ -1,4 +1,4 @@
-@extends('layouts.central')
+@extends('layouts.tenant-auth')
 
 @section('title', app('currentTenant')->store_name . ' — প্যানেল লগইন')
 

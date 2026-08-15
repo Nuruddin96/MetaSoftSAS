@@ -65,11 +65,40 @@ class PwaTest extends TestCase
         $this->assertStringNotContainsString($tenantB->subdomain, $manifest['scope']);
     }
 
-    public function test_manifest_requires_authentication(): void
+    public function test_manifest_requires_no_authentication(): void
     {
+        // The manifest/service-worker must be fetchable by the browser from
+        // the (unauthenticated) tenant login page itself, otherwise a
+        // visitor can never discover/install the PWA before logging in —
+        // see the 'panel/manifest.json' route comment in routes/web.php.
         $tenant = $this->makeTenant();
 
         $response = $this->get($this->panelUrl($tenant, 'manifest.json'));
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/manifest+json');
+
+        $manifest = $response->json();
+        $this->assertStringContainsString($tenant->subdomain, $manifest['start_url']);
+    }
+
+    public function test_service_worker_requires_no_authentication(): void
+    {
+        $tenant = $this->makeTenant();
+
+        $response = $this->get($this->panelUrl($tenant, 'sw.js'));
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'application/javascript; charset=utf-8');
+    }
+
+    public function test_dashboard_still_requires_authentication(): void
+    {
+        // Guards against the fix that made manifest.json/sw.js public
+        // accidentally weakening auth on any other panel route.
+        $tenant = $this->makeTenant();
+
+        $response = $this->get('/shop/'.$tenant->subdomain.'/panel');
 
         $response->assertRedirect();
         $response->assertRedirectContains('login');
@@ -126,5 +155,32 @@ class PwaTest extends TestCase
         $this->assertStringContainsString("if (req.method !== 'GET') return;", $body);
         $this->assertStringContainsString("startsWith('/build/')", $body);
         $this->assertStringContainsString("startsWith('/images/icons/')", $body);
+    }
+
+    /**
+     * The login page used to @extend('layouts.central'), which pointed
+     * the browser at the CENTRAL manifest/service-worker — installing from
+     * the login screen would then launch the central marketing site, not
+     * this tenant's panel. Now @extends('layouts.tenant-auth'), which uses
+     * the tenant.pwa.* routes instead — this locks that in.
+     */
+    public function test_login_page_references_the_tenant_manifest_and_service_worker_not_the_central_ones(): void
+    {
+        $tenant = $this->makeTenant();
+
+        $response = $this->get($this->panelUrl($tenant, 'login'));
+
+        $response->assertOk();
+        $html = $response->getContent();
+
+        // window.__swUrl is emitted via Blade's @js(), which JSON-escapes
+        // forward slashes ("/" -> "\/") — normalize both the haystack and
+        // the expected URL the same way before comparing.
+        $unescape = fn (string $s) => str_replace('\\/', '/', $s);
+
+        $this->assertStringContainsString($this->panelUrl($tenant, 'manifest.json'), $html);
+        $this->assertStringContainsString($this->panelUrl($tenant, 'sw.js'), $unescape($html));
+        $this->assertStringNotContainsString('"'.route('central.pwa.manifest').'"', $html);
+        $this->assertStringNotContainsString(route('central.pwa.sw'), $unescape($html));
     }
 }
