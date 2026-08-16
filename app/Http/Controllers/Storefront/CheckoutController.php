@@ -100,11 +100,41 @@ class CheckoutController extends Controller
         $cart = session($this->cartKey(), []);
         abort_if(empty($cart), 400);
 
+        // Tenant-scoped via ProductVariant's own BelongsToTenant global
+        // scope (app('currentTenant') is bound on every storefront
+        // request) — any other tenant's id that ended up in this session's
+        // cart array simply isn't returned here, the same protection
+        // CartController::index() already relies on.
         $variants = ProductVariant::with('product')->whereIn('id', array_keys($cart))->get();
+
+        if ($variants->count() !== count($cart)) {
+            return back()->with('error', 'কার্টের কিছু প্রোডাক্ট আর পাওয়া যাচ্ছে না। কার্ট চেক করুন।');
+        }
 
         $deliveryCharge = $deliveryChargeService->calculate((int) $data['division_id']);
 
-        $order = DB::transaction(function () use ($data, $cart, $variants, $deliveryCharge) {
+        try {
+            $order = DB::transaction(function () use ($data, $cart, $variants, $deliveryCharge) {
+            // Re-verify stock at the actual moment of decrementing it, row-
+            // locked so two simultaneous checkouts for the last unit can't
+            // both succeed — the cart page and the buy button already show
+            // stock at add-to-cart time, but that can go stale by the time
+            // someone actually places the order.
+            $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
+
+            if ($warehouse) {
+                foreach ($variants as $v) {
+                    $available = Inventory::where('variant_id', $v->id)
+                        ->where('warehouse_id', $warehouse->id)
+                        ->lockForUpdate()
+                        ->sum('quantity');
+
+                    if ($available < $cart[$v->id]) {
+                        throw new \RuntimeException("insufficient_stock:{$v->product->name}");
+                    }
+                }
+            }
+
             $customer = Customer::firstOrCreate(
                 ['phone' => $data['customer_phone']],
                 ['name' => $data['customer_name'], 'address' => $data['customer_address'],
@@ -129,8 +159,6 @@ class CheckoutController extends Controller
                 'note' => $data['note'] ?? null,
                 'fb_event_id' => (string) Str::uuid(),
             ]);
-
-            $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
 
             foreach ($variants as $v) {
                 $qty = $cart[$v->id];
@@ -167,7 +195,16 @@ class CheckoutController extends Controller
             $customer->increment('total_spent', $order->total);
 
             return $order;
-        });
+            });
+        } catch (\RuntimeException $e) {
+            if (str_starts_with($e->getMessage(), 'insufficient_stock:')) {
+                $productName = substr($e->getMessage(), strlen('insufficient_stock:'));
+
+                return back()->withInput()->with('error', "দুঃখিত, \"{$productName}\" এখন পর্যাপ্ত স্টকে নেই। কার্ট চেক করুন।");
+            }
+
+            throw $e;
+        }
 
         // clear cart + mark incomplete order recovered
         session()->forget($this->cartKey());

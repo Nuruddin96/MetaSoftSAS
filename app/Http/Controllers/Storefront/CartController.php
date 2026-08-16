@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Storefront;
 use App\Http\Controllers\Controller;
 use App\Models\ProductVariant;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class CartController extends Controller
 {
@@ -31,15 +32,39 @@ class CartController extends Controller
         ]);
     }
 
+    /**
+     * variant_id is validated against THIS tenant only — the plain
+     * exists:product_variants,id rule this used to have runs a raw query
+     * against the table directly (Laravel's exists rule never goes through
+     * Eloquent, so BelongsToTenant's global scope never applied to it),
+     * meaning any other tenant's real variant id would have passed
+     * validation. Stock is re-checked here too — the storefront UI already
+     * disables the buy button for an out-of-stock variant, but that is a
+     * frontend courtesy only; this is the actual enforcement point.
+     */
     public function add(Request $request)
     {
         $data = $request->validate([
-            'variant_id' => 'required|exists:product_variants,id',
+            'variant_id' => ['required', Rule::exists('product_variants', 'id')->where('tenant_id', app('currentTenant')->id)],
             'qty' => 'nullable|integer|min:1|max:100',
         ]);
 
+        $variant = ProductVariant::findOrFail($data['variant_id']);
+        $stock = $variant->totalStock();
+
+        if ($stock <= 0) {
+            return back()->with('error', 'দুঃখিত, এই প্রোডাক্টটি এখন স্টকে নেই।');
+        }
+
         $cart = session($this->key(), []);
-        $cart[$data['variant_id']] = ($cart[$data['variant_id']] ?? 0) + ($data['qty'] ?? 1);
+        $already = $cart[$variant->id] ?? 0;
+        $qty = min($data['qty'] ?? 1, max(0, $stock - $already));
+
+        if ($qty <= 0) {
+            return back()->with('error', 'দুঃখিত, স্টকে যতটুকু আছে তার পুরোটাই ইতিমধ্যে আপনার কার্টে আছে।');
+        }
+
+        $cart[$variant->id] = $already + $qty;
         session([$this->key() => $cart]);
 
         return redirect()->route('storefront.cart')->with('success', 'কার্টে যোগ হয়েছে।');

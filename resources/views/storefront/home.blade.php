@@ -40,33 +40,6 @@
     </div>
 @endif
 
-<div class="grid grid-cols-3 gap-3 mb-8 text-center">
-    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
-        <p class="text-lg">✅</p>
-        <p class="text-xs text-mute mt-1">ক্যাশ অন ডেলিভারি</p>
-    </div>
-    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
-        <p class="text-lg">🚚</p>
-        <p class="text-xs text-mute mt-1">সারাদেশে ডেলিভারি</p>
-    </div>
-    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
-        <p class="text-lg">🔒</p>
-        <p class="text-xs text-mute mt-1">নিরাপদ অর্ডার</p>
-    </div>
-</div>
-
-@if ($showCats && $categories->isNotEmpty())
-    <div class="mb-8">
-        <h2 class="font-disp font-bold text-xl mb-4">ক্যাটাগরি</h2>
-        <div class="flex flex-wrap gap-2">
-            @foreach ($categories as $cat)
-                <a href="{{ route('storefront.products', ['category' => $cat->slug]) }}"
-                   class="px-4 py-2 rounded-full bg-white border border-ink/10 text-sm hover:border-brand hover:text-brand">{{ $cat->name }}</a>
-            @endforeach
-        </div>
-    </div>
-@endif
-
 @if ($featured->isEmpty())
     <div class="text-center py-20">
         <p class="text-5xl">🛍️</p>
@@ -84,6 +57,21 @@
         @endforeach
     </div>
 @endif
+
+<div class="grid grid-cols-3 gap-3 mt-8 text-center">
+    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
+        <p class="text-lg">✅</p>
+        <p class="text-xs text-mute mt-1">ক্যাশ অন ডেলিভারি</p>
+    </div>
+    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
+        <p class="text-lg">🚚</p>
+        <p class="text-xs text-mute mt-1">সারাদেশে ডেলিভারি</p>
+    </div>
+    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
+        <p class="text-lg">🔒</p>
+        <p class="text-xs text-mute mt-1">নিরাপদ অর্ডার</p>
+    </div>
+</div>
 
 @push('scripts')
 <script>

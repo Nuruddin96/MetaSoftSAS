@@ -4,6 +4,32 @@
     $footerPages = \App\Models\Page::where('is_active', 1)->where('show_in_footer', 1)->orderBy('sort_order')->get();
     $mk         = \App\Models\MarketingSetting::first();
     $cartCount  = collect(session('cart_' . $tenant->id, []))->sum();
+
+    // Single contact destination for both the desktop floating button and
+    // the mobile bottom nav's "মেসেজ" item — resolved from whichever
+    // channel this tenant actually has configured, never a fabricated
+    // number/id. WhatsApp wins when explicitly enabled (show_whatsapp_float
+    // is the tenant's own opt-in for a customer-facing contact button —
+    // Messenger's "connected" state alone doesn't carry that same explicit
+    // intent, it's also used purely for AI-agent auto-reply). Falls back to
+    // whatever real contact detail the footer already has, so this is
+    // never a dead link when nothing else is configured.
+    $waNumber = ($set['show_whatsapp_float'] ?? '0') === '1' ? ($set['whatsapp_number'] ?? null) : null;
+    $messengerPageId = null;
+    if (! $waNumber) {
+        $messengerPageId = \App\Models\FacebookPage::tablesReady()
+            ? \App\Models\FacebookPage::where('is_active', 1)->where('status', 'active')->value('page_id')
+            : null;
+        $messengerPageId = $messengerPageId ?: \App\Models\MessengerSetting::where('is_active', 1)->value('page_id');
+    }
+    $contactPlatform = $waNumber ? 'whatsapp' : ($messengerPageId ? 'messenger' : null);
+    $contactUrl = match (true) {
+        (bool) $waNumber => 'https://wa.me/' . preg_replace('/\D/', '', $waNumber),
+        (bool) $messengerPageId => 'https://m.me/' . $messengerPageId,
+        ! empty($set['footer_phone']) => 'tel:' . preg_replace('/\D/', '', $set['footer_phone']),
+        ! empty($set['footer_email']) => 'mailto:' . $set['footer_email'],
+        default => null,
+    };
 @endphp
 <!DOCTYPE html>
 <html lang="bn">
@@ -93,7 +119,7 @@
     </div>
 @endif
 
-<main class="max-w-5xl mx-auto px-4 py-8 min-h-[55vh]">
+<main class="max-w-5xl mx-auto px-4 py-8 min-h-[55vh] @unless(request()->routeIs('storefront.product')) pb-20 md:pb-8 @endunless">
     @yield('content')
 </main>
 
@@ -160,13 +186,22 @@
     </div>
 </footer>
 
-@if (($set['show_whatsapp_float'] ?? '0') === '1' && ! empty($set['whatsapp_number']))
-    <a href="https://wa.me/{{ preg_replace('/\D/', '', $set['whatsapp_number']) }}" target="_blank" rel="noopener"
-       class="fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-[#25D366] text-white grid place-items-center shadow-lg hover:scale-105 transition"
-       aria-label="WhatsApp-এ মেসেজ করুন">
-        <svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7"><path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15s-.77.96-.94 1.16c-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.78-1.47-1.75-1.64-2.05-.17-.3-.02-.46.13-.6.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37s-1.04 1.02-1.04 2.48 1.07 2.88 1.22 3.08c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35M12.04 21.5h-.01c-1.75 0-3.47-.47-4.97-1.36l-.36-.21-3.7.97.99-3.61-.23-.37a9.86 9.86 0 01-1.51-5.26c0-5.45 4.44-9.89 9.9-9.89 2.64 0 5.12 1.03 6.99 2.9a9.82 9.82 0 012.89 6.99c0 5.45-4.44 9.89-9.89 9.89M20.52 3.45A11.76 11.76 0 0012.04 0C5.5 0 .17 5.33.17 11.88c0 2.09.55 4.13 1.59 5.93L.07 24l6.33-1.66a11.85 11.85 0 005.64 1.44h.01c6.54 0 11.87-5.33 11.87-11.88 0-3.17-1.24-6.15-3.48-8.4"/></svg>
+{{-- Desktop-only floating contact button — mobile relies on the bottom nav's own "মেসেজ" item instead of duplicating this. --}}
+@if ($contactUrl)
+    <a href="{{ $contactUrl }}" @if (str_starts_with($contactUrl, 'http')) target="_blank" rel="noopener" @endif
+       class="hidden md:grid fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full text-white place-items-center shadow-lg hover:scale-105 transition {{ $contactPlatform === 'messenger' ? 'bg-[#0084FF]' : 'bg-[#25D366]' }}"
+       aria-label="{{ $contactPlatform === 'messenger' ? 'Messenger-এ মেসেজ করুন' : 'যোগাযোগ করুন' }}">
+        @if ($contactPlatform === 'messenger')
+            <svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7"><path d="M12 2C6.48 2 2 6.15 2 11.25c0 2.9 1.44 5.49 3.7 7.19V22l3.38-1.86c.9.25 1.87.38 2.92.38 5.52 0 10-4.15 10-9.27C22 6.15 17.52 2 12 2zm1.01 12.46l-2.55-2.72-4.98 2.72 5.48-5.82 2.61 2.72 4.92-2.72-5.48 5.82z"/></svg>
+        @else
+            <svg viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7"><path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15s-.77.96-.94 1.16c-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.78-1.47-1.75-1.64-2.05-.17-.3-.02-.46.13-.6.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37s-1.04 1.02-1.04 2.48 1.07 2.88 1.22 3.08c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35M12.04 21.5h-.01c-1.75 0-3.47-.47-4.97-1.36l-.36-.21-3.7.97.99-3.61-.23-.37a9.86 9.86 0 01-1.51-5.26c0-5.45 4.44-9.89 9.9-9.89 2.64 0 5.12 1.03 6.99 2.9a9.82 9.82 0 012.89 6.99c0 5.45-4.44 9.89-9.89 9.89M20.52 3.45A11.76 11.76 0 0012.04 0C5.5 0 .17 5.33.17 11.88c0 2.09.55 4.13 1.59 5.93L.07 24l6.33-1.66a11.85 11.85 0 005.64 1.44h.01c6.54 0 11.87-5.33 11.87-11.88 0-3.17-1.24-6.15-3.48-8.4"/></svg>
+        @endif
     </a>
 @endif
+
+@unless (request()->routeIs('storefront.product'))
+    @include('partials.mobile-bottom-nav')
+@endunless
 
 @stack('scripts')
 </body>

@@ -4,7 +4,7 @@
     $stock = $variant?->stockCount();
     $outOfStock = $variant && $stock !== null && $stock <= 0;
 @endphp
-<a href="{{ route('storefront.product', $product->slug) }}" class="group bg-white rounded-card border border-ink/5 overflow-hidden hover:shadow-md transition">
+<a href="{{ route('storefront.product', $product->slug) }}" class="group bg-white rounded-card border border-ink/5 overflow-hidden shadow-sm hover:shadow-md transition">
     <div class="relative aspect-square bg-ink/5 grid place-items-center text-3xl overflow-hidden">
         @if ($product->thumbnail_path)
             <img src="{{ asset('storage/' . $product->thumbnail_path) }}" class="w-full h-full object-cover" alt="{{ $product->name }}" loading="lazy">

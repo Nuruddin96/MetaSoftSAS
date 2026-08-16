@@ -114,11 +114,22 @@ trait InteractsWithCommerceSchema
 
         // layouts/panel.blade.php (rendered by every real panel page) queries
         // this unconditionally for the notification-bell badge count.
+        // Matches schema.sql's real columns — CheckoutController::place()/
+        // trackIncomplete() both read/write session_key, cart_json, and
+        // recovered_order_id, none of which the previous minimal stub had.
         if (! Schema::hasTable('incomplete_orders')) {
             Schema::create('incomplete_orders', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
+                $table->string('session_key', 100)->nullable();
+                $table->string('customer_name', 150)->nullable();
+                $table->string('customer_phone', 20)->nullable();
+                $table->text('customer_address')->nullable();
+                $table->json('cart_json')->nullable();
+                $table->decimal('total', 12, 2)->default(0);
                 $table->string('status', 20)->default('abandoned');
+                $table->unsignedBigInteger('recovered_order_id')->nullable();
+                $table->timestamp('last_activity_at')->nullable();
                 $table->timestamps();
             });
         }

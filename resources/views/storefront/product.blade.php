@@ -101,8 +101,8 @@
                        class="w-20 rounded-lg border border-ink/15 px-3 py-2 text-center">
             </div>
 
-            <button class="hidden md:block w-full md:w-auto px-10 py-3.5 rounded-btn bg-brand text-white font-bold hover:opacity-90 disabled:opacity-50" @disabled($outOfStock)>
-                🛒 {{ $outOfStock ? 'স্টক নেই' : 'অর্ডার করুন' }}
+            <button id="buyBtnDesktop" class="hidden md:block w-full md:w-auto px-10 py-3.5 rounded-btn bg-brand text-white font-bold hover:opacity-90 disabled:opacity-50" @disabled($outOfStock)>
+                🛒 <span id="buyBtnDesktopLabel">{{ $outOfStock ? 'স্টক নেই' : 'অর্ডার করুন' }}</span>
             </button>
             <p class="text-xs text-mute">ক্যাশ অন ডেলিভারি — রেজিস্ট্রেশন লাগবে না</p>
         </form>
@@ -124,8 +124,8 @@
     <div class="min-w-0">
         <p class="font-bold text-brand text-lg leading-tight" id="priceShowMobile">{{ number_format($firstVariant?->selling_price ?? 0) }}৳</p>
     </div>
-    <button type="submit" form="buyForm" class="flex-1 px-6 py-3 rounded-btn bg-brand text-white font-bold disabled:opacity-50" @disabled($outOfStock)>
-        🛒 {{ $outOfStock ? 'স্টক নেই' : 'অর্ডার করুন' }}
+    <button type="submit" form="buyForm" id="buyBtnMobile" class="flex-1 px-6 py-3 rounded-btn bg-brand text-white font-bold disabled:opacity-50" @disabled($outOfStock)>
+        🛒 <span id="buyBtnMobileLabel">{{ $outOfStock ? 'স্টক নেই' : 'অর্ডার করুন' }}</span>
     </button>
 </div>
 
@@ -163,7 +163,9 @@
             const stock = parseInt(d.stock, 10);
             const threshold = parseInt(d.threshold, 10) || 5;
             const stockEl = document.getElementById('stockShow');
-            if (stock <= 0) {
+            const outOfStock = stock <= 0;
+
+            if (outOfStock) {
                 stockEl.textContent = 'স্টক শেষ';
                 stockEl.className = 'text-sm text-red-600 font-semibold';
             } else if (stock <= threshold) {
@@ -173,6 +175,20 @@
                 stockEl.textContent = '✓ স্টকে আছে';
                 stockEl.className = 'text-sm text-mute';
             }
+
+            // Out-of-stock protection must actually block ordering, not
+            // just change the label — the desktop and mobile buy buttons
+            // are the same #buyForm submit, so both get disabled together.
+            [
+                ['buyBtnDesktop', 'buyBtnDesktopLabel'],
+                ['buyBtnMobile', 'buyBtnMobileLabel'],
+            ].forEach(([btnId, labelId]) => {
+                const btn = document.getElementById(btnId);
+                const label = document.getElementById(labelId);
+                if (!btn) return;
+                btn.disabled = outOfStock;
+                if (label) label.textContent = outOfStock ? 'স্টক নেই' : 'অর্ডার করুন';
+            });
         }));
 
     document.querySelectorAll('.thumb-btn').forEach(btn =>
