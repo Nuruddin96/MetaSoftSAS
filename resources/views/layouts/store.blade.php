@@ -11,6 +11,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title', $tenant->store_name)</title>
+    <meta name="description" content="@yield('meta_description', $set['footer_about'] ?? $tenant->store_name)">
+    <link rel="canonical" href="{{ url()->current() }}">
+    <meta property="og:title" content="@yield('title', $tenant->store_name)">
+    <meta property="og:description" content="@yield('meta_description', $set['footer_about'] ?? $tenant->store_name)">
+    <meta property="og:type" content="website">
+    @if ($tenant->logo_path)<meta property="og:image" content="{{ asset('storage/' . $tenant->logo_path) }}">@endif
     @if ($tenant->logo_path)<link rel="icon" href="{{ asset('storage/' . $tenant->logo_path) }}">@endif
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@700;800&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])

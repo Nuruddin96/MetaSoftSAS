@@ -165,6 +165,25 @@ trait InteractsWithCommerceSchema
             });
         }
 
+        // layouts/store.blade.php reads MarketingSetting::first() unconditionally
+        // on every storefront page render (GTM/FB Pixel wiring) — same
+        // shape InteractsWithWhatsAppSchema's stub already uses.
+        if (! Schema::hasTable('marketing_settings')) {
+            Schema::create('marketing_settings', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('fb_pixel_id', 50)->nullable();
+                $table->text('fb_capi_token')->nullable();
+                $table->string('fb_test_event_code', 50)->nullable();
+                $table->string('gtm_container_id', 20)->nullable();
+                $table->string('meta_app_id', 50)->nullable();
+                $table->text('meta_app_secret')->nullable();
+                $table->text('meta_access_token')->nullable();
+                $table->string('meta_ad_account_id', 50)->nullable();
+                $table->timestamp('updated_at')->nullable();
+            });
+        }
+
         // Website builder "pages" — distinct from the storefront-rendered
         // ones, same table name as the real schema (database/sql/chunk6.sql).
         if (! Schema::hasTable('pages')) {
@@ -182,6 +201,10 @@ trait InteractsWithCommerceSchema
             });
         }
 
+        // Matches the real, live production table — schema.sql previously
+        // omitted created_at/updated_at here even though production (and
+        // App\Models\ProductImage's $timestamps = true) already has both;
+        // confirmed directly against production, not assumed.
         if (! Schema::hasTable('product_images')) {
             Schema::create('product_images', function (Blueprint $table) {
                 $table->id();
@@ -189,6 +212,7 @@ trait InteractsWithCommerceSchema
                 $table->unsignedBigInteger('product_id');
                 $table->string('image_path', 255);
                 $table->integer('sort_order')->default(0);
+                $table->timestamps();
             });
         }
 

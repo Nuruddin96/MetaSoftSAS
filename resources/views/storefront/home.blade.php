@@ -40,6 +40,21 @@
     </div>
 @endif
 
+<div class="grid grid-cols-3 gap-3 mb-8 text-center">
+    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
+        <p class="text-lg">✅</p>
+        <p class="text-xs text-mute mt-1">ক্যাশ অন ডেলিভারি</p>
+    </div>
+    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
+        <p class="text-lg">🚚</p>
+        <p class="text-xs text-mute mt-1">সারাদেশে ডেলিভারি</p>
+    </div>
+    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
+        <p class="text-lg">🔒</p>
+        <p class="text-xs text-mute mt-1">নিরাপদ অর্ডার</p>
+    </div>
+</div>
+
 @if ($showCats && $categories->isNotEmpty())
     <div class="mb-8">
         <h2 class="font-disp font-bold text-xl mb-4">ক্যাটাগরি</h2>

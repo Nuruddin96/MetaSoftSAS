@@ -34,6 +34,12 @@ class Product extends Model
         return $this->hasMany(ProductImage::class);
     }
 
+    /** The variant a product card/listing shows a single price+discount for — cheapest active variant, same "min" this already reports via priceRange(). */
+    public function cardVariant(): ?ProductVariant
+    {
+        return $this->variants->sortBy('selling_price')->first();
+    }
+
     public function priceRange(): string
     {
         $prices = $this->variants->pluck('selling_price');
