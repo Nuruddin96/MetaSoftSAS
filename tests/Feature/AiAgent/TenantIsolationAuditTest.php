@@ -153,5 +153,6 @@ class TenantIsolationAuditTest extends TestCase
         $this->assertStringContainsString('500', $content, "tenant B's own price for the shared product name must still appear");
         $this->assertStringContainsString('ORD-TENANT-B-OWN', $content);
         $this->assertStringContainsString($sharedProductName, $content);
+        $this->assertStringContainsString('Tenant B own instruction', $content, "tenant B's own business instructions must actually reach its own AI call, not just be absent for tenant A");
     }
 }

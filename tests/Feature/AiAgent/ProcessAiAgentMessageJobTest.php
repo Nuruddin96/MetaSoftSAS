@@ -671,6 +671,56 @@ class ProcessAiAgentMessageJobTest extends TestCase
         });
     }
 
+    /**
+     * The exact scenario reported in production: "Dr Alvin peeling set টা কত?"
+     * followed by a bare "দাম কত?" — must resolve from conversation context
+     * (real product data + real tenant business knowledge both present),
+     * never falling back to "কোন প্রোডাক্টের দাম জানতে চাচ্ছেন?" Mirrors
+     * test_the_cosrx_snail_cream_scenario_reaches_the_provider_with_real_price_and_stock,
+     * with a tenant business-instructions block present at the same time to
+     * prove the two context sources coexist rather than one crowding out
+     * the other.
+     */
+    public function test_dr_alvin_peeling_set_follow_up_resolves_from_context_alongside_tenant_business_knowledge(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-prod-2', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+        $this->makeProduct($tenant->id, 'Dr Alvin Peeling Set', 1200, purchasePrice: 700);
+
+        DB::table('store_settings')->insert([
+            'tenant_id' => $tenant->id, 'key' => 'ai_custom_instructions',
+            'value' => 'Original product imported from the Philippines directly by the business.',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        DB::table('messenger_messages')->insert([
+            'tenant_id' => $tenant->id, 'sender_psid' => 'cust-prod-2', 'mid' => 'mid-dralvin-earlier',
+            'message_text' => 'Dr Alvin peeling set টা কত?', 'direction' => 'in', 'status' => 'new', 'created_at' => now()->subMinute(),
+        ]);
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-prod-2', 'mid-dralvin-followup', 'দাম কত?');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'এটার দাম ১২০০ টাকা।']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-dralvin-reply']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(function ($request) {
+            $content = $request->data()['messages'][0]['content'] ?? '';
+
+            return str_contains($content, 'Real product data')
+                && str_contains($content, 'Dr Alvin Peeling Set')
+                && str_contains($content, '1200')
+                && str_contains($content, '[TENANT BUSINESS KNOWLEDGE')
+                && str_contains($content, 'Philippines')
+                && ! str_contains($content, '700');
+        });
+    }
+
     public function test_tenant_as_product_data_never_reaches_tenant_bs_ai_call(): void
     {
         config(['ai.openai_api_key' => 'test-key']);
