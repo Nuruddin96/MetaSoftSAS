@@ -1,0 +1,26 @@
+-- Distinguishes AI-generated outgoing WhatsApp replies from genuine human
+-- staff replies, additive only. WhatsApp counterpart of chunk36.sql's
+-- messenger_messages.sent_by column — same reasoning applies verbatim,
+-- just for the other channel.
+--
+-- Both App\Jobs\ProcessWhatsAppAiAgentMessage (AI) and
+-- Tenant\WhatsAppInboxController::reply() (human panel reply) write
+-- through the exact same App\Services\WhatsApp\WhatsAppSendService::send()
+-- path (direction='out', status='contacted') -- there was previously NO
+-- way to tell them apart, retroactively or going forward. This matters
+-- now that the AI Agent's WhatsApp tone is learned from real historical
+-- human replies the same way Messenger's already is (see
+-- App\Services\AI\AiConversationStyleService::whatsappStyleExamples()):
+-- without this column, the AI would risk learning from its own past
+-- replies and reinforcing whatever robotic phrasing it already produces,
+-- rather than the business's actual human voice.
+--
+-- DEFAULT 'human' is deliberately the safe choice for every pre-existing
+-- row, same reasoning as chunk36.sql: the WhatsApp AI Agent has only ever
+-- been enabled very briefly (if at all) before this column is added, so
+-- the overwhelming majority of existing outbound rows are genuinely
+-- human-written. Any already-known AI-generated rows from that window
+-- would need a one-time manual backfill to 'ai' after import -- not done
+-- automatically here, since this file only ever changes schema, never
+-- data.
+ALTER TABLE whatsapp_messages ADD COLUMN sent_by ENUM('human','ai') NOT NULL DEFAULT 'human' AFTER direction;

@@ -62,6 +62,8 @@
                 'linkedOrder' => $linkedOrder,
                 'matchedCustomer' => $matchedCustomer,
                 'newOrderCreateUrl' => route('tenant.orders.create', ['name' => $customer->customer_name, 'channel' => 'facebook']),
+                'handoffActive' => $handoffActive ?? false,
+                'resumeAiUrl' => route('tenant.messenger.resume-ai', $psid),
             ])
         </div>
     </div>

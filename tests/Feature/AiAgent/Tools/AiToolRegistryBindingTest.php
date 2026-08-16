@@ -11,6 +11,7 @@ use App\Services\AI\Tools\CustomerLookupTool;
 use App\Services\AI\Tools\OrderLookupTool;
 use App\Services\AI\Tools\ProductLookupTool;
 use App\Services\AI\Tools\SalesReportTool;
+use App\Services\AI\Tools\UpdateOrderStatusTool;
 use Tests\TestCase;
 
 /**
@@ -33,6 +34,7 @@ class AiToolRegistryBindingTest extends TestCase
         CreateOrderTool::class,
         CreateProductTool::class,
         CourierActionTool::class,
+        UpdateOrderStatusTool::class,
     ];
 
     public function test_the_bound_registry_contains_every_tool(): void
@@ -43,7 +45,7 @@ class AiToolRegistryBindingTest extends TestCase
             $this->assertTrue($registry->has((new $class)->name()), "$class must be registered");
         }
 
-        $this->assertCount(7, $registry->all());
+        $this->assertCount(8, $registry->all());
     }
 
     public function test_the_bound_registry_is_a_singleton(): void

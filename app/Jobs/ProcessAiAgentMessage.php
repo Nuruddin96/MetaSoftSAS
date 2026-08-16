@@ -9,14 +9,21 @@ use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
 use App\Services\AI\AiAgentService;
+use App\Services\AI\AiAudioTranscriptionService;
 use App\Services\AI\AiConversationStyleService;
 use App\Services\AI\AiCreditService;
+use App\Services\AI\AiCustomerEmotionService;
+use App\Services\AI\AiCustomerMemoryService;
+use App\Services\AI\AiHandoffService;
+use App\Services\AI\AiProductKnowledgeService;
+use App\Services\AI\AiTenantKnowledgeService;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -64,7 +71,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         public readonly int $messengerMessageId,
     ) {}
 
-    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style): void
+    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff): void
     {
         if (! AiAgentMessageJob::tablesReady()) {
             return;
@@ -79,7 +86,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         }
 
         try {
-            $sent = $this->process($ai, $credit, $api, $style);
+            $sent = $this->process($ai, $credit, $api, $style, $knowledge, $products, $memory, $emotion, $transcription, $handoff);
 
             if ($sent) {
                 AiAgentMessageJob::markCompleted($this->tenantId, $this->messengerMessageId);
@@ -119,7 +126,7 @@ class ProcessAiAgentMessage implements ShouldQueue
      *              them. None of these send a fallback/error message to the
      *              customer, per this phase's spec.
      */
-    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style): bool
+    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff): bool
     {
         $tenant = Tenant::withoutGlobalScopes()->find($this->tenantId);
 
@@ -139,6 +146,13 @@ class ProcessAiAgentMessage implements ShouldQueue
             return false;
         }
 
+        // Phase 14 — a super-admin-imposed platform pause, independent of
+        // the tenant's own toggles above — see Tenant::isAiPaused()'s
+        // docblock.
+        if ($tenant->isAiPaused()) {
+            return false;
+        }
+
         // Re-check credit — another concurrent message for this same
         // tenant could have exhausted the balance between dispatch and
         // this worker picking the job up. Exhausted credit must stop AI
@@ -154,11 +168,69 @@ class ProcessAiAgentMessage implements ShouldQueue
             ->where('tenant_id', $this->tenantId)
             ->first();
 
-        if (! $message || $message->direction !== 'in' || ! $message->message_text) {
+        if (! $message || $message->direction !== 'in') {
             return false;
         }
 
         $psid = $message->sender_psid;
+
+        // Phase 13 — an unresolved handoff means a real staff member is
+        // already handling this conversation; the AI must not auto-reply
+        // again until they resolve it from the panel — see
+        // AiHandoffService's docblock. Checked before any of the
+        // (billable) work below, same "STOP without replying" posture as
+        // the ai_agent_enabled toggle.
+        if ($handoff->isActive($this->tenantId, 'messenger', $psid)) {
+            return false;
+        }
+
+        // Phase 9 — an image attachment is now a valid reason to reply on
+        // its own, even with no caption text at all; see
+        // resolveImageUrl()'s docblock.
+        $imageUrl = $this->resolveImageUrl($message);
+
+        // Phase 10 — a voice message with no caption is transcribed to
+        // text BEFORE anything else runs, so every downstream step
+        // (product matching, style examples, generateReply() itself) just
+        // sees ordinary message text — see transcribeAndPersist()'s
+        // docblock for why this is never a second AI content-shape the
+        // way images are. Only attempted once credit for it can actually
+        // be recorded; a failed/unaffordable transcription degrades to
+        // "nothing to reply to" exactly like a failed image resolution.
+        $transcribedNow = false;
+
+        if (! $message->message_text && $message->attachment_type === 'audio') {
+            $transcript = $this->transcribeAndPersist($message, $transcription, $credit);
+
+            if ($transcript !== null) {
+                $message->message_text = $transcript;
+                $transcribedNow = true;
+            }
+        }
+
+        if (! $message->message_text && ! $imageUrl) {
+            return false;
+        }
+
+        // Transcription is its own billable call — re-check the balance
+        // it may have just spent before committing to the (separately
+        // billable) chat completion below, the same "never trust an
+        // earlier check is still true" posture every other precondition
+        // in this method already follows.
+        if ($transcribedNow && ! $credit->hasCredit($this->tenantId)) {
+            return false;
+        }
+
+        // Phase 13 — deterministic, high-precision phrase match on
+        // whatever text this turn ends up with (post-transcription) —
+        // never AI-decided, see AiHandoffService's docblock. isActive()
+        // above already confirmed no handoff exists yet for this
+        // conversation, so trigger() here always creates a fresh row.
+        $justTriggeredHandoff = $handoff->customerRequestedHuman($message->message_text);
+
+        if ($justTriggeredHandoff) {
+            $handoff->trigger($this->tenantId, 'messenger', $psid, AiHandoffService::REASON_CUSTOMER_REQUESTED, $message->id);
+        }
 
         $history = $this->recentHistory($this->tenantId, $psid, $message->id);
         $styleExamples = $style->messengerStyleExamples($this->tenantId);
@@ -167,8 +239,30 @@ class ProcessAiAgentMessage implements ShouldQueue
         // this same conversation is still the best one known, even if
         // this particular inbound message didn't carry it.
         $customerName = MessengerMessage::resolvedNameFor($this->tenantId, $psid);
+        $tenantInstructions = $this->tenantInstructions($this->tenantId);
+        $businessKnowledge = $knowledge->businessKnowledge($this->tenantId);
+        // Search the current message plus recent history for a literal
+        // mention of one of this tenant's own product names — see
+        // AiProductKnowledgeService's docblock for why this is a cheap
+        // deterministic string match, never a second AI call.
+        $productData = $products->relevantProducts(
+            $this->tenantId,
+            [...array_column($history, 'content'), $message->message_text]
+        );
+        // Phase 6 — keyed only by this exact psid (channel-verified, never
+        // customer-typed) — see AiCustomerMemoryService's docblock.
+        $customerMemory = $memory->forMessengerCustomer($this->tenantId, $psid);
+        // Phase 8 — a verified elapsed-wait fact, never a guessed mood —
+        // see AiCustomerEmotionService's docblock.
+        $customerEmotion = $emotion->forMessengerCustomer($this->tenantId, $psid, $message->id);
+        // Phase 13 — only set on the exact turn the handoff was just
+        // created above, so this is a genuinely true fact at the moment
+        // the model is told about it — see AiHandoffService's docblock.
+        $handoffNotice = $justTriggeredHandoff
+            ? 'The customer just asked to speak with a real person, so this conversation has been flagged for your team to take over from here.'
+            : null;
 
-        $result = $ai->generateReply($tenant->store_name, $history, $message->message_text, $styleExamples, $customerName);
+        $result = $ai->generateReply($tenant->store_name, $history, (string) $message->message_text, $styleExamples, $customerName, $tenantInstructions, $businessKnowledge, $productData, $customerMemory, $customerEmotion, $imageUrl, $handoffNotice);
 
         if (! $result) {
             // AiAgentService already logged why.
@@ -194,6 +288,32 @@ class ProcessAiAgentMessage implements ShouldQueue
         $token = $this->resolveOutboundToken($this->tenantId, $psid);
 
         if (! $token) {
+            return false;
+        }
+
+        // Phase 12 — best-effort "Business is typing..." indicator, then a
+        // bounded human-feeling delay, both AFTER credit has already been
+        // recorded above so neither can affect billing — see
+        // humanDelay()'s docblock.
+        try {
+            $api->sendTypingOn($psid, $token);
+        } catch (\Throwable $e) {
+            // Purely cosmetic — never let a failure here block the actual
+            // reply below.
+        }
+
+        $this->humanDelay();
+
+        // Phase 18 — re-check, not the isActive() call made before
+        // generation above: the OpenAI round-trip plus humanDelay() can
+        // together span several seconds, long enough for the customer to
+        // ask for a human or a staff member to take over from the panel
+        // after this job's snapshot was taken but before it actually
+        // sends. Credit was already recorded above regardless (the OpenAI
+        // cost was genuinely incurred), but the generated reply itself
+        // must never reach the customer once a handoff exists — see
+        // AiHandoffService::isActive()'s docblock.
+        if ($handoff->isActive($this->tenantId, 'messenger', $psid)) {
             return false;
         }
 
@@ -260,9 +380,33 @@ class ProcessAiAgentMessage implements ShouldQueue
     }
 
     /**
+     * Phase 3 — free-text tenant behavior instructions (Tenant\SettingController
+     * ::aiAgent(), store_settings key ai_custom_instructions). Empty string
+     * (no row, or saved blank) normalizes to null so AiAgentService can do
+     * a simple truthy check rather than every caller re-checking for ''.
+     */
+    protected function tenantInstructions(int $tenantId): ?string
+    {
+        $value = StoreSetting::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('key', 'ai_custom_instructions')
+            ->value('value');
+
+        return $value !== null && trim($value) !== '' ? $value : null;
+    }
+
+    /**
      * Minimal, safe context: only this conversation's own recent
      * messages, nothing from any other table. No tools, no arbitrary
      * database access — see AiAgentService's docblock.
+     *
+     * Deliberately no longer filters out attachment-only turns (no
+     * caption text) — a customer who sends a photo with no caption used
+     * to vanish from history entirely, so a later "দাম কত?" carried no
+     * trace an image was ever shared. A short placeholder line keeps that
+     * turn in context (see attachmentPlaceholder()) without pretending the
+     * AI actually understood the attachment's contents — real image/audio
+     * understanding is a separate, not-yet-built capability.
      *
      * @return array<int, array{role: string, content: string}>
      */
@@ -278,7 +422,7 @@ class ProcessAiAgentMessage implements ShouldQueue
             ->where('tenant_id', $tenantId)
             ->where('sender_psid', $psid)
             ->where('id', '<', $beforeMessageId)
-            ->whereNotNull('message_text')
+            ->where(fn ($q) => $q->whereNotNull('message_text')->orWhereNotNull('attachment_url'))
             ->orderByDesc('id')
             ->limit($limit)
             ->get()
@@ -286,9 +430,112 @@ class ProcessAiAgentMessage implements ShouldQueue
             ->values()
             ->map(fn (MessengerMessage $m) => [
                 'role' => $m->direction === 'out' ? 'assistant' : 'user',
-                'content' => (string) $m->message_text,
+                'content' => $m->message_text !== null && $m->message_text !== ''
+                    ? (string) $m->message_text
+                    : $this->attachmentPlaceholder($m->attachment_type),
             ])
             ->all();
+    }
+
+    /**
+     * A short, honest stand-in for an attachment-only history turn —
+     * never claims the AI understood what was sent, only that something
+     * was sent, so the model doesn't silently lose track of the turn
+     * existing at all. attachment_type is Meta's own raw webhook value
+     * (image/audio/video/file/...); anything unrecognized degrades to a
+     * generic "sent an attachment" line rather than guessing.
+     */
+    protected function attachmentPlaceholder(?string $attachmentType): string
+    {
+        return match ($attachmentType) {
+            'image' => '[customer sent a photo]',
+            'audio' => '[customer sent a voice message]',
+            'video' => '[customer sent a video]',
+            default => '[customer sent an attachment]',
+        };
+    }
+
+    /**
+     * Phase 9 — only ever resolves an image on the CURRENT message being
+     * replied to, never on older history turns (those stay text-only
+     * placeholders via attachmentPlaceholder() above) — re-analyzing every
+     * past image on every subsequent reply would be unbounded, repeated
+     * AI cost for no real benefit. Messenger attachments are already
+     * rehosted to our own public storage at webhook time
+     * (MessengerWebhookController::rehostAttachment()), so this is a
+     * plain column read, never a new HTTP fetch — the returned URL is
+     * passed straight into AiAgentService::generateReply(), which builds
+     * the OpenAI vision-capable message shape from it.
+     */
+    protected function resolveImageUrl(MessengerMessage $message): ?string
+    {
+        if ($message->attachment_type !== 'image' || ! $message->attachment_url) {
+            return null;
+        }
+
+        return $message->attachment_url;
+    }
+
+    /**
+     * Phase 10 — only ever transcribes the CURRENT message (same "never
+     * re-analyze old history" reasoning as resolveImageUrl()). Unlike an
+     * image, a voice message's attachment_url already IS a plain, already
+     * public rehosted file (same MessengerWebhookController::
+     * rehostAttachment() as any other Messenger attachment) — this
+     * downloads those bytes (transcription needs the actual file, not a
+     * link the way vision's image_url does) and hands them to
+     * AiAudioTranscriptionService.
+     *
+     * On success, writes the transcript back onto this exact message row
+     * (message_text) so it (a) becomes this reply's customer message with
+     * zero further plumbing, and (b) is available as real text — not just
+     * the "[customer sent a voice message]" placeholder — the next time
+     * this conversation's history is replayed, without ever transcribing
+     * the same audio twice. On ANY failure (download, transcription, an
+     * empty result), returns null and leaves the row untouched — no
+     * credit is charged (see AiCreditService::recordTranscriptionUsage()'s
+     * docblock) and the placeholder stays honest.
+     */
+    protected function transcribeAndPersist(MessengerMessage $message, AiAudioTranscriptionService $transcription, AiCreditService $credit): ?string
+    {
+        if (! $message->attachment_url) {
+            return null;
+        }
+
+        try {
+            $audio = Http::timeout(20)->get($message->attachment_url);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        if (! $audio->successful()) {
+            return null;
+        }
+
+        $body = $audio->body();
+
+        // OpenAI's own transcription file-size ceiling.
+        if (strlen($body) > 25 * 1024 * 1024) {
+            return null;
+        }
+
+        $result = $transcription->transcribe($body, $audio->header('Content-Type', 'audio/ogg'));
+
+        if (! $result) {
+            return null;
+        }
+
+        $credit->recordTranscriptionUsage(
+            $this->tenantId,
+            $result['durationSeconds'],
+            (string) config('ai.transcription_model', 'whisper-1'),
+            contextType: 'messenger_voice_transcription',
+            contextId: $message->id,
+        );
+
+        MessengerMessage::withoutGlobalScopes()->where('id', $message->id)->update(['message_text' => $result['text']]);
+
+        return $result['text'];
     }
 
     /**
@@ -325,5 +572,41 @@ class ProcessAiAgentMessage implements ShouldQueue
             ->where('tenant_id', $tenantId)
             ->where('is_active', 1)
             ->value('page_access_token');
+    }
+
+    /**
+     * Phase 12 — response humanization. An AI reply that always arrives
+     * at a fixed, sub-second latency — no matter the hour, no matter how
+     * involved the question — is itself one of the most obvious "this is
+     * a bot" tells, independent of how good the reply text itself is
+     * (Phase 7's style learning already handles that half). This sleeps
+     * the current job for a few real seconds before the send below, which
+     * is safe here specifically because credit was already deducted
+     * above and this runs well inside both the job's own $timeout and the
+     * cron worker's --max-time budget (see this class's own docblock).
+     *
+     * Deliberately bounded to a handful of seconds, not a realistic full
+     * typing-time simulation (a genuinely long, reply-length-proportional
+     * delay would need generation and delivery split into two separately
+     * -dispatched queued jobs — a larger architectural change, not taken
+     * here). Skipped entirely under phpunit so the test suite never
+     * actually sleeps; humanDelaySeconds() itself stays directly testable
+     * since it has no other observable side effect.
+     */
+    protected function humanDelay(): void
+    {
+        if (app()->runningUnitTests()) {
+            return;
+        }
+
+        sleep($this->humanDelaySeconds());
+    }
+
+    public function humanDelaySeconds(): int
+    {
+        $min = max(0, (int) config('ai.human_delay_min_seconds', 2));
+        $max = max($min, (int) config('ai.human_delay_max_seconds', 6));
+
+        return random_int($min, $max);
     }
 }

@@ -48,6 +48,23 @@ class MessengerApi
     }
 
     /**
+     * Phase 12 — the Send API's sender_action shape, unchanged for as long
+     * as the Messenger Platform has existed. Shows the "Business is
+     * typing..." indicator to the customer; Meta clears it automatically
+     * after ~20s or the moment an actual message is sent, so there is no
+     * corresponding typing_off call to make. Purely cosmetic — see
+     * App\Jobs\ProcessAiAgentMessage::humanDelay()'s docblock for why this
+     * exists and why a failure here must never block the actual reply.
+     */
+    public function sendTypingOn(string $psid, string $pageAccessToken): array
+    {
+        return Http::post("{$this->base}/me/messages?access_token={$pageAccessToken}", [
+            'recipient' => ['id' => $psid],
+            'sender_action' => 'typing_on',
+        ])->json() ?? [];
+    }
+
+    /**
      * Sends a media attachment by URL (our own re-hosted public URL, not a
      * direct file upload — matches how MessengerWebhookController re-hosts
      * inbound attachments, so both directions use the same "our durable

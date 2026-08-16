@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Traits\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class WhatsAppMessage extends Model
 {
@@ -29,6 +30,20 @@ class WhatsAppMessage extends Model
     protected static function booted(): void
     {
         static::creating(fn ($m) => $m->created_at = $m->created_at ?: now());
+    }
+
+    /**
+     * True once database/sql/chunk37.sql's sent_by column exists — mirrors
+     * MessengerMessage::sentByColumnReady() exactly (same additive-column
+     * guard, same "not memoized, low-frequency call sites" reasoning).
+     * Used both to gate writing 'sent_by' in
+     * App\Services\WhatsApp\WhatsAppSendService::send() and to gate
+     * reading it back for style learning
+     * (App\Services\AI\AiConversationStyleService::whatsappStyleExamples()).
+     */
+    public static function sentByColumnReady(): bool
+    {
+        return Schema::hasColumn('whatsapp_messages', 'sent_by');
     }
 
     public function phoneNumber()

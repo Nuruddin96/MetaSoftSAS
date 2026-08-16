@@ -3,24 +3,31 @@
 namespace App\Services\AI;
 
 use App\Models\MessengerMessage;
+use App\Models\WhatsAppMessage;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Builds a small, tenant-specific "how does this business's own staff
- * actually talk" style profile from real Messenger history — the fix for
- * a production incident where AI replies were technically correct but
+ * actually talk" style profile from real conversation history — the fix
+ * for a production incident where AI replies were technically correct but
  * read as a generic, over-formal call-center script instead of the
  * tenant's real human voice (see config('ai.system_prompt')'s docblock).
+ * Covers both channels — messengerStyleExamples() (Messenger) and
+ * whatsappStyleExamples() (Phase 7 — WhatsApp) — as two structurally
+ * mirrored, independently-implemented halves of this one class, not a
+ * shared query path, per this codebase's established "independent
+ * implementation per channel" convention.
  *
- * ONLY ever learns from messenger_messages rows with sent_by='human' —
- * never 'ai'. This is deliberate and load-bearing: if the AI's own past
- * replies were allowed into these examples, it would learn from (and
- * reinforce) whatever robotic phrasing it already produces, defeating the
- * entire point. See database/sql/chunk36.sql and MessengerMessage::
- * sentByColumnReady() for how that distinction is made and why it didn't
- * exist before this class.
+ * ONLY ever learns from human-written outbound rows — messenger_messages/
+ * whatsapp_messages with sent_by='human', never 'ai'. This is deliberate
+ * and load-bearing: if the AI's own past replies were allowed into these
+ * examples, it would learn from (and reinforce) whatever robotic phrasing
+ * it already produces, defeating the entire point. See
+ * database/sql/chunk36.sql (Messenger) / chunk37.sql (WhatsApp) and
+ * MessengerMessage::sentByColumnReady() / WhatsAppMessage::
+ * sentByColumnReady() for how that distinction is made.
  *
  * Deliberately application-level, not a fine-tuned model: this only ever
  * feeds a small amount of real text into the existing GPT call as extra
@@ -103,6 +110,113 @@ class AiConversationStyleService
         return "ai_style_examples:messenger:{$tenantId}";
     }
 
+    /**
+     * Phase 7 — WhatsApp counterpart of messengerStyleExamples() above.
+     * Structurally mirrored, not shared, the same "independent
+     * implementation per channel" convention App\Jobs\
+     * ProcessWhatsAppAiAgentMessage's own docblock already establishes for
+     * this codebase — only ever learns from whatsapp_messages rows with
+     * sent_by='human', gated by WhatsAppMessage::sentByColumnReady() the
+     * same way this class gates on MessengerMessage::sentByColumnReady().
+     * Cached and degrades to '' on failure for the same reasons.
+     */
+    public function whatsappStyleExamples(int $tenantId): string
+    {
+        if (! WhatsAppMessage::sentByColumnReady()) {
+            return '';
+        }
+
+        try {
+            return Cache::remember(
+                $this->whatsappCacheKey($tenantId),
+                now()->addMinutes((int) config('ai.style_cache_minutes', 360)),
+                fn () => $this->buildFromWhatsAppHistory($tenantId)
+            );
+        } catch (\Throwable $e) {
+            Log::warning('AI conversation style: failed to build or read the WhatsApp style profile — continuing without it.', [
+                'tenant_id' => $tenantId,
+                'exception' => get_class($e),
+            ]);
+
+            return '';
+        }
+    }
+
+    /**
+     * WhatsApp counterpart of forgetMessengerStyleCache() — called from
+     * Tenant\WhatsAppInboxController::reply() after a genuine human reply.
+     */
+    public function forgetWhatsAppStyleCache(int $tenantId): void
+    {
+        Cache::forget($this->whatsappCacheKey($tenantId));
+    }
+
+    protected function whatsappCacheKey(int $tenantId): string
+    {
+        return "ai_style_examples:whatsapp:{$tenantId}";
+    }
+
+    protected function buildFromWhatsAppHistory(int $tenantId): string
+    {
+        $max = max(0, (int) config('ai.style_examples_max', 6));
+
+        if ($max === 0) {
+            return '';
+        }
+
+        $humanReplies = WhatsAppMessage::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('direction', 'out')
+            ->where('sent_by', 'human')
+            ->whereNotNull('message_text')
+            ->orderByDesc('id')
+            ->limit($max * 3)
+            ->get(['id', 'wa_id', 'message_text']);
+
+        if ($humanReplies->isEmpty()) {
+            return '';
+        }
+
+        $precedingByWaId = $this->batchPrecedingInboundWhatsApp($tenantId, $humanReplies);
+
+        $pairs = [];
+
+        foreach ($humanReplies as $reply) {
+            if (count($pairs) >= $max) {
+                break;
+            }
+
+            $customerMessage = ($precedingByWaId->get($reply->wa_id) ?? collect())
+                ->first(fn ($m) => $m->id < $reply->id)?->message_text;
+
+            if (! $customerMessage) {
+                continue;
+            }
+
+            $pairs[] = [
+                $this->trimExample($customerMessage),
+                $this->trimExample($reply->message_text),
+            ];
+        }
+
+        if (! $pairs) {
+            return '';
+        }
+
+        $pairs = array_reverse($pairs);
+
+        $examplesBlock = implode("\n\n", array_map(
+            fn (array $pair) => "Customer: {$pair[0]}\nReply: {$pair[1]}",
+            $pairs
+        ));
+
+        $profileLine = $this->buildProfileLine($humanReplies->pluck('message_text'));
+
+        return $profileLine === ''
+            ? $examplesBlock
+            : $profileLine."\n\n".$examplesBlock;
+    }
+
     protected function buildFromHistory(int $tenantId): string
     {
         $max = max(0, (int) config('ai.style_examples_max', 6));
@@ -129,6 +243,8 @@ class AiConversationStyleService
             return '';
         }
 
+        $precedingByPsid = $this->batchPrecedingInboundMessenger($tenantId, $humanReplies);
+
         $pairs = [];
 
         foreach ($humanReplies as $reply) {
@@ -136,14 +252,8 @@ class AiConversationStyleService
                 break;
             }
 
-            $customerMessage = MessengerMessage::withoutGlobalScopes()
-                ->where('tenant_id', $tenantId)
-                ->where('sender_psid', $reply->sender_psid)
-                ->where('direction', 'in')
-                ->where('id', '<', $reply->id)
-                ->whereNotNull('message_text')
-                ->orderByDesc('id')
-                ->value('message_text');
+            $customerMessage = ($precedingByPsid->get($reply->sender_psid) ?? collect())
+                ->first(fn ($m) => $m->id < $reply->id)?->message_text;
 
             if (! $customerMessage) {
                 continue;
@@ -173,6 +283,57 @@ class AiConversationStyleService
         return $profileLine === ''
             ? $examplesBlock
             : $profileLine."\n\n".$examplesBlock;
+    }
+
+    /**
+     * Phase 17 — one batched query for every candidate reply's preceding
+     * inbound message, replacing what used to be one extra query PER
+     * candidate reply (up to style_examples_max * 3 of them). Fetches the
+     * most recent inbound messages across every psid involved, in one
+     * round trip, then buildFromHistory() pairs each reply with its own
+     * preceding message in memory (still applying the exact same "most
+     * recent message with id < this reply's id" rule per reply — the
+     * batching only changes how many queries that takes, never the
+     * result). The extra ' * 5' headroom on the row limit is a safety
+     * margin, not a per-psid guarantee — if a customer genuinely sent
+     * more than ~5 consecutive messages between two staff replies, that
+     * one candidate simply gets skipped, same as today's existing
+     * "no preceding message found" fallback already handles.
+     *
+     * @param  Collection<int, MessengerMessage>  $humanReplies
+     * @return Collection<string, Collection<int, MessengerMessage>> keyed by sender_psid
+     */
+    protected function batchPrecedingInboundMessenger(int $tenantId, Collection $humanReplies): Collection
+    {
+        $psids = $humanReplies->pluck('sender_psid')->unique()->values();
+
+        return MessengerMessage::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('sender_psid', $psids)
+            ->where('direction', 'in')
+            ->where('id', '<', $humanReplies->max('id'))
+            ->whereNotNull('message_text')
+            ->orderByDesc('id')
+            ->limit($humanReplies->count() * 5)
+            ->get(['id', 'sender_psid', 'message_text'])
+            ->groupBy('sender_psid');
+    }
+
+    /** WhatsApp counterpart of batchPrecedingInboundMessenger() — see its docblock. */
+    protected function batchPrecedingInboundWhatsApp(int $tenantId, Collection $humanReplies): Collection
+    {
+        $waIds = $humanReplies->pluck('wa_id')->unique()->values();
+
+        return WhatsAppMessage::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('wa_id', $waIds)
+            ->where('direction', 'in')
+            ->where('id', '<', $humanReplies->max('id'))
+            ->whereNotNull('message_text')
+            ->orderByDesc('id')
+            ->limit($humanReplies->count() * 5)
+            ->get(['id', 'wa_id', 'message_text'])
+            ->groupBy('wa_id');
     }
 
     /**

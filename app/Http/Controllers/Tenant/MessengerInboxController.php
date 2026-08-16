@@ -11,6 +11,7 @@ use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\Order;
 use App\Services\AI\AiConversationStyleService;
+use App\Services\AI\AiHandoffService;
 use App\Services\ImageOptimizer;
 use App\Services\Inbox\UnifiedInboxService;
 use App\Services\Messenger\MessengerApi;
@@ -45,7 +46,7 @@ class MessengerInboxController extends Controller
     }
 
     /** Same ?panel=1 partial-response convention as WhatsAppInboxController::show() — see its docblock. */
-    public function show(Request $request, string $psid, UnifiedInboxService $inbox)
+    public function show(Request $request, string $psid, UnifiedInboxService $inbox, AiHandoffService $handoff)
     {
         $messages = MessengerMessage::where('sender_psid', $psid)
             ->orderBy('created_at')->get();
@@ -86,6 +87,7 @@ class MessengerInboxController extends Controller
             'customer' => $customer,
             'linkedOrder' => $linkedOrder,
             'matchedCustomer' => $matchedCustomer,
+            'handoffActive' => $handoff->isActive(app('currentTenant')->id, 'messenger', $psid),
         ];
 
         if ($request->query('panel') === '1') {
@@ -427,6 +429,17 @@ class MessengerInboxController extends Controller
         MessengerMessage::where('sender_psid', $psid)->update(['status' => $data['status']]);
 
         return back()->with('success', 'স্ট্যাটাস আপডেট হয়েছে।');
+    }
+
+    /**
+     * Phase 13 — explicit staff action only; see AiHandoffService::resolve()'s
+     * docblock for why a human panel reply never implicitly does this.
+     */
+    public function resumeAi(string $psid, AiHandoffService $handoff)
+    {
+        $handoff->resolve(app('currentTenant')->id, 'messenger', $psid, auth()->id());
+
+        return back()->with('success', 'এই কনভারসেশনের জন্য AI Agent আবার চালু হয়েছে।');
     }
 
     /**

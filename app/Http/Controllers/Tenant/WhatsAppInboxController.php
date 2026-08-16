@@ -7,6 +7,8 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
+use App\Services\AI\AiConversationStyleService;
+use App\Services\AI\AiHandoffService;
 use App\Services\ImageOptimizer;
 use App\Services\Inbox\UnifiedInboxService;
 use App\Services\WhatsApp\WhatsAppMediaService;
@@ -35,7 +37,7 @@ class WhatsAppInboxController extends Controller
      * page at that URL either way — the only difference is how much of it
      * comes back.
      */
-    public function show(Request $request, string $waId, UnifiedInboxService $inbox)
+    public function show(Request $request, string $waId, UnifiedInboxService $inbox, AiHandoffService $handoff)
     {
         $messages = WhatsAppMessage::where('wa_id', $waId)
             ->orderBy('created_at')->get();
@@ -67,6 +69,7 @@ class WhatsAppInboxController extends Controller
             'connected' => WhatsAppPhoneNumber::where('is_active', 1)->where('status', 'active')->exists(),
             'linkedOrder' => Order::whereIn('customer_phone', $phoneCandidates)->latest()->first(),
             'matchedCustomer' => Customer::whereIn('phone', $phoneCandidates)->first(),
+            'handoffActive' => $handoff->isActive(app('currentTenant')->id, 'whatsapp', $waId),
         ];
 
         if ($request->query('panel') === '1') {
@@ -105,7 +108,7 @@ class WhatsAppInboxController extends Controller
         return array_values(array_unique($candidates));
     }
 
-    public function reply(Request $request, string $waId, WhatsAppSendService $service)
+    public function reply(Request $request, string $waId, WhatsAppSendService $service, AiConversationStyleService $style)
     {
         $data = $request->validate([
             'message' => 'nullable|string|max:1000',
@@ -121,11 +124,24 @@ class WhatsAppInboxController extends Controller
         $tenant = app('currentTenant');
 
         if ($message) {
+            // sentBy defaults to 'human' — a genuine staff reply, exactly
+            // like MessengerInboxController::reply() records. Distinguishes
+            // it from ProcessWhatsAppAiAgentMessage's AI-generated replies,
+            // which is what lets AiConversationStyleService::
+            // whatsappStyleExamples() learn tone only from real human
+            // replies — see chunk37.sql's docblock.
             $result = $service->sendText($tenant, $waId, $message);
 
             if (! $result->successful) {
                 return back()->with('error', 'মেসেজ পাঠানো যায়নি: '.($result->errorMessage ?? 'WhatsApp API error'));
             }
+
+            // A genuine human reply — possibly a correction of something
+            // the AI got wrong — is exactly the high-value signal that
+            // should shape the very next AI reply, not sit unused for up to
+            // config('ai.style_cache_minutes'). See
+            // AiConversationStyleService::forgetWhatsAppStyleCache()'s docblock.
+            $style->forgetWhatsAppStyleCache($tenant->id);
         }
 
         if ($request->hasFile('image')) {
@@ -161,6 +177,17 @@ class WhatsAppInboxController extends Controller
         WhatsAppMessage::where('wa_id', $waId)->update(['status' => $data['status']]);
 
         return back()->with('success', 'স্ট্যাটাস আপডেট হয়েছে।');
+    }
+
+    /**
+     * Phase 13 — explicit staff action only; see AiHandoffService::resolve()'s
+     * docblock for why a human panel reply never implicitly does this.
+     */
+    public function resumeAi(string $waId, AiHandoffService $handoff)
+    {
+        $handoff->resolve(app('currentTenant')->id, 'whatsapp', $waId, auth()->id());
+
+        return back()->with('success', 'এই কনভারসেশনের জন্য AI Agent আবার চালু হয়েছে।');
     }
 
     /** Polling endpoint for the thread view — same "no confirmed queue worker on shared hosting" reasoning as MessengerInboxController::updates(), plain request/response, not WebSockets. */

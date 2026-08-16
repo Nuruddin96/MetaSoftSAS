@@ -59,6 +59,10 @@ trait InteractsWithWhatsAppSchema
                 $table->string('subdomain')->unique();
                 $table->string('store_name');
                 $table->string('status')->default('active');
+                // Phase 14 — see database/sql/chunk39.sql's docblock.
+                $table->timestamp('ai_paused_at')->nullable();
+                $table->unsignedBigInteger('ai_paused_by_super_admin_id')->nullable();
+                $table->string('ai_paused_reason', 255)->nullable();
                 $table->timestamp('trial_ends_at')->nullable();
                 $table->timestamp('subscription_ends_at')->nullable();
                 $table->string('custom_domain')->nullable();
@@ -141,7 +145,61 @@ trait InteractsWithWhatsAppSchema
             Schema::create('orders', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
+                $table->string('order_number', 30)->default('');
+                $table->string('messenger_psid', 100)->nullable();
+                $table->string('customer_name', 150)->default('');
+                $table->string('customer_phone', 20)->default('');
+                $table->text('customer_address')->nullable();
                 $table->string('status', 20)->default('pending');
+                $table->timestamps();
+            });
+        }
+
+        // WhatsAppInboxController::show() looks up Customer::whereIn('phone', ...)
+        // for the 'matchedCustomer' panel data on every thread render — same
+        // shape InteractsWithCommerceSchema uses.
+        if (! Schema::hasTable('customers')) {
+            Schema::create('customers', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 150);
+                $table->string('phone', 20);
+                $table->string('email', 150)->nullable();
+                $table->text('address')->nullable();
+                $table->unsignedInteger('division_id')->nullable();
+                $table->unsignedInteger('district_id')->nullable();
+                $table->unsignedInteger('upazila_id')->nullable();
+                $table->decimal('due_balance', 12, 2)->default(0);
+                $table->integer('total_orders')->default(0);
+                $table->decimal('total_spent', 14, 2)->default(0);
+                $table->text('note')->nullable();
+                $table->timestamps();
+                $table->unique(['tenant_id', 'phone']);
+            });
+        }
+
+        // Phase 5 (AiProductKnowledgeService) needs the real product/variant
+        // shape, not just the low_stock_threshold-only stub the panel's
+        // notification badge previously needed here — mirrors
+        // InteractsWithAiAgentSchema's fuller definition rather than a
+        // second, differently-shaped stub.
+        if (! Schema::hasTable('categories')) {
+            Schema::create('categories', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 150);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('products')) {
+            Schema::create('products', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('category_id')->nullable();
+                $table->string('name');
+                $table->string('slug', 280)->nullable();
+                $table->boolean('is_active')->default(true);
                 $table->timestamps();
             });
         }
@@ -150,7 +208,24 @@ trait InteractsWithWhatsAppSchema
             Schema::create('product_variants', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('product_id');
+                $table->string('sku', 80)->nullable();
+                $table->string('barcode', 80)->nullable();
+                $table->string('variant_name', 150)->default('Default');
+                $table->decimal('purchase_price', 12, 2)->default(0);
+                $table->decimal('selling_price', 12, 2);
                 $table->integer('low_stock_threshold')->default(5);
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('warehouses')) {
+            Schema::create('warehouses', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 150);
+                $table->boolean('is_default')->default(false);
                 $table->timestamps();
             });
         }
@@ -160,6 +235,7 @@ trait InteractsWithWhatsAppSchema
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
                 $table->unsignedBigInteger('variant_id');
+                $table->unsignedBigInteger('warehouse_id')->nullable();
                 $table->integer('quantity')->default(0);
                 $table->timestamp('updated_at')->nullable();
             });
@@ -254,6 +330,7 @@ trait InteractsWithWhatsAppSchema
                 $table->string('attachment_name', 255)->nullable();
                 $table->json('raw_payload')->nullable();
                 $table->string('direction', 10)->default('in');
+                $table->string('sent_by', 10)->default('human');
                 $table->string('status', 20)->default('new');
                 $table->string('delivery_status', 20)->nullable();
                 $table->string('error_code', 30)->nullable();
@@ -289,6 +366,24 @@ trait InteractsWithWhatsAppSchema
                 $table->unsignedBigInteger('context_id')->nullable();
                 $table->string('note', 255)->nullable();
                 $table->unsignedBigInteger('created_by')->nullable();
+                $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        // See database/sql/chunk38.sql (Phase 13 human handoff) for the
+        // real (MySQL) definition — the ENUM there becomes a plain string
+        // column here, same simplification every other schema trait in
+        // this suite makes.
+        if (! Schema::hasTable('ai_handoffs')) {
+            Schema::create('ai_handoffs', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('channel', 20);
+                $table->string('external_id', 100);
+                $table->string('reason', 50);
+                $table->unsignedBigInteger('triggered_by_message_id')->nullable();
+                $table->timestamp('resolved_at')->nullable();
+                $table->unsignedBigInteger('resolved_by_user_id')->nullable();
                 $table->timestamp('created_at')->nullable();
             });
         }

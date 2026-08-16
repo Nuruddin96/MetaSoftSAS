@@ -216,6 +216,12 @@ class SettingController extends Controller
      * See MessengerWebhookController::maybeDispatchAiAgent() and
      * WhatsAppWebhookController::maybeDispatchAiAgent()'s docblocks for
      * how each set of three is enforced together.
+     *
+     * Also saves ai_custom_instructions (Phase 3) — free-text, per-tenant
+     * behavior instructions ("বন্ধুসুলভভাবে কথা বলবে", "discount নিজে
+     * থেকে দিবে না", etc.), read by AiAgentService::systemPrompt() and
+     * spliced into every reply's prompt with an explicit "cannot override
+     * the safety rules above" boundary — see that method's docblock.
      */
     public function aiAgent(Request $request)
     {
@@ -223,6 +229,14 @@ class SettingController extends Controller
             'ai_agent_enabled' => 'nullable|boolean',
             'messenger_ai_auto_reply_enabled' => 'nullable|boolean',
             'whatsapp_ai_auto_reply_enabled' => 'nullable|boolean',
+            // Free-text tenant instructions (Phase 3) — capped well below
+            // ai_usage_ledger-cost-relevant territory; this text is
+            // injected into every single AI reply's prompt (see
+            // AiAgentService::systemPrompt()), so an unbounded textarea
+            // would let one tenant silently inflate their own per-message
+            // token cost with no limit. 2000 chars is generous for
+            // realistic business instructions while staying bounded.
+            'ai_custom_instructions' => 'nullable|string|max:2000',
         ]);
 
         StoreSetting::updateOrCreate(
@@ -238,6 +252,11 @@ class SettingController extends Controller
         StoreSetting::updateOrCreate(
             ['key' => 'whatsapp_ai_auto_reply_enabled'],
             ['value' => $request->boolean('whatsapp_ai_auto_reply_enabled') ? '1' : '0']
+        );
+
+        StoreSetting::updateOrCreate(
+            ['key' => 'ai_custom_instructions'],
+            ['value' => trim((string) ($data['ai_custom_instructions'] ?? ''))]
         );
 
         return back()->with('success', 'AI এজেন্ট সেটিংস সেভ হয়েছে।');

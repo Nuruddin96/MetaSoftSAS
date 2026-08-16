@@ -7,6 +7,7 @@ use App\Services\AI\Tools\CustomerLookupTool;
 use App\Services\AI\Tools\OrderLookupTool;
 use App\Services\AI\Tools\ProductLookupTool;
 use App\Services\AI\Tools\SalesReportTool;
+use App\Services\AI\Tools\UpdateOrderStatusTool;
 
 return [
     // Phase 2 provider abstraction (App\Services\AI\Providers). Chooses
@@ -63,6 +64,21 @@ return [
     // pricing changes.
     'credit_per_1k_tokens' => (float) env('AI_CREDIT_PER_1K_TOKENS', 1.0),
 
+    // Phase 10 — voice/audio understanding. Whisper-style transcription is
+    // priced per minute of audio, not per token, so it needs its own
+    // tenant-facing rate rather than reusing credit_per_1k_tokens — see
+    // AiCreditService::recordTranscriptionUsage(). Same "operator sets a
+    // simple round number" reasoning as credit_per_1k_tokens above.
+    'credit_per_minute_transcription' => (float) env('AI_CREDIT_PER_MINUTE_TRANSCRIPTION', 0.5),
+
+    // Model used for App\Services\AI\AiAudioTranscriptionService — a
+    // SEPARATE OpenAI endpoint (/audio/transcriptions) from the chat model
+    // above, deliberately not required to be the same model family.
+    // whisper-1 is the broadest-availability, best-documented choice and
+    // has strong Bengali support; kept independently configurable in case
+    // a deploy wants to switch to a newer transcription model later.
+    'transcription_model' => env('OPENAI_TRANSCRIPTION_MODEL', 'whisper-1'),
+
     // Admin-only informational cost estimate (never used to gate or
     // deduct credit — see AiCreditService::estimateCostUsd()). USD price
     // per 1,000 tokens, input/output priced separately since they differ
@@ -74,6 +90,12 @@ return [
         'gpt-5-mini' => ['input' => 0.25, 'output' => 2.00],
         'gpt-4o-mini' => ['input' => 0.15, 'output' => 0.60],
         'default' => ['input' => 0.50, 'output' => 1.50],
+        // USD per minute of audio — same placeholder-value caveat as
+        // above. 'default' covers any transcription model not listed.
+        'transcription' => [
+            'whisper-1' => 0.006,
+            'default' => 0.006,
+        ],
     ],
 
     // How many of the most recent stored messages for a conversation
@@ -84,6 +106,18 @@ return [
     // rows — see App\Jobs\ProcessAiAgentMessage::recentHistory() and
     // Tenant\AiChatController respectively.
     'context_messages' => (int) env('AI_AGENT_CONTEXT_MESSAGES', 10),
+
+    // Phase 12 — response humanization. Delays the actual customer-facing
+    // send (never the billable OpenAI call itself, which already happened
+    // and was already recorded — see AiCreditService::recordUsage()) by a
+    // small random number of seconds, so a reply never arrives at the
+    // inhuman, fixed, sub-second latency a bot always has — see
+    // App\Jobs\ProcessAiAgentMessage::humanDelay()'s docblock for the full
+    // reasoning, including why this is deliberately a bounded few-second
+    // delay rather than a full realistic typing-time simulation. Set both
+    // to 0 to disable entirely.
+    'human_delay_min_seconds' => (int) env('AI_HUMAN_DELAY_MIN_SECONDS', 2),
+    'human_delay_max_seconds' => (int) env('AI_HUMAN_DELAY_MAX_SECONDS', 6),
 
     // Tool registry (App\Services\AI\Tools\AiToolRegistry, bound in
     // AppServiceProvider). Every predefined tool the AI is allowed to
@@ -107,6 +141,8 @@ return [
         CreateOrderTool::class,
         CreateProductTool::class,
         CourierActionTool::class,
+        // Phase 11 — same mutating/confirm-first pattern as the three above.
+        UpdateOrderStatusTool::class,
     ],
 
     // Safety cap on how many tool-calling round trips AiChatService will
@@ -157,9 +193,16 @@ return [
         - Do not use headings, bullet points, or numbered lists in a chat reply unless the customer specifically asked for a list of things.
         - Do not over-explain or volunteer information nobody asked for (delivery charge, payment methods, policies) unless it's genuinely the natural next thing a real salesperson would mention, or the business's own real replies typically include it.
 
+        Understanding the conversation:
+        - Read the whole conversation before answering, not just the latest message. If the customer uses a vague reference — "এটা", "ওটা", "সেটা", "আগেরটা", "this", "that", "it" — assume they mean whatever product/topic was most recently and clearly discussed in this same conversation, unless something in the conversation clearly signals they've moved on to something else. Do not ask "কোন প্রোডাক্ট?" when the conversation already makes it obvious.
+        - Only ask a clarifying question after you've actually checked whether the conversation already answers it. If a product was named earlier — even several messages back, even in the very message you're replying to — treat it as known; don't ask the customer to repeat something they already told you.
+        - The conversation history may contain a line like "[customer sent a photo]" or "[customer sent a voice message]" — this only means an attachment existed at that point in the conversation, not that you understood its contents; you cannot review a past image or hear audio at all. If the customer refers back to something they showed earlier, be honest that you can't review that older attachment itself, but still use whatever they've said in text around it.
+        - An image the customer just attached to THIS message, however, is genuinely visible to you — describe or answer about what you actually see in it naturally, the way a real staff member glancing at a customer's photo would. Still follow the "known facts only" rules below: seeing a product in a photo is not the same as knowing its price, stock, or exact specifications — state those only from real data given to you elsewhere, never guess them from how something looks in the image. If the photo shows possible damage/a defect, describe what you see neutrally without confidently diagnosing cause or fault. Never comment on people's appearance or anything in the photo unrelated to the business.
+        - A voice message the customer just sent for THIS message reaches you as an accurate text transcription of what they said — not the audio itself, and not something you "hear". Treat it as their own words and reply naturally, the same as if they had typed it. Speech-to-text can occasionally misrecognize a word, especially numbers, product names, or names of people — if the transcribed text is garbled or genuinely doesn't make sense, say so honestly and ask them to repeat or type it, rather than guessing what they probably meant.
+
         Never use generic scripted phrases, in Bengali or English, such as: "অবশ্যই! আমি আপনাকে সাহায্য করতে পারি", "আপনার আগ্রহের জন্য ধন্যবাদ", "নিশ্চয়ই!", "আমি আপনার প্রশ্নটি বুঝতে পেরেছি", "আপনাকে জানাতে পেরে আনন্দিত", "দয়া করে অপেক্ষা করুন", "আর কোনো প্রশ্ন থাকলে জানাবেন", "আশা করি এটি সহায়ক হবে", "Certainly!", "I'd be happy to assist", "Thank you for reaching out", "Please let me know if you need any further assistance". These are guidance for what sounds scripted, not a rigid banned-word list — use judgment.
 
-        Also never say any variation of "আমি একজন মানব প্রতিনিধিকে জানিয়ে দেব", "মানুষ সমর্থন টিমকে জানানোর ব্যবস্থা করব", "আমি টিমকে জানাচ্ছি", "একটা টিকিট ওপেন করছি", "I'll notify a representative", "I'll inform the team", "I'll escalate this" — every one of these is a promise you cannot actually keep, in a topic (a complaint, something you don't know, a payment/order problem) where you're specifically told not to promise a next step. Say only that you personally can't confirm/handle that right now, nothing about anyone being told or anything being escalated.
+        Also never say any variation of "আমি একজন মানব প্রতিনিধিকে জানিয়ে দেব", "মানুষ সমর্থন টিমকে জানানোর ব্যবস্থা করব", "আমি টিমকে জানাচ্ছি", "একটা টিকিট ওপেন করছি", "I'll notify a representative", "I'll inform the team", "I'll escalate this" — every one of these is a promise you cannot actually keep, in a topic (a complaint, something you don't know, a payment/order problem) where you're specifically told not to promise a next step. Say only that you personally can't confirm/handle that right now, nothing about anyone being told or anything being escalated. The ONE exception: if you are explicitly told below that this conversation has just been handed off to a real staff member, that has genuinely already happened — say so honestly in this business's own natural voice instead of applying the rule above.
 
         Language: reply in whatever mix of Bengali, Banglish, or English the customer just used — match their style, don't upgrade casual Banglish into formal textbook Bengali. If real example replies from this business's own staff are provided below, imitate their exact wording style, word choice, greeting style, and emoji use — that is a stronger guide to how this business actually talks than these general rules. Never copy an old example's exact sentence word-for-word — learn the style from it and write a fresh reply for the current situation.
 
@@ -202,4 +245,15 @@ return [
     'style_examples_max' => (int) env('AI_STYLE_EXAMPLES_MAX', 6),
     'style_example_max_chars' => (int) env('AI_STYLE_EXAMPLE_MAX_CHARS', 150),
     'style_cache_minutes' => (int) env('AI_STYLE_CACHE_MINUTES', 360),
+
+    // AiProductKnowledgeService (Phase 5) tunables. product_match_scan_limit
+    // bounds the single cheap "id => name" query used to detect which of
+    // the tenant's own products were mentioned in the conversation — a
+    // typical small BD shop catalog is far under this; it exists purely as
+    // a safety cap, not a real-world ceiling. product_match_max bounds how
+    // many distinct matched products get their real price/stock data
+    // pulled into one prompt (kept small on purpose — same "compact
+    // context, not the whole catalog" reasoning as style examples above).
+    'product_match_scan_limit' => (int) env('AI_PRODUCT_MATCH_SCAN_LIMIT', 200),
+    'product_match_max' => (int) env('AI_PRODUCT_MATCH_MAX', 3),
 ];

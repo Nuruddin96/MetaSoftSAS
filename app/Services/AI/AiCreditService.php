@@ -147,6 +147,65 @@ class AiCreditService
     }
 
     /**
+     * Phase 10 — the transcription counterpart of recordUsage() above, for
+     * the SEPARATE billable OpenAI call App\Services\AI\
+     * AiAudioTranscriptionService makes (a customer's voice message being
+     * converted to text). Whisper-style transcription is priced per
+     * minute of audio, not per token, so this uses its own tenant-facing
+     * rate (config('ai.credit_per_minute_transcription')) rather than
+     * credit_per_1k_tokens — input_tokens/output_tokens are left null on
+     * the ledger row (nullable columns, see chunk32.sql) since there
+     * genuinely are none for this kind of call. Same "only call this
+     * AFTER the OpenAI call actually succeeded" rule as recordUsage() —
+     * see that method's docblock and AiAudioTranscriptionService's "never
+     * charges for a failed attempt" guarantee.
+     */
+    public function recordTranscriptionUsage(
+        int $tenantId,
+        float $durationSeconds,
+        string $model,
+        string $contextType,
+        ?int $contextId = null,
+    ): ?AiUsageLedger {
+        if (! AiCreditAccount::tablesReady()) {
+            return null;
+        }
+
+        $minutes = $durationSeconds / 60;
+        $creditAmount = round($minutes * (float) config('ai.credit_per_minute_transcription', 0.5), 4);
+        $estimatedCostUsd = round(
+            $minutes * (float) (config('ai.pricing.transcription.'.$model) ?? config('ai.pricing.transcription.default', 0.006)),
+            6
+        );
+
+        return DB::transaction(function () use ($tenantId, $creditAmount, $model, $estimatedCostUsd, $contextType, $contextId) {
+            $account = AiCreditAccount::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $account) {
+                return null;
+            }
+
+            $account->decrement('balance', $creditAmount);
+
+            return AiUsageLedger::withoutGlobalScopes()->create([
+                'tenant_id' => $tenantId,
+                'type' => 'usage',
+                'credit_amount' => $creditAmount,
+                'balance_after' => $account->fresh()->balance,
+                'input_tokens' => null,
+                'output_tokens' => null,
+                'model' => $model,
+                'estimated_cost_usd' => $estimatedCostUsd,
+                'context_type' => $contextType,
+                'context_id' => $contextId,
+            ]);
+        });
+    }
+
+    /**
      * Paginated ledger for one tenant, optionally filtered by type(s).
      * $tenantVisibleOnly strips estimated_cost_usd, input/output tokens,
      * model, context_type/context_id, and created_by before the caller

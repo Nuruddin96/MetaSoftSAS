@@ -45,12 +45,37 @@ class AiPendingActionService
      * responsible for verifying $action belongs to the requesting
      * tenant/user before calling this.
      *
+     * Phase 15 — the status !== 'pending' check used to be a plain
+     * read-then-write with no locking: two near-simultaneous requests
+     * (a double-click, or a browser retrying a slow response — a real
+     * scenario on shared hosting) could each load their OWN copy of
+     * $action, both see status='pending' before either had committed,
+     * and both go on to actually execute the mutating tool — a real
+     * duplicate order/courier-dispatch/product-creation, not just a
+     * cosmetic double form-submit. This now claims the row with a single
+     * atomic conditional UPDATE first (mirrors AiAgentMessageJob::claim()'s
+     * pending -> processing pattern), and only the request that wins it
+     * ever reaches $this->tools->call(). Reuses confirmed_at (already
+     * NULL for the entire 'pending' lifetime — see propose()) as the
+     * one-time claim gate rather than adding a new ai_pending_actions.status
+     * enum value purely for this.
+     *
      * @return array{success: bool, message: string} The tool's own result
      *                                               (or a generic expiry/state message) — always has at least these two keys.
      */
     public function confirm(AiPendingAction $action): array
     {
         if ($action->status !== 'pending') {
+            return ['success' => false, 'message' => 'এই অ্যাকশনটি ইতিমধ্যে প্রসেস করা হয়ে গেছে।'];
+        }
+
+        $claimed = AiPendingAction::withoutGlobalScopes()
+            ->where('id', $action->id)
+            ->where('status', 'pending')
+            ->whereNull('confirmed_at')
+            ->update(['confirmed_at' => now()]) === 1;
+
+        if (! $claimed) {
             return ['success' => false, 'message' => 'এই অ্যাকশনটি ইতিমধ্যে প্রসেস করা হয়ে গেছে।'];
         }
 
@@ -75,7 +100,6 @@ class AiPendingActionService
             'status' => $succeeded ? 'confirmed' : 'failed',
             'result' => $data,
             'error' => $succeeded ? null : ($data['message'] ?? null),
-            'confirmed_at' => now(),
         ]);
 
         return ['success' => (bool) $succeeded, 'message' => $data['message'] ?? ($succeeded ? 'সম্পন্ন হয়েছে।' : 'সম্পন্ন করা যায়নি।')];

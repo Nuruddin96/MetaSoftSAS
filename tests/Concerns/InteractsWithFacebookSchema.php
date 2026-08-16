@@ -53,6 +53,10 @@ trait InteractsWithFacebookSchema
                 $table->string('subdomain')->unique();
                 $table->string('store_name');
                 $table->string('status')->default('active');
+                // Phase 14 — see database/sql/chunk39.sql's docblock.
+                $table->timestamp('ai_paused_at')->nullable();
+                $table->unsignedBigInteger('ai_paused_by_super_admin_id')->nullable();
+                $table->string('ai_paused_reason', 255)->nullable();
                 $table->timestamp('trial_ends_at')->nullable();
                 $table->timestamp('subscription_ends_at')->nullable();
                 $table->string('custom_domain')->nullable();
@@ -254,6 +258,24 @@ trait InteractsWithFacebookSchema
                 $table->timestamp('identity_fetched_at')->nullable();
                 $table->timestamps();
                 $table->unique(['tenant_id', 'psid']);
+            });
+        }
+
+        // See database/sql/chunk38.sql (Phase 13 human handoff) for the
+        // real (MySQL) definition — the ENUM there becomes a plain string
+        // column here, same simplification every other schema trait in
+        // this suite makes.
+        if (! Schema::hasTable('ai_handoffs')) {
+            Schema::create('ai_handoffs', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('channel', 20);
+                $table->string('external_id', 100);
+                $table->string('reason', 50);
+                $table->unsignedBigInteger('triggered_by_message_id')->nullable();
+                $table->timestamp('resolved_at')->nullable();
+                $table->unsignedBigInteger('resolved_by_user_id')->nullable();
+                $table->timestamp('created_at')->nullable();
             });
         }
     }

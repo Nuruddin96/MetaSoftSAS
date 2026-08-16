@@ -175,10 +175,11 @@ class WhatsAppAiDispatchTest extends TestCase
         Queue::assertNotPushed(ProcessWhatsAppAiAgentMessage::class);
     }
 
-    public function test_a_media_only_message_does_not_dispatch_the_ai_job(): void
+    public function test_an_image_only_message_with_no_caption_does_dispatch_the_ai_job(): void
     {
-        // Same "text only, Phase 1 scope" rule Messenger's dispatch hook
-        // already applies to attachment-only messages.
+        // Phase 9 — real image understanding: an image attachment is now
+        // enough on its own to trigger AI processing, even with zero
+        // caption text.
         Queue::fake();
         $tenant = $this->makeTenant();
         $this->connectPhoneNumber($tenant->id);
@@ -188,6 +189,44 @@ class WhatsAppAiDispatchTest extends TestCase
         $this->postMessage([
             'from' => '8801700000000', 'id' => 'wamid.media-1', 'timestamp' => (string) time(),
             'type' => 'image', 'image' => ['id' => 'media-id-1', 'mime_type' => 'image/jpeg'],
+        ])->assertOk();
+
+        Queue::assertPushed(ProcessWhatsAppAiAgentMessage::class);
+    }
+
+    public function test_an_audio_only_message_with_no_caption_does_dispatch_the_ai_job(): void
+    {
+        // Phase 10 — real voice understanding via transcription: an audio
+        // attachment is now enough on its own to trigger AI processing,
+        // even with zero caption text.
+        Queue::fake();
+        $tenant = $this->makeTenant();
+        $this->connectPhoneNumber($tenant->id);
+        $this->enableAiAgentAndWhatsAppAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $this->postMessage([
+            'from' => '8801700000000', 'id' => 'wamid.media-2', 'timestamp' => (string) time(),
+            'type' => 'audio', 'audio' => ['id' => 'media-id-2', 'mime_type' => 'audio/ogg'],
+        ])->assertOk();
+
+        Queue::assertPushed(ProcessWhatsAppAiAgentMessage::class);
+    }
+
+    public function test_a_non_image_non_audio_media_only_message_still_does_not_dispatch_the_ai_job(): void
+    {
+        // Video/document/location understanding is explicitly out of
+        // scope — only 'image' (Phase 9) and 'audio' (Phase 10) dispatch
+        // without caption text; everything else still needs real text.
+        Queue::fake();
+        $tenant = $this->makeTenant();
+        $this->connectPhoneNumber($tenant->id);
+        $this->enableAiAgentAndWhatsAppAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $this->postMessage([
+            'from' => '8801700000000', 'id' => 'wamid.media-3', 'timestamp' => (string) time(),
+            'type' => 'video', 'video' => ['id' => 'media-id-3', 'mime_type' => 'video/mp4'],
         ])->assertOk();
 
         Queue::assertNotPushed(ProcessWhatsAppAiAgentMessage::class);
@@ -262,5 +301,48 @@ class WhatsAppAiDispatchTest extends TestCase
 
         Queue::assertNotPushed(ProcessWhatsAppAiAgentMessage::class);
         $this->assertSame(0, WhatsAppMessage::withoutGlobalScopes()->count());
+    }
+
+    public function test_an_active_handoff_stops_the_dispatch(): void
+    {
+        // Phase 13 — purely an optimization (the job re-checks this
+        // itself too), but must still hold: no wasted queue dispatch for
+        // a conversation a human is already handling.
+        Queue::fake();
+        $tenant = $this->makeTenant();
+        $this->connectPhoneNumber($tenant->id);
+        $this->enableAiAgentAndWhatsAppAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        DB::table('ai_handoffs')->insert([
+            'tenant_id' => $tenant->id, 'channel' => 'whatsapp', 'external_id' => '8801700000000',
+            'reason' => 'customer_requested', 'created_at' => now(),
+        ]);
+
+        $this->postMessage([
+            'from' => '8801700000000', 'id' => 'wamid.handoff-dispatch', 'timestamp' => (string) time(),
+            'type' => 'text', 'text' => ['body' => 'দাম কত?'],
+        ])->assertOk();
+
+        Queue::assertNotPushed(ProcessWhatsAppAiAgentMessage::class);
+    }
+
+    public function test_a_platform_paused_tenant_stops_the_dispatch(): void
+    {
+        // Phase 14 — purely an optimization (the job re-checks this
+        // itself too).
+        Queue::fake();
+        $tenant = $this->makeTenant();
+        $this->connectPhoneNumber($tenant->id);
+        $this->enableAiAgentAndWhatsAppAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+        DB::table('tenants')->where('id', $tenant->id)->update(['ai_paused_at' => now()]);
+
+        $this->postMessage([
+            'from' => '8801700000000', 'id' => 'wamid.pause-dispatch', 'timestamp' => (string) time(),
+            'type' => 'text', 'text' => ['body' => 'দাম কত?'],
+        ])->assertOk();
+
+        Queue::assertNotPushed(ProcessWhatsAppAiAgentMessage::class);
     }
 }

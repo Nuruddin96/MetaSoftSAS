@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Jobs\ProcessWhatsAppAiAgentMessage;
 use App\Models\AiWhatsAppMessageJob;
 use App\Models\StoreSetting;
+use App\Models\Tenant;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
 use App\Services\AI\AiCreditService;
+use App\Services\AI\AiHandoffService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -246,7 +248,17 @@ class WhatsAppWebhookController extends Controller
             // try/catch around its own create().
         }
 
-        if ($stored && $type === 'text' && $content['message_text']) {
+        // Phase 9 — an image with no caption is now dispatchable too (real
+        // vision understanding, see AiAgentService/
+        // ProcessWhatsAppAiAgentMessage::resolveImageUrl()), not just plain
+        // text. Phase 10 — same for a voice message
+        // (ProcessWhatsAppAiAgentMessage::transcribeAndPersist() converts
+        // it to text before anything else runs). Every other type
+        // (video/document/location/...) still needs real caption text to
+        // dispatch at all — those stay text-only placeholders in history.
+        $dispatchable = $type === 'text' ? (bool) $content['message_text'] : in_array($type, ['image', 'audio'], true);
+
+        if ($stored && $dispatchable) {
             try {
                 $this->maybeDispatchAiAgent($owner->tenant_id, $stored);
             } catch (\Throwable $e) {
@@ -308,7 +320,24 @@ class WhatsAppWebhookController extends Controller
             return;
         }
 
+        // Phase 14 — purely an optimization, same reasoning as the credit
+        // check below: skips queuing a job that would only immediately
+        // no-op. The job re-checks this itself too — see
+        // ProcessWhatsAppAiAgentMessage::process() and Tenant::isAiPaused()'s
+        // docblock.
+        if (Tenant::aiPauseColumnsReady() && Tenant::withoutGlobalScopes()->where('id', $tenantId)->value('ai_paused_at') !== null) {
+            return;
+        }
+
         if (! app(AiCreditService::class)->hasCredit($tenantId)) {
+            return;
+        }
+
+        // Phase 13 — purely an optimization, same reasoning as the credit
+        // check above: skips queuing a job (and writing its 'pending'
+        // tracking row) that would only immediately no-op. The job
+        // re-checks this itself too — see ProcessWhatsAppAiAgentMessage::process().
+        if (app(AiHandoffService::class)->isActive($tenantId, 'whatsapp', $message->wa_id)) {
             return;
         }
 

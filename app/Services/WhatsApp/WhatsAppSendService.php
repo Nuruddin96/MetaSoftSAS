@@ -46,7 +46,13 @@ class WhatsAppSendService
         $this->base = 'https://graph.facebook.com/'.config('whatsapp.graph_version');
     }
 
-    public function sendText(Tenant $tenant, string $to, string $text): WhatsAppSendResult
+    /**
+     * @param  string  $sentBy  'human' (default — every existing caller, e.g.
+     *                          Tenant\WhatsAppInboxController::reply(), needs no change) or 'ai' —
+     *                          see database/sql/chunk37.sql and WhatsAppMessage::sentByColumnReady().
+     *                          Only App\Jobs\ProcessWhatsAppAiAgentMessage ever passes 'ai'.
+     */
+    public function sendText(Tenant $tenant, string $to, string $text, string $sentBy = 'human'): WhatsAppSendResult
     {
         $phoneNumber = $this->resolvePhoneNumber($tenant);
 
@@ -61,7 +67,8 @@ class WhatsAppSendService
             [
                 'message_type' => 'text',
                 'message_text' => $text,
-            ]
+            ],
+            $sentBy
         );
     }
 
@@ -74,7 +81,7 @@ class WhatsAppSendService
      * generic attachment.payload.url. No media-upload-endpoint support in
      * this phase — link-based sending only.
      */
-    public function sendMedia(Tenant $tenant, string $to, string $type, string $link, ?string $caption = null, ?string $filename = null): WhatsAppSendResult
+    public function sendMedia(Tenant $tenant, string $to, string $type, string $link, ?string $caption = null, ?string $filename = null, string $sentBy = 'human'): WhatsAppSendResult
     {
         if (! in_array($type, self::MEDIA_TYPES, true)) {
             throw new \InvalidArgumentException("Unsupported WhatsApp media type: {$type}");
@@ -105,7 +112,8 @@ class WhatsAppSendService
                 'attachment_url' => $link,
                 'attachment_type' => $type,
                 'attachment_name' => $filenameApplies ? $filename : null,
-            ]
+            ],
+            $sentBy
         );
     }
 
@@ -127,7 +135,7 @@ class WhatsAppSendService
      * @param  array  $body  The Cloud API message-type-specific body (everything after messaging_product/to).
      * @param  array  $baseAttributes  message_type/message_text/attachment_* — merged with the tenant/phone/wa_id/direction/status fields common to every send.
      */
-    protected function send(WhatsAppPhoneNumber $phoneNumber, array $body, string $to, array $baseAttributes): WhatsAppSendResult
+    protected function send(WhatsAppPhoneNumber $phoneNumber, array $body, string $to, array $baseAttributes, string $sentBy = 'human'): WhatsAppSendResult
     {
         $messageAttributes = array_merge([
             'tenant_id' => $phoneNumber->tenant_id,
@@ -143,6 +151,14 @@ class WhatsAppSendService
             // for why these two columns are deliberately separate.
             'status' => 'contacted',
         ], $baseAttributes);
+
+        // Gated exactly like MessengerMessage's sent_by write — see
+        // WhatsAppMessage::sentByColumnReady()'s docblock. Unconditionally
+        // adding this key would throw "Unknown column" on any tenant
+        // database that hasn't imported chunk37.sql yet.
+        if (WhatsAppMessage::sentByColumnReady()) {
+            $messageAttributes['sent_by'] = $sentBy;
+        }
 
         $token = $phoneNumber->businessAccount?->user_access_token;
 

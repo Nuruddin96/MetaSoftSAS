@@ -42,13 +42,25 @@ class AiWhatsAppMessageJob extends Model
      * for the single execution that wins the pending -> processing
      * transition; a retried/duplicate job execution sees 0 affected rows
      * and must stop without generating or sending anything.
+     *
+     * Phase 15 — mirrors AiAgentMessageJob::claim()'s stale-reclaim
+     * addition one-for-one; see that method's docblock for the full
+     * "worker died mid-flight, would otherwise drop this message
+     * forever" reasoning.
      */
     public static function claim(int $tenantId, int $whatsAppMessageId): bool
     {
+        $staleBefore = now()->subSeconds((int) config('queue.connections.database.retry_after', 90));
+
         return static::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('whatsapp_message_id', $whatsAppMessageId)
-            ->where('status', 'pending')
+            ->where(function ($query) use ($staleBefore) {
+                $query->where('status', 'pending')
+                    ->orWhere(function ($stale) use ($staleBefore) {
+                        $stale->where('status', 'processing')->where('updated_at', '<', $staleBefore);
+                    });
+            })
             ->update(['status' => 'processing', 'updated_at' => now()]) === 1;
     }
 

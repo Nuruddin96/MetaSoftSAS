@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class Tenant extends Model
@@ -13,6 +14,7 @@ class Tenant extends Model
         'trial_ends_at' => 'datetime',
         'subscription_ends_at' => 'datetime',
         'custom_domain_dns_verified_at' => 'datetime',
+        'ai_paused_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -66,6 +68,29 @@ class Tenant extends Model
     public function aiCreditAccount()
     {
         return $this->hasOne(AiCreditAccount::class);
+    }
+
+    /**
+     * True once database/sql/chunk39.sql's ai_paused_at/
+     * ai_paused_by_super_admin_id/ai_paused_reason columns exist — same
+     * additive-column guard as MessengerMessage::sentByColumnReady().
+     * Used to gate both reading isAiPaused() and writing a pause/resume
+     * from App\Http\Controllers\SuperAdmin\AiCreditController.
+     */
+    public static function aiPauseColumnsReady(): bool
+    {
+        return Schema::hasColumn('tenants', 'ai_paused_at');
+    }
+
+    /**
+     * Phase 14 — a super-admin-imposed pause, independent of (checked
+     * ALONGSIDE, never instead of) the tenant's own ai_agent_enabled
+     * toggle — see chunk39.sql's docblock for why this is a separate
+     * column rather than reusing either that toggle or tenants.status.
+     */
+    public function isAiPaused(): bool
+    {
+        return self::aiPauseColumnsReady() && $this->ai_paused_at !== null;
     }
 
     /** Plan limit check, e.g. isWithinLimit('max_products', $count) */

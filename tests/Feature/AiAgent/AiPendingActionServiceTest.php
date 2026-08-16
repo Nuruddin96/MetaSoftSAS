@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\AiAgent;
 
+use App\Models\AiPendingAction;
 use App\Services\AI\AiPendingActionService;
 use App\Services\AI\Tools\AiMutatingTool;
 use App\Services\AI\Tools\AiToolRegistry;
@@ -189,6 +190,37 @@ class AiPendingActionServiceTest extends TestCase
         $this->service($tool)->confirm($action->fresh());
 
         $this->assertSame(1, $calls, 'a second confirm attempt on an already-confirmed action must never re-execute the mutation');
+    }
+
+    public function test_a_genuine_concurrent_double_confirm_only_executes_the_tool_once(): void
+    {
+        // Phase 15 — the actual race the sequential test above does NOT
+        // cover: two requests (a double-click, or a browser retrying a
+        // slow response) that each independently loaded their OWN copy
+        // of $action BEFORE either had committed anything. Simulated
+        // here by loading two separate model instances of the exact same
+        // row, both still genuinely 'pending' in the database, then
+        // calling confirm() on each in turn WITHOUT refreshing between —
+        // exactly what two concurrent PHP-FPM workers handling the same
+        // double-click would each see.
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $calls = 0;
+        $tool = $this->fakeMutatingTool(function () use (&$calls) {
+            $calls++;
+
+            return ['success' => true, 'message' => 'ok'];
+        });
+
+        $action = $this->service($tool)->propose($tenant->id, $user->id, null, 'fake_mutating_tool', 'summary', []);
+        $sameActionLoadedIndependently = AiPendingAction::withoutGlobalScopes()->find($action->id);
+
+        $firstResult = $this->service($tool)->confirm($action);
+        $secondResult = $this->service($tool)->confirm($sameActionLoadedIndependently);
+
+        $this->assertSame(1, $calls, 'a genuine concurrent double-confirm must still only ever execute the mutating tool once');
+        $this->assertTrue($firstResult['success']);
+        $this->assertFalse($secondResult['success'], 'the loser of the race must be told the action was already processed, not silently re-run it');
     }
 
     public function test_reject_marks_pending_as_rejected_and_never_executes_the_tool(): void

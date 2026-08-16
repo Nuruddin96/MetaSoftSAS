@@ -11,7 +11,9 @@ use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\Order;
 use App\Models\StoreSetting;
+use App\Models\Tenant;
 use App\Services\AI\AiCreditService;
+use App\Services\AI\AiHandoffService;
 use App\Services\Messenger\CustomerInfoExtractor;
 use App\Services\Messenger\FacebookMessengerCustomerService;
 use App\Services\Messenger\MessengerApi;
@@ -325,7 +327,16 @@ class MessengerWebhookController extends Controller
             ]);
         }
 
-        if ($message && $text) {
+        // Phase 9 — an image with no caption is now dispatchable too (real
+        // vision understanding, see AiAgentService/ProcessAiAgentMessage::
+        // resolveImageUrl()), not just plain text. Phase 10 — same for a
+        // voice message (ProcessAiAgentMessage::transcribeAndPersist()
+        // converts it to text before anything else runs). Every other
+        // attachment type (video/file) still needs real caption text to
+        // dispatch at all — those stay text-only placeholders in history.
+        $dispatchable = $text || ($attachmentUrl && in_array($attachmentType, ['image', 'audio'], true));
+
+        if ($message && $dispatchable) {
             try {
                 $this->maybeDispatchAiAgent($owner->tenant_id, $message);
             } catch (\Throwable $e) {
@@ -386,7 +397,24 @@ class MessengerWebhookController extends Controller
             return;
         }
 
+        // Phase 14 — purely an optimization, same reasoning as the credit
+        // check below: skips queuing a job that would only immediately
+        // no-op. The job re-checks this itself too — see
+        // ProcessAiAgentMessage::process() and Tenant::isAiPaused()'s
+        // docblock.
+        if (Tenant::aiPauseColumnsReady() && Tenant::withoutGlobalScopes()->where('id', $tenantId)->value('ai_paused_at') !== null) {
+            return;
+        }
+
         if (! app(AiCreditService::class)->hasCredit($tenantId)) {
+            return;
+        }
+
+        // Phase 13 — purely an optimization, same reasoning as the credit
+        // check above: skips queuing a job (and writing its 'pending'
+        // tracking row) that would only immediately no-op. The job
+        // re-checks this itself too — see ProcessAiAgentMessage::process().
+        if (app(AiHandoffService::class)->isActive($tenantId, 'messenger', $message->sender_psid)) {
             return;
         }
 

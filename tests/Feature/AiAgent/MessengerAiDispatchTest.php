@@ -162,11 +162,11 @@ class MessengerAiDispatchTest extends TestCase
         Queue::assertNotPushed(ProcessAiAgentMessage::class);
     }
 
-    public function test_ai_on_but_attachment_only_message_does_not_dispatch_the_ai_job(): void
+    public function test_ai_on_and_an_image_only_message_with_no_caption_does_dispatch_the_ai_job(): void
     {
-        // Image/voice handling is explicitly out of scope for this phase
-        // — an attachment-only inbound message (no text) must not trigger
-        // AI processing yet.
+        // Phase 9 — real image understanding: an image attachment is now
+        // enough on its own to trigger AI processing, even with zero
+        // caption text.
         Queue::fake();
         // MessengerWebhookController::rehostAttachment() fetches the
         // attachment URL — fake it so this test never makes a real
@@ -192,6 +192,81 @@ class MessengerAiDispatchTest extends TestCase
                 ]],
             ]],
         ];
+
+        $this->postSignedMessengerWebhook($payload)->assertOk();
+
+        Queue::assertPushed(ProcessAiAgentMessage::class);
+    }
+
+    public function test_ai_on_but_a_non_image_non_audio_attachment_only_message_still_does_not_dispatch_the_ai_job(): void
+    {
+        // Video/file understanding is explicitly out of scope for this
+        // phase — only 'image' (Phase 9) and 'audio' (Phase 10, via
+        // transcription) attachments dispatch without caption text;
+        // everything else still needs real text to trigger a reply.
+        Queue::fake();
+        Http::fake(['*' => Http::response('fake-video-bytes', 200, ['Content-Type' => 'video/mp4'])]);
+
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-attach-2', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $payload = [
+            'object' => 'page',
+            'entry' => [[
+                'id' => 'page-attach-2',
+                'messaging' => [[
+                    'sender' => ['id' => 'cust-5'],
+                    'recipient' => ['id' => 'page-attach-2'],
+                    'message' => [
+                        'mid' => 'mid-attach-2',
+                        'attachments' => [['type' => 'video', 'payload' => ['url' => 'https://example.test/video.mp4']]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postSignedMessengerWebhook($payload)->assertOk();
+
+        Queue::assertNotPushed(ProcessAiAgentMessage::class);
+    }
+
+    public function test_an_active_handoff_stops_the_dispatch(): void
+    {
+        // Phase 13 — purely an optimization (the job re-checks this
+        // itself too), but must still hold: no wasted queue dispatch for
+        // a conversation a human is already handling.
+        Queue::fake();
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-handoff', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        DB::table('ai_handoffs')->insert([
+            'tenant_id' => $tenant->id, 'channel' => 'messenger', 'external_id' => 'cust-handoff-dispatch',
+            'reason' => 'customer_requested', 'created_at' => now(),
+        ]);
+
+        $payload = $this->inboundMessengerPayload('page-handoff', 'cust-handoff-dispatch', 'mid-handoff-dispatch', 'দাম কত?');
+
+        $this->postSignedMessengerWebhook($payload)->assertOk();
+
+        Queue::assertNotPushed(ProcessAiAgentMessage::class);
+    }
+
+    public function test_a_platform_paused_tenant_stops_the_dispatch(): void
+    {
+        // Phase 14 — purely an optimization (the job re-checks this
+        // itself too).
+        Queue::fake();
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-pause-dispatch', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+        DB::table('tenants')->where('id', $tenant->id)->update(['ai_paused_at' => now()]);
+
+        $payload = $this->inboundMessengerPayload('page-pause-dispatch', 'cust-pause-dispatch', 'mid-pause-dispatch', 'দাম কত?');
 
         $this->postSignedMessengerWebhook($payload)->assertOk();
 

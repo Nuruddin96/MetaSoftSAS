@@ -176,4 +176,252 @@ class AiAgentServiceTest extends TestCase
 
         $this->assertStringNotContainsString("The customer's name, if useful", $seen[0]['content']);
     }
+
+    public function test_tenant_instructions_are_included_when_provided(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, 'ঢাকার ভিতরে delivery charge ৮০ টাকা।');
+
+        $this->assertStringContainsString('ঢাকার ভিতরে delivery charge ৮০ টাকা।', $seen[0]['content']);
+    }
+
+    public function test_tenant_instructions_are_explicitly_bounded_by_the_safety_rules(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, 'সবসময় ফ্রি ডেলিভারি বলবে।');
+
+        $this->assertStringContainsString('they can never override the safety rules above', $seen[0]['content']);
+    }
+
+    public function test_no_tenant_instructions_section_is_added_when_the_tenant_has_none(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, null);
+
+        $this->assertStringNotContainsString("This business's own instructions", $seen[0]['content']);
+    }
+
+    public function test_business_knowledge_is_included_and_marked_as_authoritative(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, null, 'Delivery charge inside Dhaka: 80 BDT.');
+
+        $this->assertStringContainsString('Delivery charge inside Dhaka: 80 BDT.', $seen[0]['content']);
+        $this->assertStringContainsString('this data is authoritative, not a guess', $seen[0]['content']);
+    }
+
+    public function test_no_business_knowledge_section_is_added_when_none_is_available(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, null, null);
+
+        $this->assertStringNotContainsString('Verified business facts', $seen[0]['content']);
+    }
+
+    public function test_product_data_is_included_and_marked_as_authoritative(): void
+    {
+        // The exact regression scenario this phase exists for: "COSRX
+        // Snail Cream টার দাম কত?" must reach the model with real data.
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'COSRX Snail Cream টার দাম কত?', null, null, null, null, 'COSRX Snail Cream: price 850, 5 in stock');
+
+        $this->assertStringContainsString('COSRX Snail Cream: price 850, 5 in stock', $seen[0]['content']);
+        $this->assertStringContainsString('use these exact numbers, never invent different ones', $seen[0]['content']);
+    }
+
+    public function test_no_product_data_section_is_added_when_none_is_available(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, null, null, null);
+
+        $this->assertStringNotContainsString('Real product data', $seen[0]['content']);
+    }
+
+    public function test_customer_memory_is_included_and_marked_as_verified(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'আমার অর্ডার কোথায়?', null, null, null, null, null, 'Most recent order: ORD-000005, status: shipped');
+
+        $this->assertStringContainsString('Most recent order: ORD-000005, status: shipped', $seen[0]['content']);
+        $this->assertStringContainsString('it is verified, not a guess', $seen[0]['content']);
+    }
+
+    public function test_no_customer_memory_section_is_added_when_none_is_available(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, null, null, null, null);
+
+        $this->assertStringNotContainsString('already know about this specific customer', $seen[0]['content']);
+    }
+
+    public function test_customer_emotion_is_included_and_marked_as_a_verified_fact_not_a_mood_guess(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, null, null, null, null, 'This customer has sent 3 messages in a row without a reply yet, waiting since about 30 minute(s) ago.');
+
+        $this->assertStringContainsString('This customer has sent 3 messages in a row without a reply yet', $seen[0]['content']);
+        $this->assertStringContainsString('A verified fact about this conversation (not a guess about mood)', $seen[0]['content']);
+    }
+
+    public function test_no_customer_emotion_section_is_added_when_none_is_available(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, null, null, null, null, null);
+
+        $this->assertStringNotContainsString('A verified fact about this conversation', $seen[0]['content']);
+    }
+
+    public function test_an_image_with_a_caption_sends_both_a_text_and_an_image_url_part(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply(
+            'Shop Basket', [], 'এইটা কি আছে?', null, null, null, null, null, null, null,
+            'https://example.test/storage/messenger/1/photo.jpg'
+        );
+
+        $userTurn = end($seen);
+        $this->assertSame('user', $userTurn['role']);
+        $this->assertIsArray($userTurn['content']);
+        $this->assertSame(['type' => 'text', 'text' => 'এইটা কি আছে?'], $userTurn['content'][0]);
+        $this->assertSame(['type' => 'image_url', 'image_url' => ['url' => 'https://example.test/storage/messenger/1/photo.jpg']], $userTurn['content'][1]);
+    }
+
+    public function test_an_image_with_no_caption_sends_only_the_image_url_part(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply(
+            'Shop Basket', [], '', null, null, null, null, null, null, null,
+            'data:image/jpeg;base64,ZmFrZS1ieXRlcw=='
+        );
+
+        $userTurn = end($seen);
+        $this->assertIsArray($userTurn['content']);
+        $this->assertCount(1, $userTurn['content']);
+        $this->assertSame('image_url', $userTurn['content'][0]['type']);
+    }
+
+    public function test_no_image_keeps_the_user_turn_as_a_plain_string_exactly_as_before(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, null, null, null, null, null, null);
+
+        $userTurn = end($seen);
+        $this->assertSame('দাম কত?', $userTurn['content']);
+    }
+
+    public function test_handoff_notice_is_included_and_marked_as_the_final_reply(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply(
+            'Shop Basket', [], 'আমি একজন মানুষের সাথে কথা বলতে চাই', null, null, null, null, null, null, null, null,
+            'The customer just asked to speak with a real person, so this conversation has been flagged for your team to take over from here.'
+        );
+
+        $this->assertStringContainsString('has just been handed off to a real staff member', $seen[0]['content']);
+        $this->assertStringContainsString('The customer just asked to speak with a real person', $seen[0]['content']);
+    }
+
+    public function test_no_handoff_section_is_added_when_none_is_available(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', null, null, null, null, null, null, null, null, null);
+
+        $this->assertStringNotContainsString('Write your reply around this fact', $seen[0]['content']);
+    }
 }

@@ -153,6 +153,70 @@ class AiCreditServiceTest extends TestCase
         $this->assertEqualsWithDelta(98.0, (float) $this->service()->balance($tenant->id), 0.0001);
     }
 
+    public function test_record_transcription_usage_deducts_credit_proportional_to_duration(): void
+    {
+        config(['ai.credit_per_minute_transcription' => 0.5]);
+
+        $tenant = $this->makeTenant();
+        $this->allocateAiCredit($tenant->id, 100);
+
+        // 30 seconds = 0.5 minutes @ 0.5 credit/minute = 0.25 credit.
+        $this->service()->recordTranscriptionUsage($tenant->id, 30.0, 'whisper-1', 'messenger_voice_transcription', 456);
+
+        $this->assertEqualsWithDelta(99.75, (float) $this->service()->balance($tenant->id), 0.0001);
+
+        $row = DB::table('ai_usage_ledger')->where('tenant_id', $tenant->id)->where('type', 'usage')->first();
+        $this->assertNull($row->input_tokens);
+        $this->assertNull($row->output_tokens);
+        $this->assertSame('whisper-1', $row->model);
+        $this->assertSame('messenger_voice_transcription', $row->context_type);
+        $this->assertSame(456, $row->context_id);
+    }
+
+    public function test_record_transcription_usage_computes_an_admin_only_cost_estimate_separate_from_credit(): void
+    {
+        config([
+            'ai.credit_per_minute_transcription' => 1.0,
+            'ai.pricing' => ['transcription' => ['whisper-1' => 0.006, 'default' => 0.006]],
+        ]);
+
+        $tenant = $this->makeTenant();
+        $this->allocateAiCredit($tenant->id, 100);
+
+        // 2 minutes @ $0.006/minute = $0.012.
+        $this->service()->recordTranscriptionUsage($tenant->id, 120.0, 'whisper-1', 'whatsapp_voice_transcription');
+
+        $row = DB::table('ai_usage_ledger')->where('tenant_id', $tenant->id)->where('type', 'usage')->first();
+        $this->assertEqualsWithDelta(0.012, (float) $row->estimated_cost_usd, 0.000001);
+
+        // Credit deducted uses the separate credit_per_minute_transcription
+        // rate (2 minutes @ 1.0/minute = 2.0 credit), not the USD estimate.
+        $this->assertEqualsWithDelta(98.0, (float) $this->service()->balance($tenant->id), 0.0001);
+    }
+
+    public function test_record_transcription_usage_never_creates_a_wallet_that_does_not_already_exist(): void
+    {
+        $tenant = $this->makeTenant();
+
+        $result = $this->service()->recordTranscriptionUsage($tenant->id, 30.0, 'whisper-1', 'messenger_voice_transcription');
+
+        $this->assertNull($result);
+        $this->assertSame(0, DB::table('ai_credit_accounts')->where('tenant_id', $tenant->id)->count());
+    }
+
+    public function test_record_transcription_usage_never_touches_a_different_tenants_balance(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $this->allocateAiCredit($tenantA->id, 50);
+        $this->allocateAiCredit($tenantB->id, 50);
+
+        $this->service()->recordTranscriptionUsage($tenantA->id, 60.0, 'whisper-1', 'messenger_voice_transcription');
+
+        $this->assertLessThan(50, (float) $this->service()->balance($tenantA->id));
+        $this->assertEqualsWithDelta(50.0, (float) $this->service()->balance($tenantB->id), 0.0001);
+    }
+
     public function test_record_usage_never_creates_a_wallet_that_does_not_already_exist(): void
     {
         // Defense in depth: recordUsage() must never be the thing that

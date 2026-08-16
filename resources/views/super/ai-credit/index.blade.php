@@ -10,6 +10,7 @@
         <option value="">সব</option>
         <option value="has_credit" @selected(request('status') === 'has_credit')>ক্রেডিট আছে</option>
         <option value="exhausted" @selected(request('status') === 'exhausted')>ক্রেডিট শেষ / বরাদ্দ হয়নি</option>
+        <option value="paused" @selected(request('status') === 'paused')>প্ল্যাটফর্ম থেকে পজ করা</option>
     </select>
 </form>
 
@@ -19,6 +20,7 @@
             <th class="px-4 py-3">টেনেন্ট</th>
             <th class="px-4 py-3">প্ল্যান</th>
             <th class="px-4 py-3">ব্যালেন্স</th>
+            <th class="px-4 py-3">AI Agent</th>
         </tr></thead>
         <tbody>
         @forelse ($tenants as $t)
@@ -34,9 +36,14 @@
                         <span class="font-semibold">{{ number_format($t->aiCreditAccount->balance, 2) }}</span>
                     @endif
                 </td>
+                <td class="px-4 py-3">
+                    @if ($t->isAiPaused())
+                        <span class="px-2 py-1 rounded text-xs bg-red-50 text-red-600 font-semibold">⛔ পজড</span>
+                    @endif
+                </td>
             </tr>
         @empty
-            <tr><td colspan="3" class="px-4 py-12 text-center text-mute">কোনো টেনেন্ট নেই।</td></tr>
+            <tr><td colspan="4" class="px-4 py-12 text-center text-mute">কোনো টেনেন্ট নেই।</td></tr>
         @endforelse
         </tbody>
     </table>

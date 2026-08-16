@@ -163,6 +163,10 @@ Route::domain(config('app.central_domain'))->group(function () {
                 Route::get('{tenant}', [SuperAiCreditController::class, 'show'])->name('show');
                 Route::post('{tenant}/allocate', [SuperAiCreditController::class, 'allocate'])->name('allocate');
                 Route::post('{tenant}/adjustments', [SuperAiCreditController::class, 'adjust'])->name('adjustments.store');
+                // Phase 14 — platform-level AI Agent pause, independent of
+                // credit — see Tenant::isAiPaused()'s docblock.
+                Route::post('{tenant}/pause-ai', [SuperAiCreditController::class, 'pauseAi'])->name('pause-ai');
+                Route::post('{tenant}/resume-ai', [SuperAiCreditController::class, 'resumeAi'])->name('resume-ai');
             });
 
             Route::get('source/products', [SourceProductController::class, 'index'])->name('source.products');
@@ -350,6 +354,7 @@ $tenantRoutes = function () {
             Route::get('messenger/{psid}', [MessengerInboxController::class, 'show'])->name('messenger.show');
             Route::post('messenger/{psid}/reply', [MessengerInboxController::class, 'reply'])->name('messenger.reply');
             Route::post('messenger/{psid}/status', [MessengerInboxController::class, 'updateStatus'])->name('messenger.status');
+            Route::post('messenger/{psid}/resume-ai', [MessengerInboxController::class, 'resumeAi'])->name('messenger.resume-ai');
 
             // Advertising / Ads Billing — read-only for tenants, gated by
             // AdvertisingBalanceService::isEnabled() inside the controller
@@ -411,6 +416,7 @@ $tenantRoutes = function () {
                 Route::get('whatsapp/{waId}', [WhatsAppInboxController::class, 'show'])->name('whatsapp.show');
                 Route::post('whatsapp/{waId}/reply', [WhatsAppInboxController::class, 'reply'])->name('whatsapp.reply');
                 Route::post('whatsapp/{waId}/status', [WhatsAppInboxController::class, 'updateStatus'])->name('whatsapp.status');
+                Route::post('whatsapp/{waId}/resume-ai', [WhatsAppInboxController::class, 'resumeAi'])->name('whatsapp.resume-ai');
             });
         });
     });

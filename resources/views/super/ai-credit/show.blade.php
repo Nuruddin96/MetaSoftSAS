@@ -30,6 +30,48 @@
     </div>
 @endif
 
+{{-- Phase 14 — read-only view of the tenant's OWN toggles, purely for
+     diagnosing "why isn't this tenant's AI replying" without needing to
+     open their panel Settings page separately. --}}
+<div class="bg-white rounded-xl border border-ink/5 p-5 mb-6">
+    <p class="font-bold text-sm mb-3">টেনেন্টের নিজস্ব AI Agent সেটিংস (শুধু দেখার জন্য)</p>
+    <div class="grid grid-cols-3 gap-3 text-sm">
+        <div class="flex items-center gap-2">
+            <span>{{ $toggles['ai_agent_enabled'] ? '✅' : '⛔' }}</span>
+            <span class="text-mute text-xs">মাস্টার AI Agent</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span>{{ $toggles['messenger_ai_auto_reply_enabled'] ? '✅' : '⛔' }}</span>
+            <span class="text-mute text-xs">Messenger অটো-রিপ্লাই</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span>{{ $toggles['whatsapp_ai_auto_reply_enabled'] ? '✅' : '⛔' }}</span>
+            <span class="text-mute text-xs">WhatsApp অটো-রিপ্লাই</span>
+        </div>
+    </div>
+</div>
+
+{{-- Phase 14 — platform-level pause, independent of the tenant's own
+     toggles above and independent of credit. --}}
+<div class="rounded-xl border p-5 mb-6 {{ $tenant->isAiPaused() ? 'border-red-200 bg-red-50' : 'border-ink/5 bg-white' }}">
+    @if ($tenant->isAiPaused())
+        <p class="font-bold text-sm mb-1 text-red-800">⛔ AI Agent প্ল্যাটফর্ম থেকে পজ করা আছে</p>
+        <p class="text-xs text-red-700 mb-3">কারণ: {{ $tenant->ai_paused_reason }}</p>
+        <form method="POST" action="{{ route('super.ai-credit.resume-ai', $tenant) }}">
+            @csrf
+            <button class="py-2 px-4 rounded-lg bg-leaf text-white font-semibold text-sm hover:bg-leafdk">আবার চালু করুন</button>
+        </form>
+    @else
+        <p class="font-bold text-sm mb-3">🛑 জরুরি প্ল্যাটফর্ম পজ</p>
+        <p class="text-xs text-mute mb-3">টেনেন্টের নিজের সেটিংস/ক্রেডিট স্পর্শ না করেই এই টেনেন্টের AI Agent সম্পূর্ণভাবে বন্ধ করুন (Messenger ও WhatsApp — দুই চ্যানেলেই)।</p>
+        <form method="POST" action="{{ route('super.ai-credit.pause-ai', $tenant) }}" class="flex gap-2">
+            @csrf
+            <input name="reason" required placeholder="কারণ (আবশ্যক)" class="flex-1 rounded-lg border border-ink/15 px-3 py-2 text-sm">
+            <button class="py-2 px-4 rounded-lg bg-red-600 text-white font-semibold text-sm hover:bg-red-700 shrink-0">পজ করুন</button>
+        </form>
+    @endif
+</div>
+
 <div class="grid lg:grid-cols-3 gap-6">
     <div class="lg:col-span-2 space-y-6">
         <div class="bg-white rounded-xl border border-ink/5 overflow-hidden">

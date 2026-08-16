@@ -117,6 +117,30 @@ class AiConversationStyleServiceTest extends TestCase
         $this->assertSame(2, substr_count($examples, 'Customer:'));
     }
 
+    public function test_building_the_style_profile_never_does_a_query_per_candidate_reply(): void
+    {
+        // Phase 17 — regression guard for the N+1 this class used to have:
+        // one extra query PER candidate human reply to find its preceding
+        // customer message. With style_examples_max=6 (default), the old
+        // code made up to 1 + 18 = 19 queries; the fix batches the
+        // "preceding message" lookup into a single query regardless of
+        // how many distinct conversations are involved.
+        config(['ai.style_examples_max' => 6]);
+        $tenant = $this->makeTenant();
+
+        for ($i = 1; $i <= 15; $i++) {
+            $this->seedMessage($tenant->id, "psid-query-{$i}", 'in', "প্রশ্ন {$i}", createdAtOffsetSeconds: $i * 10);
+            $this->seedMessage($tenant->id, "psid-query-{$i}", 'out', "উত্তর {$i}", 'human', createdAtOffsetSeconds: $i * 10 + 5);
+        }
+
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+        app(AiConversationStyleService::class)->messengerStyleExamples($tenant->id);
+        $queryCount = count(\Illuminate\Support\Facades\DB::getQueryLog());
+        \Illuminate\Support\Facades\DB::disableQueryLog();
+
+        $this->assertLessThanOrEqual(5, $queryCount, 'building the style profile must stay a small, constant number of queries regardless of how many distinct conversations are candidates');
+    }
+
     public function test_truncates_an_unusually_long_historical_reply(): void
     {
         config(['ai.style_example_max_chars' => 30]);

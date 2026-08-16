@@ -67,6 +67,22 @@ class MessengerApiTest extends TestCase
         $this->assertSame('invalid recipient', $result['error']['message']);
     }
 
+    public function test_send_typing_on_posts_the_correct_sender_action_shape(): void
+    {
+        Http::fake(['*/me/messages*' => Http::response([])]);
+
+        (new MessengerApi)->sendTypingOn('psid-42', 'tok');
+
+        Http::assertSent(function ($request) {
+            $body = json_decode((string) $request->body(), true);
+
+            return $request->method() === 'POST'
+                && $body['recipient']['id'] === 'psid-42'
+                && $body['sender_action'] === 'typing_on'
+                && ! isset($body['message']);
+        });
+    }
+
     public function test_get_profile_uses_the_configured_graph_api_version_and_token(): void
     {
         config(['facebook.graph_version' => 'v26.0']);

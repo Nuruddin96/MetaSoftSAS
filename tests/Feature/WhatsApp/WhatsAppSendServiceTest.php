@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\WhatsApp;
 
-use App\Models\Tenant;
 use App\Models\WhatsAppBusinessAccount;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
@@ -53,6 +52,38 @@ class WhatsAppSendServiceTest extends WhatsAppFeatureTestCase
         $this->assertDatabaseHas('whatsapp_messages', [
             'wamid' => 'wamid.sent-text-1', 'delivery_status' => 'sent', 'direction' => 'out',
         ]);
+    }
+
+    /** Phase 7 — see chunk37.sql and AiConversationStyleService::whatsappStyleExamples()'s docblock for why this default matters. */
+    public function test_sent_by_defaults_to_human_when_not_specified(): void
+    {
+        [$tenant] = $this->connectTenant();
+        Http::fake(['*/messages' => Http::response(['messages' => [['id' => 'wamid.sentby-default']]])]);
+
+        $result = (new WhatsAppSendService)->sendText($tenant, '8801700000000', 'হ্যালো');
+
+        $this->assertSame('human', $result->message->sent_by);
+    }
+
+    public function test_sent_by_ai_is_persisted_when_explicitly_passed(): void
+    {
+        [$tenant] = $this->connectTenant();
+        Http::fake(['*/messages' => Http::response(['messages' => [['id' => 'wamid.sentby-ai']]])]);
+
+        $result = (new WhatsAppSendService)->sendText($tenant, '8801700000000', 'হ্যালো', sentBy: 'ai');
+
+        $this->assertSame('ai', $result->message->sent_by);
+    }
+
+    public function test_sent_by_ai_is_persisted_even_on_a_failed_send(): void
+    {
+        [$tenant] = $this->connectTenant();
+        Http::fake(['*/messages' => Http::response(['error' => ['code' => 131047, 'message' => 'rejected']], 400)]);
+
+        $result = (new WhatsAppSendService)->sendText($tenant, '8801700000000', 'হ্যালো', sentBy: 'ai');
+
+        $this->assertFalse($result->successful);
+        $this->assertSame('ai', $result->message->sent_by);
     }
 
     public function test_image_send_success_persists_attachment_fields_and_caption(): void

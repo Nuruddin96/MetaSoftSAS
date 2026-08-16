@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Models\WhatsAppBusinessAccount;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -212,6 +213,53 @@ class WhatsAppInboxTest extends WhatsAppFeatureTestCase
         $message->refresh();
         $this->assertSame('converted', $message->status);
         $this->assertSame('read', $message->delivery_status, 'business status update must never touch the WhatsApp delivery lifecycle column');
+    }
+
+    // --- handoff (Phase 13) -------------------------------------------------------------------------
+
+    public function test_resume_ai_resolves_the_active_handoff(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        WhatsAppMessage::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'wa_id' => '8801700000000', 'status' => 'new', 'direction' => 'in',
+        ]);
+        DB::table('ai_handoffs')->insert([
+            'tenant_id' => $tenant->id, 'channel' => 'whatsapp', 'external_id' => '8801700000000',
+            'reason' => 'customer_requested', 'created_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')
+            ->post($this->panelUrl($tenant, 'whatsapp/8801700000000/resume-ai'));
+
+        $response->assertRedirect();
+        $this->assertSame(
+            0,
+            DB::table('ai_handoffs')->where('tenant_id', $tenant->id)->whereNull('resolved_at')->count()
+        );
+    }
+
+    public function test_resume_ai_never_resolves_another_tenants_handoff(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+        WhatsAppMessage::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantB->id, 'wa_id' => '8801700000000', 'status' => 'new', 'direction' => 'in',
+        ]);
+        DB::table('ai_handoffs')->insert([
+            'tenant_id' => $tenantA->id, 'channel' => 'whatsapp', 'external_id' => '8801700000000',
+            'reason' => 'customer_requested', 'created_at' => now(),
+        ]);
+
+        $this->actingAs($userB, 'tenant')
+            ->post($this->panelUrl($tenantB, 'whatsapp/8801700000000/resume-ai'));
+
+        $this->assertSame(
+            1,
+            DB::table('ai_handoffs')->where('tenant_id', $tenantA->id)->whereNull('resolved_at')->count(),
+            "tenant B's resume action must never resolve tenant A's handoff"
+        );
     }
 
     // --- attachments ---------------------------------------------------------------------------------

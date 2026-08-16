@@ -5,6 +5,7 @@ namespace Tests\Feature\Facebook;
 use App\Models\MessengerMessage;
 use App\Models\Tenant;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Regression test for a live-production 500 on /panel/messenger:
@@ -67,6 +68,7 @@ class MessengerInboxRenderTest extends FacebookFeatureTestCase
      * Regression test for a live-production 500 on GET /panel/messenger/
      * {psid}: a JS comment inside show.blade.php's <script> block
      * literally contained the text "@once" ("... _thread.blade.php's
+     *
      * @once script block ..."). Blade scans the entire raw template text
      * for @directive patterns — including inside what looks like a plain
      * JS comment to a human reader — so that literal text compiled into a
@@ -215,5 +217,59 @@ class MessengerInboxRenderTest extends FacebookFeatureTestCase
 
         $this->assertNotNull($conversation);
         $this->assertSame('Rahim', $conversation['customer_name']);
+    }
+
+    // --- handoff (Phase 13) -------------------------------------------------------------------------
+
+    public function test_resume_ai_resolves_the_active_handoff(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+
+        MessengerMessage::create([
+            'sender_psid' => 'psid-resume-1', 'mid' => 'mid-resume-1', 'customer_name' => 'Test Customer',
+            'message_text' => 'আমি মানুষের সাথে কথা বলতে চাই', 'direction' => 'in', 'status' => 'new',
+        ]);
+        DB::table('ai_handoffs')->insert([
+            'tenant_id' => $tenant->id, 'channel' => 'messenger', 'external_id' => 'psid-resume-1',
+            'reason' => 'customer_requested', 'created_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')
+            ->post($this->panelUrl($tenant, 'messenger/psid-resume-1/resume-ai'));
+
+        $response->assertRedirect();
+        $this->assertSame(
+            0,
+            DB::table('ai_handoffs')->where('tenant_id', $tenant->id)->whereNull('resolved_at')->count()
+        );
+    }
+
+    public function test_resume_ai_never_resolves_another_tenants_handoff(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+
+        DB::table('ai_handoffs')->insert([
+            'tenant_id' => $tenantA->id, 'channel' => 'messenger', 'external_id' => 'psid-resume-2',
+            'reason' => 'customer_requested', 'created_at' => now(),
+        ]);
+
+        app()->instance('currentTenant', $tenantB);
+        MessengerMessage::create([
+            'sender_psid' => 'psid-resume-2', 'mid' => 'mid-resume-2', 'customer_name' => 'Other Tenant Customer',
+            'message_text' => 'হ্যালো', 'direction' => 'in', 'status' => 'new',
+        ]);
+
+        $this->actingAs($userB, 'tenant')
+            ->post($this->panelUrl($tenantB, 'messenger/psid-resume-2/resume-ai'));
+
+        $this->assertSame(
+            1,
+            DB::table('ai_handoffs')->where('tenant_id', $tenantA->id)->whereNull('resolved_at')->count(),
+            "tenant B's resume action must never resolve tenant A's handoff"
+        );
     }
 }

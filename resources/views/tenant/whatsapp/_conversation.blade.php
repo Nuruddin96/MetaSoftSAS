@@ -85,6 +85,8 @@
                 'linkedOrder' => $linkedOrder,
                 'matchedCustomer' => $matchedCustomer,
                 'newOrderCreateUrl' => route('tenant.orders.create', ['name' => $customer->customer_name, 'channel' => 'whatsapp']),
+                'handoffActive' => $handoffActive ?? false,
+                'resumeAiUrl' => route('tenant.whatsapp.resume-ai', $waId),
             ])
         </div>
     </div>

@@ -352,6 +352,16 @@
             <label class="flex items-center gap-2 text-sm mb-3">
                 <input type="checkbox" name="whatsapp_ai_auto_reply_enabled" value="1" @checked(($store['whatsapp_ai_auto_reply_enabled'] ?? '0') === '1')> WhatsApp অটো রিপ্লাই চালু
             </label>
+
+            <div class="border-t border-ink/10 pt-3 mb-3">
+                <label class="text-sm font-semibold block mb-1">AI-কে আপনার ব্যবসার বিষয়ে কী কী জানা দরকার?</label>
+                <p class="text-xs text-mute mb-2">যেমন — ব্যবহারের ধরন, delivery charge, পেমেন্ট মেথড, discount policy, কাস্টমারের সাথে কথা বলার ধরন, কোন জিনিস কখনো বলা যাবে না — যা লিখবেন AI সবসময় সেটা মাথায় রেখে রিপ্লাই দেবে। তবে এটা AI-এর মূল নিরাপত্তা নিয়ম override করতে পারবে না (যেমন — না জানা দাম বানিয়ে বলা)।</p>
+                <textarea name="ai_custom_instructions" rows="5" maxlength="2000"
+                    placeholder="উদাহরণ:&#10;আমাদের কাস্টমারদের সাথে বন্ধুসুলভভাবে কথা বলবে।&#10;ঢাকার ভিতরে delivery charge ৮০ টাকা, বাইরে ১৫০ টাকা।&#10;ক্যাশ অন ডেলিভারি আছে।&#10;কোনো discount নিজে থেকে দিবে না।&#10;কাস্টমার রাগ করলে argument করবে না।"
+                    class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">{{ $store['ai_custom_instructions'] ?? '' }}</textarea>
+                <p class="text-xs text-mute mt-1 text-right">সর্বোচ্চ ২০০০ অক্ষর</p>
+            </div>
+
             <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
         </form>
     </x-ui.collapsible-card>

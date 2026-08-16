@@ -40,6 +40,14 @@ class AiAgentSettingTest extends TestCase
             ->value('value') === '1';
     }
 
+    protected function valueOf(int $tenantId, string $key): ?string
+    {
+        return StoreSetting::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('key', $key)
+            ->value('value');
+    }
+
     public function test_new_tenants_have_ai_disabled_by_default(): void
     {
         $tenant = $this->makeTenant();
@@ -142,5 +150,86 @@ class AiAgentSettingTest extends TestCase
         $this->assertTrue($this->isEnabled($tenant->id));
         $this->assertTrue($this->isKeyEnabled($tenant->id, 'messenger_ai_auto_reply_enabled'));
         $this->assertFalse($this->isKeyEnabled($tenant->id, 'whatsapp_ai_auto_reply_enabled'));
+    }
+
+    // --- Phase 3: tenant AI instructions -----------------------------------------------------
+
+    public function test_tenant_can_save_custom_ai_instructions(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+
+        $this->actingAs($user, 'tenant')
+            ->post('/shop/'.$tenant->subdomain.'/panel/settings/ai-agent', [
+                'ai_agent_enabled' => '1',
+                'ai_custom_instructions' => 'ঢাকার ভিতরে delivery charge ৮০ টাকা।',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame('ঢাকার ভিতরে delivery charge ৮০ টাকা।', $this->valueOf($tenant->id, 'ai_custom_instructions'));
+    }
+
+    public function test_leading_and_trailing_whitespace_is_trimmed_on_save(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+
+        $this->actingAs($user, 'tenant')
+            ->post('/shop/'.$tenant->subdomain.'/panel/settings/ai-agent', [
+                'ai_custom_instructions' => "  বন্ধুসুলভভাবে কথা বলবে।  \n",
+            ])
+            ->assertRedirect();
+
+        $this->assertSame('বন্ধুসুলভভাবে কথা বলবে।', $this->valueOf($tenant->id, 'ai_custom_instructions'));
+    }
+
+    public function test_instructions_over_the_length_limit_are_rejected(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+
+        $response = $this->actingAs($user, 'tenant')
+            ->post('/shop/'.$tenant->subdomain.'/panel/settings/ai-agent', [
+                'ai_custom_instructions' => str_repeat('ক', 2001),
+            ]);
+
+        $response->assertSessionHasErrors('ai_custom_instructions');
+        $this->assertNull($this->valueOf($tenant->id, 'ai_custom_instructions'));
+    }
+
+    public function test_leaving_instructions_blank_saves_an_empty_value_not_an_error(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+
+        $this->actingAs($user, 'tenant')
+            ->post('/shop/'.$tenant->subdomain.'/panel/settings/ai-agent', ['ai_agent_enabled' => '1'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('', $this->valueOf($tenant->id, 'ai_custom_instructions'));
+    }
+
+    public function test_tenant_a_cannot_see_or_overwrite_tenant_bs_ai_instructions(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userA = $this->makeUser($tenantA->id);
+        StoreSetting::updateOrCreate(['tenant_id' => $tenantB->id, 'key' => 'ai_custom_instructions'], ['value' => 'তেন্যান্ট B এর গোপন নিয়ম']);
+
+        app()->instance('currentTenant', $tenantA);
+
+        $this->actingAs($userA, 'tenant')
+            ->post('/shop/'.$tenantA->subdomain.'/panel/settings/ai-agent', [
+                'ai_custom_instructions' => 'তেন্যান্ট A এর নিজস্ব নিয়ম',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame('তেন্যান্ট A এর নিজস্ব নিয়ম', $this->valueOf($tenantA->id, 'ai_custom_instructions'));
+        $this->assertSame('তেন্যান্ট B এর গোপন নিয়ম', $this->valueOf($tenantB->id, 'ai_custom_instructions'), "tenant B's instructions must be completely untouched by tenant A's request");
     }
 }

@@ -145,4 +145,41 @@ class SystemPromptContentTest extends TestCase
     {
         $this->assertStringContainsString('An old price or detail mentioned only in a past-conversation style example is NOT proof it\'s still true today', $this->prompt());
     }
+
+    public function test_instructs_resolving_vague_references_from_the_whole_conversation(): void
+    {
+        $prompt = $this->prompt();
+
+        foreach (['এটা', 'ওটা', 'সেটা', 'আগেরটা', 'this', 'that', 'it'] as $reference) {
+            $this->assertStringContainsString($reference, $prompt, "vague-reference guidance must name: {$reference}");
+        }
+        $this->assertStringContainsString('assume they mean whatever product/topic was most recently and clearly discussed', $prompt);
+    }
+
+    public function test_instructs_checking_context_before_asking_a_clarifying_question(): void
+    {
+        $prompt = $this->prompt();
+
+        $this->assertStringContainsString('Only ask a clarifying question after you\'ve actually checked whether the conversation already answers it', $prompt);
+        $this->assertStringContainsString('don\'t ask the customer to repeat something they already told you', $prompt);
+    }
+
+    public function test_explains_the_attachment_placeholder_honestly_without_claiming_understanding(): void
+    {
+        $prompt = $this->prompt();
+
+        $this->assertStringContainsString('[customer sent a photo]', $prompt);
+        $this->assertStringContainsString('cannot review a past image or hear audio', $prompt);
+    }
+
+    public function test_explains_that_an_image_on_the_current_message_is_genuinely_visible(): void
+    {
+        // Phase 9 — the prompt must be honest in the opposite direction
+        // too: a CURRENT image is real, not a placeholder, but must still
+        // never be used to invent a price/spec from how something looks.
+        $prompt = $this->prompt();
+
+        $this->assertStringContainsString('genuinely visible to you', $prompt);
+        $this->assertStringContainsString('never guess them from how something looks', $prompt);
+    }
 }
