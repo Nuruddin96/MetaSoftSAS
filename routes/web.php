@@ -369,6 +369,7 @@ $tenantRoutes = function () {
             Route::get('settings', [SettingController::class, 'index'])->name('settings');
             Route::post('settings/marketing', [SettingController::class, 'marketing'])->name('settings.marketing');
             Route::post('settings/domain', [SettingController::class, 'requestDomain'])->name('settings.domain');
+            Route::delete('settings/domain', [SettingController::class, 'cancelDomainRequest'])->name('settings.domain.cancel');
             Route::post('settings/messenger', [SettingController::class, 'messenger'])->name('settings.messenger');
             Route::post('settings/courier', [SettingController::class, 'courier'])->name('settings.courier');
             Route::post('settings/store', [SettingController::class, 'store'])->name('settings.store');

@@ -136,8 +136,8 @@
         ];
     @endphp
     @foreach ($stats as [$label, $value, $icon, $isRevenue, $iconTone, $link])
-        <a href="{{ $link }}" class="block rounded-[8px] lg:rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
-            <x-ui.card hoverable padding="none" radius="none" class="flex flex-col rounded-[8px] lg:rounded-card p-2.5 lg:p-6 active:scale-[0.97] h-full">
+        <a href="{{ $link }}" class="block rounded-[10px] lg:rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+            <x-ui.card hoverable padding="none" radius="none" class="flex flex-col rounded-[10px] lg:rounded-3xl shadow-sm p-2.5 lg:p-6 active:scale-[0.97] h-full">
                 <div class="order-1 w-7 h-7 lg:w-9 lg:h-9 rounded-[7px] lg:rounded-lg grid place-items-center {{ $iconTone }}">
                     <i data-lucide="{{ $icon }}" class="w-4 h-4 lg:w-[18px] lg:h-[18px]"></i>
                 </div>

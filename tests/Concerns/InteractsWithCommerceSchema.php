@@ -32,9 +32,23 @@ trait InteractsWithCommerceSchema
 {
     protected function setUpCommerceSchema(): void
     {
+        if (! Schema::hasTable('plans')) {
+            Schema::create('plans', function (Blueprint $table) {
+                $table->id();
+                $table->string('name', 100);
+                $table->string('slug', 100)->unique();
+                $table->decimal('price_monthly', 10, 2)->default(0);
+                $table->decimal('price_yearly', 10, 2)->default(0);
+                $table->boolean('allow_custom_domain')->default(false);
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
         if (! Schema::hasTable('tenants')) {
             Schema::create('tenants', function (Blueprint $table) {
                 $table->id();
+                $table->unsignedBigInteger('plan_id')->nullable();
                 $table->string('subdomain')->unique();
                 $table->string('store_name');
                 $table->string('status')->default('active');
@@ -42,6 +56,16 @@ trait InteractsWithCommerceSchema
                 $table->timestamp('subscription_ends_at')->nullable();
                 $table->string('custom_domain')->nullable();
                 $table->boolean('custom_domain_verified')->default(false);
+                // Domain *request* workflow — separate from the two columns
+                // above, which are the live/approved mapping ResolveCustomDomain
+                // middleware actually routes on (database/sql/chunk12.sql,
+                // chunk20.sql).
+                $table->string('custom_domain_requested')->nullable();
+                $table->string('custom_domain_request_status')->default('none');
+                $table->string('custom_domain_verification_token', 64)->nullable();
+                $table->timestamp('custom_domain_dns_verified_at')->nullable();
+                $table->string('primary_color')->nullable();
+                $table->string('secondary_color')->nullable();
                 $table->timestamps();
             });
         }
@@ -306,9 +330,11 @@ trait InteractsWithCommerceSchema
                 $table->unsignedBigInteger('category_id')->nullable();
                 $table->string('name');
                 $table->string('slug', 280)->nullable();
+                $table->text('description')->nullable();
                 $table->boolean('has_variants')->default(false);
                 $table->boolean('is_active')->default(true);
                 $table->boolean('is_featured')->default(false);
+                $table->string('thumbnail_path')->nullable();
                 $table->timestamps();
             });
         }
@@ -437,6 +463,14 @@ trait InteractsWithCommerceSchema
                 $table->timestamps();
             });
         }
+    }
+
+    protected function makePlan(array $attrs = []): \App\Models\Plan
+    {
+        return \App\Models\Plan::create(array_merge([
+            'name' => 'Test Plan', 'slug' => 'test-plan-'.Str::random(8),
+            'price_monthly' => 500, 'price_yearly' => 5000,
+        ], $attrs));
     }
 
     protected function makeTenant(array $attrs = []): Tenant

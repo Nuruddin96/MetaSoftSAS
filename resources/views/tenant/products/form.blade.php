@@ -76,31 +76,55 @@
             <p class="font-bold">ভ্যারিয়েন্ট ও দাম</p>
             <button type="button" onclick="addVariantRow()" class="text-sm text-leaf font-semibold hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">+ ভ্যারিয়েন্ট যোগ</button>
         </div>
-        <p class="text-xs text-mute mb-3">একটাই দাম হলে এক রো-ই রাখুন (নাম "Default")। সাইজ/কালার থাকলে প্রতিটার আলাদা রো — প্রতিটার জন্য আলাদা বারকোড অটো তৈরি হবে।</p>
+        <p class="text-xs text-mute mb-3">একটাই দাম হলে এক রো-ই রাখুন (নাম "Default")। সাইজ/কালার থাকলে প্রতিটার আলাদা রো — প্রতিটার জন্য আলাদা বারকোড অটো তৈরি হবে। অপশন (Size/Color) দিলে কাস্টমার প্রোডাক্ট পেজে আলাদাভাবে বেছে নিতে পারবে।</p>
 
-        <div id="variantRows" class="space-y-3">
+        <div id="variantRows" class="space-y-4">
             @php
                 $existing = $product
-                    ? $product->variants->map(fn ($v) => ['id' => $v->id, 'variant_name' => $v->variant_name, 'purchase_price' => $v->purchase_price, 'selling_price' => $v->selling_price, 'stock' => $v->inventory->sum('quantity')])->all()
-                    : [['id' => null, 'variant_name' => 'Default', 'purchase_price' => '', 'selling_price' => '', 'stock' => '']];
+                    ? $product->variants->map(fn ($v) => [
+                        'id' => $v->id, 'variant_name' => $v->variant_name,
+                        'purchase_price' => $v->purchase_price, 'selling_price' => $v->selling_price,
+                        'compare_at_price' => $v->compare_at_price, 'stock' => $v->inventory->sum('quantity'),
+                        'attr1_name' => array_key_first($v->attributes ?? []) ?? '',
+                        'attr1_value' => $v->attributes[array_key_first($v->attributes ?? []) ?? ''] ?? '',
+                        'attr2_name' => count($v->attributes ?? []) > 1 ? array_keys($v->attributes)[1] : '',
+                        'attr2_value' => count($v->attributes ?? []) > 1 ? array_values($v->attributes)[1] : '',
+                    ])->all()
+                    : [['id' => null, 'variant_name' => 'Default', 'purchase_price' => '', 'selling_price' => '', 'compare_at_price' => '', 'stock' => '', 'attr1_name' => '', 'attr1_value' => '', 'attr2_name' => '', 'attr2_value' => '']];
                 $existing = old('variants', $existing);
             @endphp
             @foreach ($existing as $i => $v)
-                <div class="flex items-start gap-2 variant-row">
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 min-w-0">
-                        <input type="hidden" name="variants[{{ $i }}][id]" value="{{ $v['id'] ?? '' }}">
-                        <input name="variants[{{ $i }}][variant_name]" value="{{ $v['variant_name'] ?? '' }}" placeholder="নাম (লাল / XL)"
-                               class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                        <input name="variants[{{ $i }}][purchase_price]" value="{{ $v['purchase_price'] ?? '' }}" type="number" step="0.01" min="0" placeholder="কেনা দাম"
-                               class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                        <input name="variants[{{ $i }}][selling_price]" value="{{ $v['selling_price'] ?? '' }}" type="number" step="0.01" min="0" required placeholder="বিক্রয় দাম *"
-                               class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                        @if (!$product)
-                            <input name="variants[{{ $i }}][stock]" value="{{ $v['stock'] ?? '' }}" type="number" min="0" placeholder="শুরুর স্টক"
+                <div class="flex items-start gap-2 variant-row border border-ink/10 rounded-lg p-3">
+                    <div class="flex-1 min-w-0 space-y-2">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <input type="hidden" name="variants[{{ $i }}][id]" value="{{ $v['id'] ?? '' }}">
+                            <input name="variants[{{ $i }}][variant_name]" value="{{ $v['variant_name'] ?? '' }}" placeholder="নাম (লাল / XL)"
                                    class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                        @else
-                            <span class="text-xs text-mute self-center">স্টক: {{ $v['stock'] ?? 0 }} (ইনভেন্টরি পেজে বদলান)</span>
-                        @endif
+                            <input name="variants[{{ $i }}][purchase_price]" value="{{ $v['purchase_price'] ?? '' }}" type="number" step="0.01" min="0" placeholder="কেনা দাম"
+                                   class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                            <input name="variants[{{ $i }}][selling_price]" value="{{ $v['selling_price'] ?? '' }}" type="number" step="0.01" min="0" required placeholder="বিক্রয় দাম (offer) *"
+                                   class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                            @if (!$product)
+                                <input name="variants[{{ $i }}][stock]" value="{{ $v['stock'] ?? '' }}" type="number" min="0" placeholder="শুরুর স্টক"
+                                       class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                            @else
+                                <span class="text-xs text-mute self-center">স্টক: {{ $v['stock'] ?? 0 }} (ইনভেন্টরি পেজে বদলান)</span>
+                            @endif
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <input name="variants[{{ $i }}][compare_at_price]" value="{{ $v['compare_at_price'] ?? '' }}" type="number" step="0.01" min="0" placeholder="আগের দাম (ঐচ্ছিক, offer থাকলে)"
+                                   class="rounded-lg border border-ink/15 px-3 py-2 text-sm md:col-span-2">
+                            <input name="variants[{{ $i }}][attr1_name]" value="{{ $v['attr1_name'] ?? '' }}" placeholder="অপশন ১ (যেমন Size)"
+                                   class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                            <input name="variants[{{ $i }}][attr1_value]" value="{{ $v['attr1_value'] ?? '' }}" placeholder="মান (যেমন M)"
+                                   class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 md:w-1/2">
+                            <input name="variants[{{ $i }}][attr2_name]" value="{{ $v['attr2_name'] ?? '' }}" placeholder="অপশন ২ (যেমন Color)"
+                                   class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                            <input name="variants[{{ $i }}][attr2_value]" value="{{ $v['attr2_value'] ?? '' }}" placeholder="মান (যেমন Blue)"
+                                   class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                        </div>
                     </div>
                     <button type="button" onclick="removeVariantRow(this)" class="shrink-0 text-red-600 text-sm px-2 py-2" aria-label="ভ্যারিয়েন্ট মুছুন">✕</button>
                 </div>
@@ -119,14 +143,25 @@
     function addVariantRow() {
         const wrap = document.getElementById('variantRows');
         const div = document.createElement('div');
-        div.className = 'flex items-start gap-2 variant-row';
+        div.className = 'flex items-start gap-2 variant-row border border-ink/10 rounded-lg p-3';
         div.innerHTML = `
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 min-w-0">
-                <input type="hidden" name="variants[${idx}][id]" value="">
-                <input name="variants[${idx}][variant_name]" placeholder="নাম (লাল / XL)" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                <input name="variants[${idx}][purchase_price]" type="number" step="0.01" min="0" placeholder="কেনা দাম" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                <input name="variants[${idx}][selling_price]" type="number" step="0.01" min="0" required placeholder="বিক্রয় দাম *" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
-                <input name="variants[${idx}][stock]" type="number" min="0" placeholder="শুরুর স্টক" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+            <div class="flex-1 min-w-0 space-y-2">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <input type="hidden" name="variants[${idx}][id]" value="">
+                    <input name="variants[${idx}][variant_name]" placeholder="নাম (লাল / XL)" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                    <input name="variants[${idx}][purchase_price]" type="number" step="0.01" min="0" placeholder="কেনা দাম" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                    <input name="variants[${idx}][selling_price]" type="number" step="0.01" min="0" required placeholder="বিক্রয় দাম (offer) *" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                    <input name="variants[${idx}][stock]" type="number" min="0" placeholder="শুরুর স্টক" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <input name="variants[${idx}][compare_at_price]" type="number" step="0.01" min="0" placeholder="আগের দাম (ঐচ্ছিক, offer থাকলে)" class="rounded-lg border border-ink/15 px-3 py-2 text-sm md:col-span-2">
+                    <input name="variants[${idx}][attr1_name]" placeholder="অপশন ১ (যেমন Size)" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                    <input name="variants[${idx}][attr1_value]" placeholder="মান (যেমন M)" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-3 md:w-1/2">
+                    <input name="variants[${idx}][attr2_name]" placeholder="অপশন ২ (যেমন Color)" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                    <input name="variants[${idx}][attr2_value]" placeholder="মান (যেমন Blue)" class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
+                </div>
             </div>
             <button type="button" onclick="removeVariantRow(this)" class="shrink-0 text-red-600 text-sm px-2 py-2" aria-label="ভ্যারিয়েন্ট মুছুন">✕</button>`;
         wrap.appendChild(div);

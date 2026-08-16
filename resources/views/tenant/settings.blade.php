@@ -281,10 +281,22 @@
                 <p><span class="text-mute">Host/Name:</span> @ ({{ $tenant->custom_domain_requested }})</p>
                 <p><span class="text-mute">Value:</span> {{ $domainTxtValue }}</p>
             </div>
-            <p class="text-sm">⏳ <b>{{ $tenant->custom_domain_requested }}</b> — DNS যাচাইয়ের অপেক্ষায়</p>
+            <div class="flex items-center justify-between gap-3">
+                <p class="text-sm">⏳ <b>{{ $tenant->custom_domain_requested }}</b> — DNS যাচাইয়ের অপেক্ষায়</p>
+                <form method="POST" action="{{ route('tenant.settings.domain.cancel') }}" onsubmit="return confirm('রিকোয়েস্টটি বাতিল করবেন? ভুল ডোমেইন দিলে বাতিল করে আবার সঠিকটি দিতে পারবেন।')">
+                    @csrf @method('DELETE')
+                    <button class="text-red-600 text-xs hover:underline rounded shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">বাতিল / পরিবর্তন করুন</button>
+                </form>
+            </div>
         @elseif ($tenant->custom_domain_request_status === 'dns_verified')
             <p class="text-xs text-leafdk mb-2">✅ DNS যাচাই সম্পন্ন হয়েছে।</p>
-            <p class="text-sm">⏳ <b>{{ $tenant->custom_domain_requested }}</b> — আমাদের টিম সেটআপ শেষ করলেই চালু হয়ে যাবে</p>
+            <div class="flex items-center justify-between gap-3">
+                <p class="text-sm">⏳ <b>{{ $tenant->custom_domain_requested }}</b> — আমাদের টিম সেটআপ শেষ করলেই চালু হয়ে যাবে</p>
+                <form method="POST" action="{{ route('tenant.settings.domain.cancel') }}" onsubmit="return confirm('রিকোয়েস্টটি বাতিল করবেন? ভুল ডোমেইন দিলে বাতিল করে আবার সঠিকটি দিতে পারবেন।')">
+                    @csrf @method('DELETE')
+                    <button class="text-red-600 text-xs hover:underline rounded shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">বাতিল / পরিবর্তন করুন</button>
+                </form>
+            </div>
         @else
             @if ($tenant->custom_domain_request_status === 'rejected')
                 <p class="text-xs text-red-600 mb-3">আপনার আগের রিকোয়েস্টটি বাতিল হয়েছে — আবার চেষ্টা করুন বা অ্যাডমিনের সাথে যোগাযোগ করুন।</p>

@@ -5,12 +5,31 @@
 
 @section('content')
 @php
+    $axes = $product->optionAxes();
     $firstVariant = $product->variants->first();
     $gallery = $product->images->isNotEmpty() ? $product->images : collect();
     $mainImage = $product->thumbnail_path ?: $gallery->first()?->image_path;
-    $discount = $firstVariant?->discountPercent();
+    $savings = $firstVariant?->savingsAmount();
     $stock = $firstVariant?->stockCount();
     $outOfStock = $firstVariant && $stock !== null && $stock <= 0;
+
+    // JS-side lookup map for the grouped Size/Color-style selectors — one
+    // entry per real variant, keyed by its exact attribute combination, so
+    // the script never has to guess a price/stock/offer for a combination
+    // that wasn't actually configured.
+    $variantMap = $product->variants->mapWithKeys(fn ($v) => [
+        collect($axes)->map(fn ($axis) => $v->attributes[$axis] ?? '')->implode('||') => [
+            'id' => $v->id,
+            'price' => number_format($v->selling_price),
+            'compare' => $v->compare_at_price ? number_format($v->compare_at_price) : null,
+            'savings' => $v->savingsAmount() ? number_format($v->savingsAmount()) : null,
+            'stock' => $v->stockCount(),
+            'threshold' => $v->low_stock_threshold,
+        ],
+    ]);
+    $axisValues = collect($axes)->mapWithKeys(fn ($axis) => [
+        $axis => $product->variants->pluck("attributes.$axis")->filter()->unique()->values(),
+    ]);
 @endphp
 
 @if ($mainImage)
@@ -53,21 +72,37 @@
         @endif
     </div>
 
-    <div class="pb-24 md:pb-0">
+    <div>
         <h1 class="font-disp font-bold text-2xl">{{ $product->name }}</h1>
 
         <form method="POST" action="{{ route('storefront.cart.add') }}" class="mt-5 space-y-4" id="buyForm">
             @csrf
-            @if ($product->variants->count() > 1)
+            <input type="hidden" name="variant_id" id="variantIdInput" value="{{ $firstVariant?->id }}">
+
+            @if ($axes)
+                {{-- Independent Size/Color-style selectors — each axis chosen separately, JS resolves the exact matching variant. --}}
+                @foreach ($axes as $axis)
+                    <div>
+                        <label class="text-sm font-medium">{{ $axis }} বাছাই করুন</label>
+                        <div class="mt-2 flex flex-wrap gap-2 axis-group" data-axis="{{ $axis }}">
+                            @foreach ($axisValues[$axis] as $i => $value)
+                                <button type="button"
+                                        class="axis-btn px-4 py-2 rounded-lg border border-ink/15 text-sm hover:border-brand {{ $i === 0 ? 'is-selected border-brand bg-brand/10 font-semibold' : '' }}"
+                                        data-axis="{{ $axis }}" data-value="{{ $value }}">{{ $value }}</button>
+                            @endforeach
+                        </div>
+                    </div>
+                @endforeach
+            @elseif ($product->variants->count() > 1)
                 <div>
                     <label class="text-sm font-medium">ভ্যারিয়েন্ট বাছাই করুন</label>
                     <div class="mt-2 flex flex-wrap gap-2" id="variantPick">
                         @foreach ($product->variants as $i => $v)
                             <label class="cursor-pointer">
-                                <input type="radio" name="variant_id" value="{{ $v->id }}" class="peer sr-only"
+                                <input type="radio" name="variant_id_flat" value="{{ $v->id }}" class="peer sr-only"
                                        data-price="{{ number_format($v->selling_price) }}"
                                        data-compare="{{ $v->compare_at_price ? number_format($v->compare_at_price) : '' }}"
-                                       data-discount="{{ $v->discountPercent() ?? '' }}"
+                                       data-savings="{{ $v->savingsAmount() ? number_format($v->savingsAmount()) : '' }}"
                                        data-stock="{{ $v->stockCount() }}"
                                        data-threshold="{{ $v->low_stock_threshold }}"
                                        @checked($i === 0)>
@@ -78,15 +113,13 @@
                         @endforeach
                     </div>
                 </div>
-            @else
-                <input type="hidden" name="variant_id" value="{{ $firstVariant?->id }}">
             @endif
 
             <div class="flex items-baseline gap-2 flex-wrap">
                 <p class="font-disp font-extrabold text-3xl text-brand" id="priceShow">{{ number_format($firstVariant?->selling_price ?? 0) }}৳</p>
-                <p class="text-base text-mute line-through {{ $discount ? '' : 'hidden' }}" id="compareShow">{{ $firstVariant?->compare_at_price ? number_format($firstVariant->compare_at_price) : '' }}৳</p>
-                <span class="bg-accent/20 text-ink text-xs font-bold px-2 py-0.5 rounded-md {{ $discount ? '' : 'hidden' }}" id="discountShow">-{{ $discount }}%</span>
+                <p class="text-base text-red-400 line-through {{ $savings ? '' : 'hidden' }}" id="compareShow">{{ $firstVariant?->compare_at_price ? number_format($firstVariant->compare_at_price) : '' }}৳</p>
             </div>
+            <p class="text-sm text-red-500 font-medium {{ $savings ? '' : 'hidden' }}" id="savingsShow">Save {{ $savings ? number_format($savings) : '' }} Tk</p>
 
             <p class="text-sm {{ $outOfStock ? 'text-red-600 font-semibold' : ($stock !== null && $stock <= ($firstVariant?->low_stock_threshold ?? 5) ? 'text-amber-600' : 'text-mute') }}" id="stockShow">
                 @if ($outOfStock) স্টক শেষ
@@ -97,14 +130,17 @@
 
             <div class="flex items-center gap-3">
                 <label class="text-sm">পরিমাণ</label>
-                <input type="number" name="qty" value="1" min="1" max="100"
-                       class="w-20 rounded-lg border border-ink/15 px-3 py-2 text-center">
+                <div class="inline-flex items-center border border-ink/15 rounded-lg overflow-hidden">
+                    <button type="button" id="qtyDown" class="w-9 h-9 grid place-items-center text-lg text-ink/60 hover:bg-ink/5" aria-label="কমান">−</button>
+                    <input name="qty" id="qtyInput" value="1" type="number" min="1" max="100"
+                           class="w-12 h-9 text-center border-x border-ink/15 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                    <button type="button" id="qtyUp" class="w-9 h-9 grid place-items-center text-lg text-ink/60 hover:bg-ink/5" aria-label="বাড়ান">+</button>
+                </div>
             </div>
 
-            <button id="buyBtnDesktop" class="hidden md:block w-full md:w-auto px-10 py-3.5 rounded-btn bg-brand text-white font-bold hover:opacity-90 disabled:opacity-50" @disabled($outOfStock)>
-                🛒 <span id="buyBtnDesktopLabel">{{ $outOfStock ? 'স্টক নেই' : 'অর্ডার করুন' }}</span>
+            <button id="buyBtn" class="w-full md:w-auto px-10 py-3.5 rounded-btn bg-brand text-white font-bold hover:opacity-90 disabled:opacity-50" @disabled($outOfStock)>
+                🛒 <span id="buyBtnLabel">{{ $outOfStock ? 'স্টক নেই' : 'অর্ডার করুন' }}</span>
             </button>
-            <p class="text-xs text-mute">ক্যাশ অন ডেলিভারি — রেজিস্ট্রেশন লাগবে না</p>
         </form>
 
         @if ($delivery['chargeInside'] || $delivery['chargeOutside'])
@@ -114,23 +150,86 @@
         @endif
 
         @if ($product->description)
-            <div class="mt-4 text-sm text-mute leading-relaxed whitespace-pre-line border-t border-ink/10 pt-5">{{ $product->description }}</div>
+            <div class="mt-4 bg-white rounded-card border border-ink/5 p-4 text-sm text-mute leading-relaxed whitespace-pre-line">{{ $product->description }}</div>
         @endif
     </div>
 </div>
 
-{{-- Mobile-only sticky buy bar — same form fields, submits the exact same #buyForm above, never a second/duplicate cart-add path. --}}
-<div class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-ink/10 px-4 py-3 flex items-center gap-3" style="padding-bottom: max(0.75rem, env(safe-area-inset-bottom));">
-    <div class="min-w-0">
-        <p class="font-bold text-brand text-lg leading-tight" id="priceShowMobile">{{ number_format($firstVariant?->selling_price ?? 0) }}৳</p>
-    </div>
-    <button type="submit" form="buyForm" id="buyBtnMobile" class="flex-1 px-6 py-3 rounded-btn bg-brand text-white font-bold disabled:opacity-50" @disabled($outOfStock)>
-        🛒 <span id="buyBtnMobileLabel">{{ $outOfStock ? 'স্টক নেই' : 'অর্ডার করুন' }}</span>
-    </button>
-</div>
-
 @push('scripts')
 <script>
+    const variantMap = @json($variantMap);
+    const axes = @json($axes);
+    const selected = {};
+    axes.forEach(axis => {
+        const firstBtn = document.querySelector(`.axis-btn[data-axis="${axis}"]`);
+        if (firstBtn) selected[axis] = firstBtn.dataset.value;
+    });
+
+    function applyVariantData(d) {
+        document.getElementById('variantIdInput').value = d.id;
+        document.getElementById('priceShow').textContent = d.price + '৳';
+
+        const compareEl = document.getElementById('compareShow');
+        const savingsEl = document.getElementById('savingsShow');
+        if (d.savings) {
+            compareEl.textContent = d.compare + '৳';
+            compareEl.classList.remove('hidden');
+            savingsEl.textContent = 'Save ' + d.savings + ' Tk';
+            savingsEl.classList.remove('hidden');
+        } else {
+            compareEl.classList.add('hidden');
+            savingsEl.classList.add('hidden');
+        }
+
+        const stock = parseInt(d.stock, 10);
+        const threshold = parseInt(d.threshold, 10) || 5;
+        const stockEl = document.getElementById('stockShow');
+        const outOfStock = stock <= 0;
+
+        if (outOfStock) {
+            stockEl.textContent = 'স্টক শেষ';
+            stockEl.className = 'text-sm text-red-600 font-semibold';
+        } else if (stock <= threshold) {
+            stockEl.textContent = 'মাত্র ' + stock + ' টি বাকি';
+            stockEl.className = 'text-sm text-amber-600';
+        } else {
+            stockEl.textContent = '✓ স্টকে আছে';
+            stockEl.className = 'text-sm text-mute';
+        }
+
+        const btn = document.getElementById('buyBtn');
+        const label = document.getElementById('buyBtnLabel');
+        btn.disabled = outOfStock;
+        label.textContent = outOfStock ? 'স্টক নেই' : 'অর্ডার করুন';
+    }
+
+    function updateFromAxes() {
+        const key = axes.map(a => selected[a] ?? '').join('||');
+        const d = variantMap[key];
+        if (d) applyVariantData(d);
+    }
+
+    document.querySelectorAll('.axis-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const axis = btn.dataset.axis;
+            document.querySelectorAll(`.axis-btn[data-axis="${axis}"]`).forEach(b =>
+                b.classList.remove('is-selected', 'border-brand', 'bg-brand/10', 'font-semibold'));
+            btn.classList.add('is-selected', 'border-brand', 'bg-brand/10', 'font-semibold');
+            selected[axis] = btn.dataset.value;
+            updateFromAxes();
+        });
+    });
+
+    // Flat (single-axis-free-text) variant picker — pre-existing behavior, unchanged.
+    document.querySelectorAll('#variantPick input').forEach(r =>
+        r.addEventListener('change', e => {
+            const d = e.target.dataset;
+            applyVariantData({
+                id: e.target.value, price: d.price, compare: d.compare, savings: d.savings,
+                stock: d.stock, threshold: d.threshold,
+            });
+        }));
+
     document.getElementById('buyForm')?.addEventListener('submit', () => {
         if (typeof fbq === 'function') {
             fbq('track', 'AddToCart', {
@@ -142,60 +241,19 @@
         }
     });
 
-    document.querySelectorAll('#variantPick input').forEach(r =>
-        r.addEventListener('change', e => {
-            const d = e.target.dataset;
-            document.getElementById('priceShow').textContent = d.price + '৳';
-            document.getElementById('priceShowMobile').textContent = d.price + '৳';
-
-            const compareEl = document.getElementById('compareShow');
-            const discountEl = document.getElementById('discountShow');
-            if (d.discount) {
-                compareEl.textContent = d.compare + '৳';
-                compareEl.classList.remove('hidden');
-                discountEl.textContent = '-' + d.discount + '%';
-                discountEl.classList.remove('hidden');
-            } else {
-                compareEl.classList.add('hidden');
-                discountEl.classList.add('hidden');
-            }
-
-            const stock = parseInt(d.stock, 10);
-            const threshold = parseInt(d.threshold, 10) || 5;
-            const stockEl = document.getElementById('stockShow');
-            const outOfStock = stock <= 0;
-
-            if (outOfStock) {
-                stockEl.textContent = 'স্টক শেষ';
-                stockEl.className = 'text-sm text-red-600 font-semibold';
-            } else if (stock <= threshold) {
-                stockEl.textContent = 'মাত্র ' + stock + ' টি বাকি';
-                stockEl.className = 'text-sm text-amber-600';
-            } else {
-                stockEl.textContent = '✓ স্টকে আছে';
-                stockEl.className = 'text-sm text-mute';
-            }
-
-            // Out-of-stock protection must actually block ordering, not
-            // just change the label — the desktop and mobile buy buttons
-            // are the same #buyForm submit, so both get disabled together.
-            [
-                ['buyBtnDesktop', 'buyBtnDesktopLabel'],
-                ['buyBtnMobile', 'buyBtnMobileLabel'],
-            ].forEach(([btnId, labelId]) => {
-                const btn = document.getElementById(btnId);
-                const label = document.getElementById(labelId);
-                if (!btn) return;
-                btn.disabled = outOfStock;
-                if (label) label.textContent = outOfStock ? 'স্টক নেই' : 'অর্ডার করুন';
-            });
-        }));
-
     document.querySelectorAll('.thumb-btn').forEach(btn =>
         btn.addEventListener('click', () => {
             const img = document.getElementById('mainImage');
             if (img) img.src = btn.dataset.src;
         }));
+
+    const qtyInput = document.getElementById('qtyInput');
+    document.getElementById('qtyDown')?.addEventListener('click', () => {
+        qtyInput.value = Math.max(1, (parseInt(qtyInput.value, 10) || 1) - 1);
+    });
+    document.getElementById('qtyUp')?.addEventListener('click', () => {
+        qtyInput.value = Math.min(100, (parseInt(qtyInput.value, 10) || 1) + 1);
+    });
 </script>
 @endpush
 @endsection

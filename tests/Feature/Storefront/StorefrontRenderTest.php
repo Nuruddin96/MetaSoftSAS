@@ -82,7 +82,7 @@ class StorefrontRenderTest extends TestCase
         $response->assertOk();
         $response->assertSee('450', false);
         $response->assertSee('600', false);
-        $response->assertSee('-25%', false);
+        $response->assertSee('Save 150 Tk', false);
         $response->assertSee('স্টকে আছে');
     }
 

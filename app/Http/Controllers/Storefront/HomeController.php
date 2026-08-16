@@ -17,6 +17,14 @@ class HomeController extends Controller
             'categories' => Category::where('is_active', 1)->limit(12)->get(),
             'featured' => Product::with('variants')->where('is_active', 1)
                 ->latest()->limit(8)->get(),
+            // Same "real, higher reference price" rule as ProductVariant::hasOffer() —
+            // never a fabricated discount, only variants with a genuine compare_at_price.
+            'offers' => Product::with(['variants' => fn ($q) => $q->where('is_active', 1), 'variants.inventory'])
+                ->where('is_active', 1)
+                ->whereHas('variants', fn ($q) => $q->where('is_active', 1)
+                    ->whereNotNull('compare_at_price')
+                    ->whereColumn('compare_at_price', '>', 'selling_price'))
+                ->latest()->limit(12)->get(),
         ]);
     }
 }

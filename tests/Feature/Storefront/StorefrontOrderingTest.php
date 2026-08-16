@@ -96,7 +96,8 @@ class StorefrontOrderingTest extends TestCase
 
     // --- 2. Variant selection reaches cart correctly ----------------------------------------------
 
-    public function test_product_page_shows_both_configured_variants_with_their_own_price(): void
+    /** makeTwoVariantProduct() gives both variants the same {color, size} attribute keys, so this must render as separate Size/Color selectors, not the old flat "Red / M" combined picker. */
+    public function test_product_page_shows_size_and_color_as_separate_selectors(): void
     {
         $tenant = $this->makeTenant();
         [$product, $variantA, $variantB] = $this->makeTwoVariantProduct($tenant);
@@ -104,9 +105,14 @@ class StorefrontOrderingTest extends TestCase
         $response = $this->get($this->storeUrl($tenant, 'product/'.$product->slug));
 
         $response->assertOk();
-        $response->assertSee('Red / M');
-        $response->assertSee('Blue / L');
-        $response->assertSee('800', false);
+        $response->assertSee('data-axis="color"', false);
+        $response->assertSee('data-axis="size"', false);
+        $response->assertSee('data-value="Red"', false);
+        $response->assertSee('data-value="Blue"', false);
+        $response->assertSee('data-value="M"', false);
+        $response->assertSee('data-value="L"', false);
+        $response->assertSee('"price":"800"', false);
+        $response->assertSee('"price":"850"', false);
     }
 
     public function test_the_exact_selected_variant_id_and_price_reach_the_cart(): void
@@ -124,6 +130,7 @@ class StorefrontOrderingTest extends TestCase
 
     // --- 3. Out-of-stock protection ------------------------------------------------------------
 
+    /** Stock now travels to the page via the embedded variantMap JSON (read by the axis-selector JS), not a per-button data-stock attribute. */
     public function test_an_out_of_stock_variant_shows_stock_out_state_on_the_page(): void
     {
         $tenant = $this->makeTenant();
@@ -132,7 +139,7 @@ class StorefrontOrderingTest extends TestCase
         $response = $this->get($this->storeUrl($tenant, 'product/'.$product->slug));
 
         $response->assertOk();
-        $response->assertSee('data-stock="0"', false);
+        $response->assertSee('"stock":0', false);
     }
 
     public function test_the_backend_refuses_to_add_an_out_of_stock_variant_to_the_cart(): void
@@ -322,10 +329,15 @@ class StorefrontOrderingTest extends TestCase
         $response->assertOk();
         $html = $response->getContent();
         $this->assertSame(1, substr_count($html, 'aria-label="মোবাইল নেভিগেশন"'));
-        $this->assertSame(5, substr_count($html, 'text-[10px] leading-none'));
+        $this->assertSame(5, substr_count($html, 'text-[10px] font-medium leading-none'));
     }
 
-    public function test_mobile_bottom_nav_is_absent_on_the_product_detail_page(): void
+    /**
+     * The nav is now intentionally present on every storefront page (the old
+     * mobile sticky buy-bar it used to be hidden for on this page was removed
+     * this task), so this asserts presence rather than absence.
+     */
+    public function test_mobile_bottom_nav_is_present_on_the_product_detail_page(): void
     {
         $tenant = $this->makeTenant();
         $variant = $this->makeSellableVariant($tenant->id);
@@ -333,7 +345,7 @@ class StorefrontOrderingTest extends TestCase
         $response = $this->get($this->storeUrl($tenant, 'product/'.$variant->product->slug));
 
         $response->assertOk();
-        $response->assertDontSee('মোবাইল নেভিগেশন');
+        $response->assertSee('মোবাইল নেভিগেশন');
     }
 
     public function test_mobile_bottom_nav_links_point_to_real_existing_routes(): void

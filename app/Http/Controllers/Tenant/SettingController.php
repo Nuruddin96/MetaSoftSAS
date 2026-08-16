@@ -286,4 +286,35 @@ class SettingController extends Controller
 
         return back()->with('success', 'ডোমেইন রিকোয়েস্ট পাঠানো হয়েছে — DNS TXT রেকর্ড যোগ করুন, আমাদের টিম যাচাই করে চালু করে দেবে।');
     }
+
+    /**
+     * Cancel a not-yet-approved domain request (pending or dns_verified),
+     * e.g. the tenant made a typo or changed their mind. Only ever touches
+     * the request-workflow columns (custom_domain_requested,
+     * custom_domain_request_status, custom_domain_verification_token,
+     * custom_domain_dns_verified_at) — never the separate custom_domain /
+     * custom_domain_verified columns that ResolveCustomDomain middleware
+     * actually routes production traffic on, so an already-approved,
+     * live domain mapping can never be touched by this action.
+     */
+    public function cancelDomainRequest(Request $request)
+    {
+        $tenant = app('currentTenant');
+
+        if (! in_array($tenant->custom_domain_request_status, ['pending', 'dns_verified'], true)) {
+            return back()->with('error', 'বাতিল করার মতো কোনো পেন্ডিং ডোমেইন রিকোয়েস্ট নেই।');
+        }
+
+        $tenant->update([
+            'custom_domain_requested' => null,
+            // 'none' (not null) — matches this column's existing
+            // ENUM('none','pending','dns_verified','approved','rejected')
+            // DEFAULT 'none' convention (database/sql/chunk20.sql).
+            'custom_domain_request_status' => 'none',
+            'custom_domain_verification_token' => null,
+            'custom_domain_dns_verified_at' => null,
+        ]);
+
+        return back()->with('success', 'ডোমেইন রিকোয়েস্ট বাতিল করা হয়েছে।');
+    }
 }

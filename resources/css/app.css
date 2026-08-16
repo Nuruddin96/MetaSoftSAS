@@ -208,3 +208,52 @@
     width: 100%;
     opacity: 0;
 }
+
+/*
+ * Storefront announcement bar (layouts/store.blade.php) — the two <span>
+ * copies inside .announcement-marquee sit back-to-back; scrolling exactly
+ * -50% of the wrapper's width moves the second copy into the first one's
+ * starting position, so the loop never visibly "jumps". Slow and subtle
+ * on purpose — a news-ticker cue, not something meant to grab attention.
+ */
+.announcement-marquee {
+    animation: announcementScroll 18s linear infinite;
+}
+
+@keyframes announcementScroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .announcement-marquee {
+        animation: none;
+    }
+}
+
+/*
+ * Homepage offer-products strip (storefront/home.blade.php) — same
+ * duplicated-content/-50% loop technique as .announcement-marquee above,
+ * just applied to a row of product cards instead of text. Duration comes
+ * from an inline --offer-duration custom property (roughly 1s per product)
+ * rather than a fixed keyframe time, since the product count varies per
+ * tenant.
+ */
+.offer-marquee {
+    animation: offerScroll var(--offer-duration, 12s) linear infinite;
+}
+
+.offer-marquee:hover {
+    animation-play-state: paused;
+}
+
+@keyframes offerScroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .offer-marquee {
+        animation: none;
+    }
+}

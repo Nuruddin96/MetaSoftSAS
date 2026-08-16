@@ -45,13 +45,19 @@
     @if ($tenant->logo_path)<meta property="og:image" content="{{ asset('storage/' . $tenant->logo_path) }}">@endif
     @if ($tenant->logo_path)<link rel="icon" href="{{ asset('storage/' . $tenant->logo_path) }}">@endif
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@700;800&display=swap" rel="stylesheet">
+    {{-- Same icon set the tenant panel's own mobile nav already uses (layouts/panel.blade.php) — reused here for the storefront's bottom nav rather than a second icon system. --}}
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    {{-- Storefront paper is a slightly different shade, and brand/accent come from this tenant's own colors. --}}
+    {{-- Storefront paper is a slightly different shade, and brand/accent come from this tenant's own colors.
+         --color-header-fg is bound explicitly to the header's own (currently always white) background,
+         instead of the store name relying on the shared global --color-ink token — so it can never go
+         invisible if --color-ink is ever repurposed elsewhere for this tenant. --}}
     <style>
         :root {
             --color-paper: #F7F6F1;
             --color-brand: {{ $tenant->primary_color ?: '#128155' }};
             --color-accent: {{ $tenant->secondary_color ?: '#f59e0b' }};
+            --color-header-fg: #132A21;
         }
     </style>
 
@@ -83,7 +89,16 @@
 @endif
 
 @if (! empty($set['announcement']))
-    <div class="bg-brand text-white text-center text-sm py-2 px-4">{{ $set['announcement'] }}</div>
+    @if (($set['announcement_style'] ?? 'static') === 'marquee')
+        <div class="bg-brand text-white text-sm py-2 overflow-hidden whitespace-nowrap" role="marquee">
+            <div class="announcement-marquee inline-block">
+                <span class="mx-8">{{ $set['announcement'] }}</span>
+                <span class="mx-8" aria-hidden="true">{{ $set['announcement'] }}</span>
+            </div>
+        </div>
+    @else
+        <div class="bg-brand text-white text-center text-sm py-2 px-4">{{ $set['announcement'] }}</div>
+    @endif
 @endif
 
 <header class="bg-white border-b border-ink/5 sticky top-0 z-40">
@@ -92,9 +107,9 @@
             @if ($tenant->logo_path)
                 <img src="{{ asset('storage/' . $tenant->logo_path) }}" alt="{{ $tenant->store_name }}" class="h-10 max-w-[160px] object-contain"
                      onerror="this.style.display='none'; this.nextElementSibling?.classList.remove('hidden');">
-                <span class="hidden font-disp font-bold text-lg text-ink truncate">{{ $tenant->store_name }}</span>
+                <span class="hidden font-disp font-bold text-lg truncate" style="color: var(--color-header-fg)">{{ $tenant->store_name }}</span>
             @else
-                <span class="font-disp font-bold text-lg text-ink truncate">{{ $tenant->store_name }}</span>
+                <span class="font-disp font-bold text-lg truncate" style="color: var(--color-header-fg)">{{ $tenant->store_name }}</span>
             @endif
         </a>
 
@@ -119,7 +134,7 @@
     </div>
 @endif
 
-<main class="max-w-5xl mx-auto px-4 py-8 min-h-[55vh] @unless(request()->routeIs('storefront.product')) pb-20 md:pb-8 @endunless">
+<main class="max-w-5xl mx-auto px-4 py-8 min-h-[55vh] pb-24 md:pb-8">
     @yield('content')
 </main>
 
@@ -135,17 +150,29 @@
                 <p class="text-white/75 leading-relaxed">{{ $set['footer_about'] }}</p>
             @endif
 
-            @php $socials = array_filter([
-                'facebook'  => $set['social_facebook'] ?? null,
-                'instagram' => $set['social_instagram'] ?? null,
-                'youtube'   => $set['social_youtube'] ?? null,
-                'tiktok'    => $set['social_tiktok'] ?? null,
-            ]); @endphp
+            @php
+                $socials = array_filter([
+                    'facebook'  => $set['social_facebook'] ?? null,
+                    'instagram' => $set['social_instagram'] ?? null,
+                    'youtube'   => $set['social_youtube'] ?? null,
+                    'tiktok'    => $set['social_tiktok'] ?? null,
+                ]);
+                // Each platform's own recognizable brand treatment, not a
+                // generic tinted circle — only rendered for a link the
+                // tenant actually filled in above.
+                $socialBg = [
+                    'facebook'  => '#1877F2',
+                    'instagram' => 'linear-gradient(45deg, #405DE6, #C13584 55%, #FD1D1D)',
+                    'youtube'   => '#FF0000',
+                    'tiktok'    => '#010101',
+                ];
+            @endphp
             @if ($socials)
                 <div class="flex gap-2.5 mt-4">
                     @foreach ($socials as $platform => $url)
                         <a href="{{ $url }}" target="_blank" rel="noopener"
-                           class="w-9 h-9 rounded-full bg-white/10 grid place-items-center text-white/80 hover:bg-white hover:text-brand transition"
+                           class="w-9 h-9 rounded-full grid place-items-center text-white hover:opacity-85 transition"
+                           style="background: {{ $socialBg[$platform] }};"
                            aria-label="{{ ucfirst($platform) }}">
                             @include('partials.icon', ['platform' => $platform, 'class' => 'w-4.5 h-4.5'])
                         </a>
@@ -199,10 +226,10 @@
     </a>
 @endif
 
-@unless (request()->routeIs('storefront.product'))
-    @include('partials.mobile-bottom-nav')
-@endunless
+{{-- Shown on every storefront page now — the product page no longer has a competing sticky buy bar of its own, so there's nothing left for this to conflict with. --}}
+@include('partials.mobile-bottom-nav')
 
+<script>lucide.createIcons();</script>
 @stack('scripts')
 </body>
 </html>

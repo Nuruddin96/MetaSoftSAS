@@ -13,7 +13,7 @@ class WebsiteController extends Controller
 {
     /** Everything the storefront can be customised with */
     public const KEYS = [
-        'announcement', 'hero_style',
+        'announcement', 'announcement_style', 'hero_style',
         'footer_about', 'footer_phone', 'footer_email', 'footer_address', 'footer_note',
         'social_facebook', 'social_instagram', 'social_youtube', 'social_tiktok',
         'whatsapp_number', 'show_whatsapp_float',
@@ -39,6 +39,7 @@ class WebsiteController extends Controller
             'secondary_color' => 'nullable|regex:/^#[0-9A-Fa-f]{6}$/',
             'logo' => 'nullable|image|max:2048',
             'announcement' => 'nullable|string|max:200',
+            'announcement_style' => 'nullable|in:static,marquee',
         ]);
 
         $tenant = app('currentTenant');
@@ -59,6 +60,7 @@ class WebsiteController extends Controller
         $tenant->update($update);
 
         $this->put('announcement', $data['announcement'] ?? null);
+        $this->put('announcement_style', $data['announcement_style'] ?? 'static');
 
         return back()->with('success', 'ব্র্যান্ড সেটিংস সেভ হয়েছে।');
     }

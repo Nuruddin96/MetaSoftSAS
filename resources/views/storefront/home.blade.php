@@ -40,6 +40,29 @@
     </div>
 @endif
 
+{{--
+    Offer strip — real discounted products only (never fabricated), one row,
+    slowly auto-sliding via the same CSS-marquee technique as the announcement
+    bar (two duplicated copies, translateX 0 -> -50% loops seamlessly, respects
+    prefers-reduced-motion). Duration is tied to the product count so the loop
+    moves roughly one product per second. Paused on hover so a card is
+    actually clickable rather than sliding away under the cursor.
+--}}
+@if ($offers->isNotEmpty())
+    <div class="mb-8">
+        <h2 class="font-disp font-bold text-xl mb-4">অফার পন্য</h2>
+        <div class="overflow-hidden">
+            <div class="flex gap-4 offer-marquee" style="--offer-duration: {{ max($offers->count(), 4) }}s">
+                @foreach ($offers->concat($offers) as $product)
+                    <div class="w-1/2 md:w-1/4 shrink-0">
+                        @include('storefront._card', ['product' => $product])
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+@endif
+
 @if ($featured->isEmpty())
     <div class="text-center py-20">
         <p class="text-5xl">🛍️</p>

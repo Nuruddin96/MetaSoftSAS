@@ -106,6 +106,14 @@
                    placeholder="যেমন: ঈদ অফার! ১০০০৳ এর উপরে ফ্রি ডেলিভারি 🎉"
                    class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
             <p class="text-xs text-mute mt-1">খালি রাখলে বারটা দেখাবে না</p>
+            <div class="mt-2 flex items-center gap-4 text-sm">
+                <label class="flex items-center gap-1.5">
+                    <input type="radio" name="announcement_style" value="static" @checked(($set['announcement_style'] ?? 'static') === 'static')> স্থির (নড়বে না)
+                </label>
+                <label class="flex items-center gap-1.5">
+                    <input type="radio" name="announcement_style" value="marquee" @checked(($set['announcement_style'] ?? 'static') === 'marquee')> স্ক্রলিং (একটানা চলবে)
+                </label>
+            </div>
         </div>
 
         <div class="flex gap-3">
