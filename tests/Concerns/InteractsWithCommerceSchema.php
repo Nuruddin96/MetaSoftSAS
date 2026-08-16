@@ -3,6 +3,7 @@
 namespace Tests\Concerns;
 
 use App\Models\Inventory;
+use App\Models\Plan;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Tenant;
@@ -54,7 +55,12 @@ trait InteractsWithCommerceSchema
                 $table->string('status')->default('active');
                 $table->timestamp('trial_ends_at')->nullable();
                 $table->timestamp('subscription_ends_at')->nullable();
-                $table->string('custom_domain')->nullable();
+                // UNIQUE — mirrors database/sql/schema.sql's real definition
+                // (`custom_domain VARCHAR(255) UNIQUE`). Needed so tests can
+                // exercise SuperAdmin\TenantController::activateDomain()'s
+                // QueryException(23000) handling for a domain already live
+                // on another tenant — see DomainRequestManagementTest.
+                $table->string('custom_domain')->nullable()->unique();
                 $table->boolean('custom_domain_verified')->default(false);
                 // Domain *request* workflow — separate from the two columns
                 // above, which are the live/approved mapping ResolveCustomDomain
@@ -465,9 +471,9 @@ trait InteractsWithCommerceSchema
         }
     }
 
-    protected function makePlan(array $attrs = []): \App\Models\Plan
+    protected function makePlan(array $attrs = []): Plan
     {
-        return \App\Models\Plan::create(array_merge([
+        return Plan::create(array_merge([
             'name' => 'Test Plan', 'slug' => 'test-plan-'.Str::random(8),
             'price_monthly' => 500, 'price_yearly' => 5000,
         ], $attrs));

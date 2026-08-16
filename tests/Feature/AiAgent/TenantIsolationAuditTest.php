@@ -91,6 +91,10 @@ class TenantIsolationAuditTest extends TestCase
             'tenant_id' => $tenantA->id, 'channel' => 'messenger', 'external_id' => $sharedPsid,
             'reason' => 'customer_requested', 'created_at' => now(), 'resolved_at' => now(),
         ]);
+        DB::table('tenant_ai_memories')->insert([
+            'tenant_id' => $tenantA->id, 'question' => "{$sharedProductName} price?",
+            'answer' => 'TENANT-A-SECRET-MEMORY-ANSWER-88888', 'created_at' => now(), 'updated_at' => now(),
+        ]);
 
         // Tenant B — the actual customer we're replying to, using the
         // EXACT SAME psid tenant A's own conversation used (Messenger
@@ -114,6 +118,10 @@ class TenantIsolationAuditTest extends TestCase
         DB::table('messenger_messages')->insert([
             ['tenant_id' => $tenantB->id, 'sender_psid' => 'other-psid-b', 'message_text' => 'প্রশ্ন', 'direction' => 'in', 'sent_by' => 'human', 'status' => 'contacted', 'created_at' => now()->subMinutes(5)],
             ['tenant_id' => $tenantB->id, 'sender_psid' => 'other-psid-b', 'message_text' => 'Tenant B own style phrase', 'direction' => 'out', 'sent_by' => 'human', 'status' => 'contacted', 'created_at' => now()->subMinutes(4)],
+        ]);
+        DB::table('tenant_ai_memories')->insert([
+            'tenant_id' => $tenantB->id, 'question' => "{$sharedProductName} price?",
+            'answer' => 'Tenant B own memory answer', 'created_at' => now(), 'updated_at' => now(),
         ]);
 
         $messageId = DB::table('messenger_messages')->insertGetId([
@@ -148,11 +156,13 @@ class TenantIsolationAuditTest extends TestCase
         $this->assertStringNotContainsString('TENANT-A-SECRET-ADDRESS', $content);
         $this->assertStringNotContainsString('TENANT-A-SECRET-STYLE-PHRASE', $content);
         $this->assertStringNotContainsString('Tenant A Victim', $content);
+        $this->assertStringNotContainsString('TENANT-A-SECRET-MEMORY-ANSWER-88888', $content);
 
         // --- Correctness: tenant B's own data still flows normally. ---
         $this->assertStringContainsString('500', $content, "tenant B's own price for the shared product name must still appear");
         $this->assertStringContainsString('ORD-TENANT-B-OWN', $content);
         $this->assertStringContainsString($sharedProductName, $content);
         $this->assertStringContainsString('Tenant B own instruction', $content, "tenant B's own business instructions must actually reach its own AI call, not just be absent for tenant A");
+        $this->assertStringContainsString('Tenant B own memory answer', $content, "tenant B's own saved Q&A memory must actually reach its own AI call, not just be absent for tenant A");
     }
 }

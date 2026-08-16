@@ -493,4 +493,36 @@ class AiAgentServiceTest extends TestCase
 
         $this->assertStringNotContainsString('Write your reply around this fact', $seen[0]['content']);
     }
+
+    public function test_tenant_memories_are_included_and_marked_as_authoritative_for_a_matching_question(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply(
+            'Shop Basket', [], 'ঢাকার ভিতরে ডেলিভারি চার্জ কত?', tenantMemories: "Q: What is the delivery charge inside Dhaka?\nA: 60 BDT."
+        );
+
+        $this->assertStringContainsString('Q: What is the delivery charge inside Dhaka?', $seen[0]['content']);
+        $this->assertStringContainsString('A: 60 BDT.', $seen[0]['content']);
+        $this->assertStringContainsString('[TENANT SAVED Q&A]', $seen[0]['content']);
+    }
+
+    public function test_no_tenant_memories_section_is_added_when_none_matched(): void
+    {
+        $seen = null;
+        $this->bindFakeProvider(function (array $messages) use (&$seen) {
+            $seen = $messages;
+
+            return AiProviderResponse::success('ok', 1, 1, 'fake-model');
+        });
+
+        app(AiAgentService::class)->generateReply('Shop Basket', [], 'দাম কত?', tenantMemories: null);
+
+        $this->assertStringNotContainsString('[TENANT SAVED Q&A]', $seen[0]['content']);
+    }
 }

@@ -256,4 +256,17 @@ return [
     // context, not the whole catalog" reasoning as style examples above).
     'product_match_scan_limit' => (int) env('AI_PRODUCT_MATCH_SCAN_LIMIT', 200),
     'product_match_max' => (int) env('AI_PRODUCT_MATCH_MAX', 3),
+
+    // AiTenantMemoryService ("Teach Your AI Agent") tunables — mirrors
+    // product_match_* above. memory_match_scan_limit bounds how many of a
+    // tenant's saved Q&A rows are scored per message (a realistic small-
+    // business Q&A list is far under this). memory_match_max bounds how
+    // many best-matching Q&A pairs are ever included in one prompt — never
+    // every saved memory. memory_match_min_ratio is the minimum fraction
+    // of a saved question's significant words that must actually appear
+    // in the conversation before it's considered a match at all (avoids
+    // matching on one coincidental shared word).
+    'memory_match_scan_limit' => (int) env('AI_MEMORY_MATCH_SCAN_LIMIT', 200),
+    'memory_match_max' => (int) env('AI_MEMORY_MATCH_MAX', 3),
+    'memory_match_min_ratio' => (float) env('AI_MEMORY_MATCH_MIN_RATIO', 0.4),
 ];

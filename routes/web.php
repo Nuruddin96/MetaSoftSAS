@@ -20,6 +20,7 @@ use App\Http\Controllers\SuperAdmin\AiCreditController as SuperAiCreditControlle
 use App\Http\Controllers\SuperAdmin\AuthController;
 use App\Http\Controllers\SuperAdmin\ClientController;
 use App\Http\Controllers\SuperAdmin\ClientPaymentController;
+use App\Http\Controllers\SuperAdmin\DomainRequestController;
 use App\Http\Controllers\SuperAdmin\PaymentController;
 use App\Http\Controllers\SuperAdmin\PlanController;
 use App\Http\Controllers\SuperAdmin\SourceOrderController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\SuperAdmin\TenantController;
 use App\Http\Controllers\TelegramController;
 use App\Http\Controllers\Tenant\AdvertisingController;
 use App\Http\Controllers\Tenant\AiChatController;
+use App\Http\Controllers\Tenant\AiMemoryController;
 use App\Http\Controllers\Tenant\BarcodeController;
 use App\Http\Controllers\Tenant\BillingController;
 use App\Http\Controllers\Tenant\CategoryController;
@@ -123,7 +125,14 @@ Route::domain(config('app.central_domain'))->group(function () {
             Route::post('tenants/{tenant}/extend', [TenantController::class, 'extend'])->name('tenants.extend');
             Route::post('tenants/{tenant}/domain/verify', [TenantController::class, 'verifyDomainDns'])->name('tenants.domain.verify');
             Route::post('tenants/{tenant}/domain/approve', [TenantController::class, 'approveDomain'])->name('tenants.domain.approve');
+            Route::post('tenants/{tenant}/domain/activate', [TenantController::class, 'activateDomain'])->name('tenants.domain.activate');
+            Route::post('tenants/{tenant}/domain/deactivate', [TenantController::class, 'deactivateDomain'])->name('tenants.domain.deactivate');
             Route::post('tenants/{tenant}/domain/reject', [TenantController::class, 'rejectDomain'])->name('tenants.domain.reject');
+            Route::delete('tenants/{tenant}/domain', [TenantController::class, 'destroyDomain'])->name('tenants.domain.destroy');
+
+            // Cross-tenant "Custom Domain Requests" list — see
+            // DomainRequestController's docblock.
+            Route::get('domain-requests', [DomainRequestController::class, 'index'])->name('domain-requests');
 
             Route::get('payments', [PaymentController::class, 'index'])->name('payments');
 
@@ -374,6 +383,14 @@ $tenantRoutes = function () {
             Route::post('settings/courier', [SettingController::class, 'courier'])->name('settings.courier');
             Route::post('settings/store', [SettingController::class, 'store'])->name('settings.store');
             Route::post('settings/ai-agent', [SettingController::class, 'aiAgent'])->name('settings.ai-agent');
+
+            // "Teach Your AI Agent" — tenant-authored Q&A memory
+            // (App\Models\AiTenantMemory). {aiMemory} route binding is
+            // tenant-isolated via App\Traits\BelongsToTenant::
+            // resolveRouteBinding() — see AiMemoryController's docblock.
+            Route::post('ai-memory', [AiMemoryController::class, 'store'])->name('ai-memory.store');
+            Route::put('ai-memory/{aiMemory}', [AiMemoryController::class, 'update'])->name('ai-memory.update');
+            Route::delete('ai-memory/{aiMemory}', [AiMemoryController::class, 'destroy'])->name('ai-memory.destroy');
 
             // Facebook OAuth "Connect Facebook" (Phase 1). The callback these
             // redirect out to is registered separately, outside this tenant

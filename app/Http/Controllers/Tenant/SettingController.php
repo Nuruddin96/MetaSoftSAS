@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
+use App\Models\AiTenantMemory;
 use App\Models\CourierSetting;
 use App\Models\FacebookConnection;
 use App\Models\FacebookPage;
@@ -66,14 +67,16 @@ class SettingController extends Controller
             'couriers' => CourierSetting::get()->keyBy('provider'),
             'marketing' => MarketingSetting::firstOrNew(['tenant_id' => app('currentTenant')->id]),
             'store' => StoreSetting::pluck('value', 'key'),
-            'domainTxtValue' => $tenant->custom_domain_verification_token
-                ? DomainManager::expectedTxtValue($tenant->custom_domain_verification_token)
-                : null,
             // Read-only display only — the balance itself is only ever
             // mutated by Super Admin via AiCreditService (see
             // SuperAdmin\AiCreditController). null = never allocated any
             // credit yet, distinct from "0" (allocated once, now spent).
             'aiCreditBalance' => app(AiCreditService::class)->balance($tenant->id),
+            // "Teach Your AI Agent" — additive table (database/sql/
+            // chunk41.sql), same tablesReady() guard as Facebook/WhatsApp
+            // above so a deploy that lands before the chunk is imported
+            // just shows an empty list instead of a 500.
+            'aiMemories' => AiTenantMemory::tablesReady() ? AiTenantMemory::orderByDesc('id')->get() : collect(),
         ]);
     }
 
@@ -262,13 +265,35 @@ class SettingController extends Controller
         return back()->with('success', 'AI এজেন্ট সেটিংস সেভ হয়েছে।');
     }
 
-    /** Tenant requests their own domain (e.g. myshop.com); super admin approves manually. */
+    /**
+     * Tenant requests their own domain (e.g. myshop.com); super admin
+     * reviews/approves and, after manually finishing DNS/SSL setup
+     * outside this app, activates it — see SuperAdmin\TenantController::
+     * approveDomain()/activateDomain(). No DNS/server details are ever
+     * asked of the tenant (kept purely to custom_domain_requested +
+     * status) — that verification_token/DNS-TXT flow still exists in the
+     * schema and DomainDriver for an admin who wants to use it as an
+     * optional convenience, but is no longer required or shown to the
+     * tenant; see Tenant::customDomainDisplayStatus()'s docblock.
+     *
+     * Also doubles as "edit a request" — resubmitting while a request is
+     * still pending/approved/rejected simply overwrites it with the
+     * corrected domain, same "cancel + resubmit" shape the existing
+     * cancelDomainRequest() flow already relied on. Blocked only once the
+     * domain is genuinely ACTIVE (custom_domain_verified) — changing that
+     * live mapping needs an explicit admin deactivate/delete first, never
+     * a silent overwrite from this endpoint.
+     */
     public function requestDomain(Request $request)
     {
         $tenant = app('currentTenant');
 
         if (! $tenant->plan?->allow_custom_domain) {
             return back()->with('error', 'কাস্টম ডোমেইন ফিচারটি আপনার প্ল্যানে নেই। Pro প্ল্যানে আপগ্রেড করুন।');
+        }
+
+        if ($tenant->custom_domain_verified && $tenant->custom_domain) {
+            return back()->with('error', 'আপনার একটি সক্রিয় কাস্টম ডোমেইন আছে। পরিবর্তনের প্রয়োজন হলে অ্যাডমিনের সাথে যোগাযোগ করুন।');
         }
 
         $data = $request->validate([
@@ -284,24 +309,27 @@ class SettingController extends Controller
             'custom_domain_dns_verified_at' => null,
         ]);
 
-        return back()->with('success', 'ডোমেইন রিকোয়েস্ট পাঠানো হয়েছে — DNS TXT রেকর্ড যোগ করুন, আমাদের টিম যাচাই করে চালু করে দেবে।');
+        return back()->with('success', 'ডোমেইন রিকোয়েস্ট পাঠানো হয়েছে — আমাদের টিম রিভিউ করে ম্যানুয়ালি সেটআপ শেষে চালু করে দেবে।');
     }
 
     /**
-     * Cancel a not-yet-approved domain request (pending or dns_verified),
-     * e.g. the tenant made a typo or changed their mind. Only ever touches
-     * the request-workflow columns (custom_domain_requested,
+     * Cancel a not-yet-active domain request (pending, the legacy
+     * dns_verified state, or already-approved-but-not-yet-live), e.g. the
+     * tenant made a typo or changed their mind. Only ever touches the
+     * request-workflow columns (custom_domain_requested,
      * custom_domain_request_status, custom_domain_verification_token,
      * custom_domain_dns_verified_at) — never the separate custom_domain /
      * custom_domain_verified columns that ResolveCustomDomain middleware
-     * actually routes production traffic on, so an already-approved,
-     * live domain mapping can never be touched by this action.
+     * actually routes production traffic on, so an already-active, live
+     * domain mapping can never be touched by this action (must go through
+     * SuperAdmin\TenantController::deactivateDomain()/destroyDomain()
+     * instead).
      */
     public function cancelDomainRequest(Request $request)
     {
         $tenant = app('currentTenant');
 
-        if (! in_array($tenant->custom_domain_request_status, ['pending', 'dns_verified'], true)) {
+        if (! in_array($tenant->custom_domain_request_status, ['pending', 'dns_verified', 'approved'], true)) {
             return back()->with('error', 'বাতিল করার মতো কোনো পেন্ডিং ডোমেইন রিকোয়েস্ট নেই।');
         }
 

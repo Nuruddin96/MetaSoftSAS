@@ -16,6 +16,7 @@ use App\Services\AI\AiCustomerMemoryService;
 use App\Services\AI\AiHandoffService;
 use App\Services\AI\AiProductKnowledgeService;
 use App\Services\AI\AiTenantKnowledgeService;
+use App\Services\AI\AiTenantMemoryService;
 use App\Services\WhatsApp\WhatsAppMediaService;
 use App\Services\WhatsApp\WhatsAppSendService;
 use Illuminate\Bus\Queueable;
@@ -67,7 +68,7 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
         public readonly int $whatsAppMessageId,
     ) {}
 
-    public function handle(AiAgentService $ai, AiCreditService $credit, WhatsAppSendService $whatsapp, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiConversationStyleService $style, AiCustomerEmotionService $emotion, WhatsAppMediaService $media, AiAudioTranscriptionService $transcription, AiHandoffService $handoff): void
+    public function handle(AiAgentService $ai, AiCreditService $credit, WhatsAppSendService $whatsapp, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiConversationStyleService $style, AiCustomerEmotionService $emotion, WhatsAppMediaService $media, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories): void
     {
         if (! AiWhatsAppMessageJob::tablesReady()) {
             return;
@@ -82,7 +83,7 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
         }
 
         try {
-            $sent = $this->process($ai, $credit, $whatsapp, $knowledge, $products, $memory, $style, $emotion, $media, $transcription, $handoff);
+            $sent = $this->process($ai, $credit, $whatsapp, $knowledge, $products, $memory, $style, $emotion, $media, $transcription, $handoff, $memories);
 
             if ($sent) {
                 AiWhatsAppMessageJob::markCompleted($this->tenantId, $this->whatsAppMessageId);
@@ -118,7 +119,7 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
      *              OpenAI failure, WhatsApp send failure) returns false without
      *              throwing, and the caller marks the job 'failed' for any of them.
      */
-    protected function process(AiAgentService $ai, AiCreditService $credit, WhatsAppSendService $whatsapp, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiConversationStyleService $style, AiCustomerEmotionService $emotion, WhatsAppMediaService $media, AiAudioTranscriptionService $transcription, AiHandoffService $handoff): bool
+    protected function process(AiAgentService $ai, AiCreditService $credit, WhatsAppSendService $whatsapp, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiConversationStyleService $style, AiCustomerEmotionService $emotion, WhatsAppMediaService $media, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories): bool
     {
         $tenant = Tenant::withoutGlobalScopes()->find($this->tenantId);
 
@@ -231,6 +232,13 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
             $this->tenantId,
             [...array_column($history, 'content'), $message->message_text]
         );
+        // "Teach Your AI Agent" — best-matching saved Q&A for this exact
+        // message, same shape Messenger's job resolves — see
+        // AiTenantMemoryService's docblock.
+        $tenantMemories = $memories->relevantMemories(
+            $this->tenantId,
+            [...array_column($history, 'content'), $message->message_text]
+        );
         // Phase 6 — wa_id is Meta's own authenticated sender identity for
         // this webhook call, never a value the conversation text supplied
         // — see AiCustomerMemoryService's docblock.
@@ -245,7 +253,7 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
             ? 'The customer just asked to speak with a real person, so this conversation has been flagged for your team to take over from here.'
             : null;
 
-        $result = $ai->generateReply($tenant->store_name, $history, (string) $message->message_text, styleExamples: $styleExamples, customerName: null, tenantInstructions: $tenantInstructions, businessKnowledge: $businessKnowledge, productData: $productData, customerMemory: $customerMemory, customerEmotion: $customerEmotion, imageUrl: $imageUrl, handoffNotice: $handoffNotice);
+        $result = $ai->generateReply($tenant->store_name, $history, (string) $message->message_text, styleExamples: $styleExamples, customerName: null, tenantInstructions: $tenantInstructions, businessKnowledge: $businessKnowledge, productData: $productData, customerMemory: $customerMemory, customerEmotion: $customerEmotion, imageUrl: $imageUrl, handoffNotice: $handoffNotice, tenantMemories: $tenantMemories);
 
         if (! $result) {
             // AiAgentService already logged why.

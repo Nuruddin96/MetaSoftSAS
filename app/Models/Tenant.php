@@ -101,6 +101,36 @@ class Tenant extends Model
         return $max === null || $currentCount < $max;
     }
 
+    /**
+     * Simple tenant/admin-facing custom-domain status — Pending / Approved
+     * / Active / Rejected / None — derived from the existing
+     * custom_domain_request_status ENUM plus the separate custom_domain/
+     * custom_domain_verified columns, rather than a new status column.
+     * 'active' is deliberately NOT a value custom_domain_request_status
+     * itself ever takes (see SuperAdmin\TenantController::
+     * activateDomain()/deactivateDomain()) — it's derived purely from
+     * custom_domain_verified being true, so deactivating just flips that
+     * one flag back to false (status reverts to 'approved' display, ready
+     * to be re-activated) without losing the request/approval history.
+     * The legacy 'dns_verified' value (from the original, now-optional
+     * DNS-TXT-verification flow) is folded into 'pending' here — it was
+     * never more than "still not yet approved" from the tenant's point of
+     * view.
+     */
+    public function customDomainDisplayStatus(): string
+    {
+        if ($this->custom_domain_verified && $this->custom_domain) {
+            return 'active';
+        }
+
+        return match ($this->custom_domain_request_status) {
+            'pending', 'dns_verified' => 'pending',
+            'approved' => 'approved',
+            'rejected' => 'rejected',
+            default => 'none',
+        };
+    }
+
     public function url(): string
     {
         if (config('app.tenancy_mode', 'subdomain') === 'path') {

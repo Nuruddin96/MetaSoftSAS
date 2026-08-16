@@ -20,6 +20,7 @@
             @php $nav = [
                 ['super.dashboard', 'ড্যাশবোর্ড', '📊'],
                 ['super.tenants', 'টেনেন্ট', '🏪'],
+                ['super.domain-requests', 'কাস্টম ডোমেইন', '🌐'],
                 ['super.payments', 'সাস পেমেন্ট', '💰'],
                 ['super.clients.index', 'ক্লায়েন্ট', '🏢'],
                 ['super.clients.payments', 'রেগুলার ক্লায়েন্ট পেমেন্ট', '💵'],

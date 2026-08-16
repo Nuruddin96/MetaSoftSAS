@@ -269,39 +269,32 @@
     </x-ui.collapsible-card>
 
     <x-ui.collapsible-card title="🌐 কাস্টম ডোমেইন">
-        @php $tenant = app('currentTenant'); @endphp
+        @php $tenant = app('currentTenant'); $domainStatus = $tenant->customDomainDisplayStatus(); @endphp
         @if (! $tenant->plan?->allow_custom_domain)
             <p class="text-xs text-mute mb-4">এই ফিচারটি শুধু Pro প্ল্যানে আছে। <a href="{{ route('tenant.billing') }}" class="text-leaf hover:underline">আপগ্রেড করুন</a>।</p>
-        @elseif ($tenant->custom_domain_verified && $tenant->custom_domain)
+        @elseif ($domainStatus === 'active')
             <p class="text-sm text-leafdk mt-2">✅ সক্রিয়: <b>{{ $tenant->custom_domain }}</b></p>
-        @elseif ($tenant->custom_domain_request_status === 'pending')
-            <p class="text-xs text-mute mb-3">DNS-এ নিচের TXT রেকর্ডটি যোগ করুন — যোগ করার পর আমাদের টিম যাচাই করে পরের ধাপে নিয়ে যাবে।</p>
-            <div class="bg-paper rounded-btn p-3 text-xs font-mono mb-3 space-y-1 overflow-x-auto">
-                <p><span class="text-mute">Type:</span> TXT</p>
-                <p><span class="text-mute">Host/Name:</span> @ ({{ $tenant->custom_domain_requested }})</p>
-                <p><span class="text-mute">Value:</span> {{ $domainTxtValue }}</p>
-            </div>
+        @elseif ($domainStatus === 'pending')
             <div class="flex items-center justify-between gap-3">
-                <p class="text-sm">⏳ <b>{{ $tenant->custom_domain_requested }}</b> — DNS যাচাইয়ের অপেক্ষায়</p>
+                <p class="text-sm">⏳ <b>{{ $tenant->custom_domain_requested }}</b> — বিবেচনাধীন (Pending), আমাদের টিম শীঘ্রই রিভিউ করবে</p>
                 <form method="POST" action="{{ route('tenant.settings.domain.cancel') }}" onsubmit="return confirm('রিকোয়েস্টটি বাতিল করবেন? ভুল ডোমেইন দিলে বাতিল করে আবার সঠিকটি দিতে পারবেন।')">
                     @csrf @method('DELETE')
                     <button class="text-red-600 text-xs hover:underline rounded shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">বাতিল / পরিবর্তন করুন</button>
                 </form>
             </div>
-        @elseif ($tenant->custom_domain_request_status === 'dns_verified')
-            <p class="text-xs text-leafdk mb-2">✅ DNS যাচাই সম্পন্ন হয়েছে।</p>
+        @elseif ($domainStatus === 'approved')
             <div class="flex items-center justify-between gap-3">
-                <p class="text-sm">⏳ <b>{{ $tenant->custom_domain_requested }}</b> — আমাদের টিম সেটআপ শেষ করলেই চালু হয়ে যাবে</p>
+                <p class="text-sm">✅ <b>{{ $tenant->custom_domain_requested }}</b> — অনুমোদিত (Approved), আমাদের টিম ম্যানুয়ালি সেটআপ শেষ করলেই চালু হয়ে যাবে</p>
                 <form method="POST" action="{{ route('tenant.settings.domain.cancel') }}" onsubmit="return confirm('রিকোয়েস্টটি বাতিল করবেন? ভুল ডোমেইন দিলে বাতিল করে আবার সঠিকটি দিতে পারবেন।')">
                     @csrf @method('DELETE')
                     <button class="text-red-600 text-xs hover:underline rounded shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">বাতিল / পরিবর্তন করুন</button>
                 </form>
             </div>
         @else
-            @if ($tenant->custom_domain_request_status === 'rejected')
-                <p class="text-xs text-red-600 mb-3">আপনার আগের রিকোয়েস্টটি বাতিল হয়েছে — আবার চেষ্টা করুন বা অ্যাডমিনের সাথে যোগাযোগ করুন।</p>
+            @if ($domainStatus === 'rejected')
+                <p class="text-xs text-red-600 mb-3">আপনার আগের রিকোয়েস্টটি প্রত্যাখ্যাত হয়েছে — আবার চেষ্টা করুন বা অ্যাডমিনের সাথে যোগাযোগ করুন।</p>
             @else
-                <p class="text-xs text-mute mb-4">নিজের ডোমেইন (যেমন myshop.com) থাকলে এখানে দিন, অ্যাডমিন যাচাই করে চালু করে দেবে।</p>
+                <p class="text-xs text-mute mb-4">নিজের ডোমেইন (যেমন myshop.com) থাকলে এখানে দিন — অ্যাডমিন রিভিউ করে ম্যানুয়ালি চালু করে দেবে। DNS/সার্ভার সেটআপের প্রয়োজন নেই, সেটা আমরা করে দেব।</p>
             @endif
             <form method="POST" action="{{ route('tenant.settings.domain') }}" class="flex gap-2">
                 @csrf
@@ -376,6 +369,50 @@
 
             <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
         </form>
+
+        <div class="border-t border-ink/10 pt-4 mt-4">
+            <label class="text-sm font-semibold block mb-1">🧠 AI-কে শেখান (Teach Your AI Agent)</label>
+            <p class="text-xs text-mute mb-3">প্রশ্ন আর উত্তর জোড়ায় জোড়ায় সেভ করুন — কাস্টমার কাছাকাছি প্রশ্ন করলে AI এখান থেকে সরাসরি উত্তর দেবে। যেমন — প্রশ্ন: "ঢাকার ভিতরে ডেলিভারি চার্জ কত?" উত্তর: "ঢাকার ভিতরে ডেলিভারি চার্জ ৬০ টাকা।"</p>
+            <form method="POST" action="{{ route('tenant.ai-memory.store') }}" class="space-y-2 mb-4">
+                @csrf
+                <input name="question" required maxlength="500" placeholder="প্রশ্ন — যেমন: ঢাকার ভিতরে ডেলিভারি চার্জ কত?"
+                       class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                <textarea name="answer" required maxlength="2000" rows="2" placeholder="উত্তর — যেমন: ঢাকার ভিতরে ডেলিভারি চার্জ ৬০ টাকা।"
+                          class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none"></textarea>
+                <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
+            </form>
+
+            @if ($aiMemories->isNotEmpty())
+                <p class="text-xs font-semibold text-mute mb-2">সেভ করা প্রশ্ন-উত্তর ({{ $aiMemories->count() }})</p>
+                <div class="space-y-2">
+                    @foreach ($aiMemories as $memory)
+                        <div class="rounded-lg border border-ink/10 p-3">
+                            <p class="text-sm font-semibold">{{ $memory->question }}</p>
+                            <p class="text-sm text-mute mt-0.5">{{ $memory->answer }}</p>
+                            <div class="flex items-center gap-3 mt-2">
+                                <details class="inline-block">
+                                    <summary class="text-xs text-leaf hover:underline cursor-pointer">এডিট</summary>
+                                    <form method="POST" action="{{ route('tenant.ai-memory.update', $memory) }}" class="space-y-2 mt-2">
+                                        @csrf @method('PUT')
+                                        <input name="question" required maxlength="500" value="{{ $memory->question }}"
+                                               class="w-full rounded-btn border border-ink/15 px-3 py-2 text-sm">
+                                        <textarea name="answer" required maxlength="2000" rows="2"
+                                                  class="w-full rounded-btn border border-ink/15 px-3 py-2 text-sm">{{ $memory->answer }}</textarea>
+                                        <x-ui.button type="submit" variant="accent" size="sm">আপডেট করুন</x-ui.button>
+                                    </form>
+                                </details>
+                                <form method="POST" action="{{ route('tenant.ai-memory.destroy', $memory) }}" onsubmit="return confirm('এই প্রশ্ন-উত্তরটি মুছে ফেলবেন?')">
+                                    @csrf @method('DELETE')
+                                    <button class="text-xs text-red-600 hover:underline">ডিলিট</button>
+                                </form>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <p class="text-xs text-mute">এখনো কোনো প্রশ্ন-উত্তর সেভ করা হয়নি।</p>
+            @endif
+        </div>
     </x-ui.collapsible-card>
 </div>
 

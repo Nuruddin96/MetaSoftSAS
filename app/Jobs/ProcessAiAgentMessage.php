@@ -17,6 +17,7 @@ use App\Services\AI\AiCustomerMemoryService;
 use App\Services\AI\AiHandoffService;
 use App\Services\AI\AiProductKnowledgeService;
 use App\Services\AI\AiTenantKnowledgeService;
+use App\Services\AI\AiTenantMemoryService;
 use App\Services\Messenger\MessengerApi;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -71,7 +72,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         public readonly int $messengerMessageId,
     ) {}
 
-    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff): void
+    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories): void
     {
         if (! AiAgentMessageJob::tablesReady()) {
             return;
@@ -86,7 +87,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         }
 
         try {
-            $sent = $this->process($ai, $credit, $api, $style, $knowledge, $products, $memory, $emotion, $transcription, $handoff);
+            $sent = $this->process($ai, $credit, $api, $style, $knowledge, $products, $memory, $emotion, $transcription, $handoff, $memories);
 
             if ($sent) {
                 AiAgentMessageJob::markCompleted($this->tenantId, $this->messengerMessageId);
@@ -126,7 +127,7 @@ class ProcessAiAgentMessage implements ShouldQueue
      *              them. None of these send a fallback/error message to the
      *              customer, per this phase's spec.
      */
-    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff): bool
+    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories): bool
     {
         $tenant = Tenant::withoutGlobalScopes()->find($this->tenantId);
 
@@ -249,6 +250,13 @@ class ProcessAiAgentMessage implements ShouldQueue
             $this->tenantId,
             [...array_column($history, 'content'), $message->message_text]
         );
+        // "Teach Your AI Agent" — best-matching saved Q&A for this exact
+        // message (see AiTenantMemoryService's docblock for the cheap
+        // keyword-overlap matching, never every saved memory).
+        $tenantMemories = $memories->relevantMemories(
+            $this->tenantId,
+            [...array_column($history, 'content'), $message->message_text]
+        );
         // Phase 6 — keyed only by this exact psid (channel-verified, never
         // customer-typed) — see AiCustomerMemoryService's docblock.
         $customerMemory = $memory->forMessengerCustomer($this->tenantId, $psid);
@@ -262,7 +270,7 @@ class ProcessAiAgentMessage implements ShouldQueue
             ? 'The customer just asked to speak with a real person, so this conversation has been flagged for your team to take over from here.'
             : null;
 
-        $result = $ai->generateReply($tenant->store_name, $history, (string) $message->message_text, $styleExamples, $customerName, $tenantInstructions, $businessKnowledge, $productData, $customerMemory, $customerEmotion, $imageUrl, $handoffNotice);
+        $result = $ai->generateReply($tenant->store_name, $history, (string) $message->message_text, $styleExamples, $customerName, $tenantInstructions, $businessKnowledge, $productData, $customerMemory, $customerEmotion, $imageUrl, $handoffNotice, $tenantMemories);
 
         if (! $result) {
             // AiAgentService already logged why.

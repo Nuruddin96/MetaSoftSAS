@@ -306,6 +306,18 @@ trait InteractsWithAiAgentSchema
                 $table->timestamp('created_at')->nullable();
             });
         }
+
+        // "Teach Your AI Agent" — see database/sql/chunk41.sql for the
+        // real (MySQL) definition.
+        if (! Schema::hasTable('tenant_ai_memories')) {
+            Schema::create('tenant_ai_memories', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('question', 500);
+                $table->text('answer');
+                $table->timestamps();
+            });
+        }
     }
 
     protected function makeTenant(array $attrs = []): Tenant

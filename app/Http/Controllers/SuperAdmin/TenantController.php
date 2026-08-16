@@ -10,6 +10,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Services\Domain\DomainManager;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -37,7 +38,7 @@ class TenantController extends Controller
             'orders' => Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count(),
             'staff' => User::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count(),
             'payments' => SubscriptionPayment::where('tenant_id', $tenant->id)->latest()->limit(10)->get(),
-            'domainActivationInstructions' => $tenant->custom_domain_request_status === 'dns_verified'
+            'domainActivationInstructions' => (in_array($tenant->custom_domain_request_status, ['dns_verified', 'approved'], true) && ! $tenant->custom_domain_verified)
                 ? DomainManager::driver()->activationInstructions($tenant)
                 : null,
         ]);
@@ -109,7 +110,13 @@ class TenantController extends Controller
         return redirect()->route('super.tenants')->with('success', 'টেনেন্ট ও তার সব ডেটা মুছে ফেলা হয়েছে।');
     }
 
-    /** Staff-triggered DNS TXT check — replaces the old "just trust the typed domain" approval. */
+    /**
+     * Optional convenience only — NOT required by approveDomain()/
+     * activateDomain() below. Kept for an admin who still wants the
+     * automated DNS-TXT sanity check; the task this module now follows
+     * explicitly forbids requiring/building automatic DNS verification,
+     * so this is never surfaced as a mandatory gate anymore.
+     */
     public function verifyDomainDns(Tenant $tenant)
     {
         if (! $tenant->custom_domain_requested) {
@@ -125,30 +132,121 @@ class TenantController extends Controller
             'custom_domain_dns_verified_at' => now(),
         ]);
 
-        return back()->with('success', 'DNS TXT রেকর্ড যাচাই সফল হয়েছে — এখন ম্যানুয়াল সেটআপ শেষ করে Activate করুন।');
+        return back()->with('success', 'DNS TXT রেকর্ড যাচাই সফল হয়েছে।');
     }
 
-    /** Staff clicks this after manually adding the domain as a cPanel addon domain. */
+    /**
+     * Step 1 of 2 — staff reviews the request and agrees to proceed. Does
+     * NOT touch custom_domain/custom_domain_verified (the columns
+     * App\Http\Middleware\ResolveCustomDomain actually routes production
+     * traffic on) — the domain only goes live once activateDomain() below
+     * is explicitly called, after the admin has manually finished DNS/SSL
+     * setup outside this app. Accepts either the legacy 'dns_verified'
+     * state (optional convenience — see verifyDomainDns() above) or plain
+     * 'pending', since DNS verification is never required to approve a
+     * request.
+     */
     public function approveDomain(Tenant $tenant)
     {
-        if ($tenant->custom_domain_request_status !== 'dns_verified') {
-            return back()->with('error', 'আগে DNS TXT রেকর্ড যাচাই করুন।');
+        if (! in_array($tenant->custom_domain_request_status, ['pending', 'dns_verified'], true)) {
+            return back()->with('error', 'অনুমোদনের মতো কোনো পেন্ডিং ডোমেইন রিকোয়েস্ট নেই।');
         }
 
-        $tenant->update([
-            'custom_domain' => $tenant->custom_domain_requested,
-            'custom_domain_verified' => 1,
-            'custom_domain_request_status' => 'approved',
-        ]);
+        $tenant->update(['custom_domain_request_status' => 'approved']);
 
-        return back()->with('success', $tenant->custom_domain.' চালু করা হয়েছে।');
+        return back()->with('success', $tenant->custom_domain_requested.' রিকোয়েস্ট অনুমোদন করা হয়েছে — ম্যানুয়ালি DNS/SSL সেটআপ শেষে Activate করুন।');
     }
 
+    /**
+     * Step 2 of 2 — staff clicks this after manually finishing DNS/SSL
+     * setup outside this app (adding the domain as a cPanel addon domain,
+     * pointing DNS, issuing SSL — see the module's manual-hosting-
+     * workflow docs). This is the ONE place custom_domain/
+     * custom_domain_verified (what ResolveCustomDomain middleware
+     * actually routes on) get set — never falsely marked verified/active
+     * automatically. Idempotent: calling it again on an already-active
+     * domain (e.g. after a deactivate/reactivate cycle) is a safe no-op
+     * beyond re-confirming the same values.
+     */
+    public function activateDomain(Tenant $tenant)
+    {
+        if (! $tenant->custom_domain_requested) {
+            return back()->with('error', 'কোনো ডোমেইন রিকোয়েস্ট নেই।');
+        }
+
+        if (! in_array($tenant->custom_domain_request_status, ['approved', 'dns_verified'], true) && ! $tenant->custom_domain_verified) {
+            return back()->with('error', 'আগে রিকোয়েস্টটি Approve করুন।');
+        }
+
+        try {
+            $tenant->update([
+                'custom_domain' => $tenant->custom_domain_requested,
+                'custom_domain_verified' => 1,
+                'custom_domain_request_status' => 'approved',
+            ]);
+        } catch (QueryException $e) {
+            // tenants.custom_domain has a UNIQUE constraint (database/sql/
+            // chunk20.sql) — same "turn the integrity-violation exception
+            // into a normal message" pattern SettingController::
+            // messenger() already applies to page_id.
+            if ($e->getCode() === '23000') {
+                return back()->with('error', 'এই ডোমেইন ইতিমধ্যে অন্য একটি স্টোরে সক্রিয় আছে।');
+            }
+
+            throw $e;
+        }
+
+        return back()->with('success', $tenant->custom_domain.' এখন সক্রিয় (Active)।');
+    }
+
+    /**
+     * Turns off routing for an active custom domain WITHOUT clearing the
+     * mapping (custom_domain/custom_domain_requested stay put, status
+     * stays 'approved') — App\Http\Middleware\ResolveCustomDomain only
+     * ever matches custom_domain_verified=true, so this alone stops the
+     * domain from resolving. Re-activating later is just calling
+     * activateDomain() again, no re-request needed.
+     */
+    public function deactivateDomain(Tenant $tenant)
+    {
+        if (! $tenant->custom_domain_verified) {
+            return back()->with('error', 'এই ডোমেইন বর্তমানে সক্রিয় নয়।');
+        }
+
+        $tenant->update(['custom_domain_verified' => 0]);
+
+        return back()->with('success', $tenant->custom_domain.' নিষ্ক্রিয় করা হয়েছে।');
+    }
+
+    /** Full reset — clears the mapping entirely so the tenant can submit a fresh request from scratch. */
+    public function destroyDomain(Tenant $tenant)
+    {
+        $tenant->update([
+            'custom_domain' => null,
+            'custom_domain_verified' => 0,
+            'custom_domain_requested' => null,
+            'custom_domain_request_status' => 'none',
+            'custom_domain_verification_token' => null,
+            'custom_domain_dns_verified_at' => null,
+        ]);
+
+        return back()->with('success', 'কাস্টম ডোমেইন সম্পূর্ণ মুছে ফেলা হয়েছে।');
+    }
+
+    /**
+     * Blocked once the domain is genuinely live — an active mapping must
+     * go through deactivateDomain()/destroyDomain() instead of silently
+     * rejecting a request that's already serving real traffic.
+     */
     public function rejectDomain(Tenant $tenant)
     {
+        if ($tenant->custom_domain_verified) {
+            return back()->with('error', 'সক্রিয় ডোমেইন প্রত্যাখ্যান করা যাবে না — আগে Deactivate করুন।');
+        }
+
         $tenant->update(['custom_domain_request_status' => 'rejected']);
 
-        return back()->with('success', 'ডোমেইন রিকোয়েস্ট বাতিল করা হয়েছে।');
+        return back()->with('success', 'ডোমেইন রিকোয়েস্ট প্রত্যাখ্যান করা হয়েছে।');
     }
 
     /** Manual extension — e.g. cash/bKash-personal payment taken outside the gateway.
