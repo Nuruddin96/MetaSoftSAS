@@ -16,6 +16,11 @@ class ProductController extends Controller
             'categories' => Category::where('is_active', 1)->get(),
             'products' => Product::with('variants.inventory')->where('is_active', 1)
                 ->when(request('category'), fn ($q, $slug) => $q->whereHas('category', fn ($c) => $c->where('slug', $slug)))
+                // Same "real, higher reference price" rule as ProductVariant::hasOffer() —
+                // backs the homepage offer section's "সব দেখুন" link.
+                ->when(request('offer'), fn ($q) => $q->whereHas('variants', fn ($v) => $v->where('is_active', 1)
+                    ->whereNotNull('compare_at_price')
+                    ->whereColumn('compare_at_price', '>', 'selling_price')))
                 ->latest()->paginate(24)->withQueryString(),
         ]);
     }

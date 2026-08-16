@@ -79,39 +79,49 @@
             @csrf
             <input type="hidden" name="variant_id" id="variantIdInput" value="{{ $firstVariant?->id }}">
 
-            @if ($axes)
-                {{-- Independent Size/Color-style selectors — each axis chosen separately, JS resolves the exact matching variant. --}}
-                @foreach ($axes as $axis)
-                    <div>
-                        <label class="text-sm font-medium">{{ $axis }} বাছাই করুন</label>
-                        <div class="mt-2 flex flex-wrap gap-2 axis-group" data-axis="{{ $axis }}">
-                            @foreach ($axisValues[$axis] as $i => $value)
-                                <button type="button"
-                                        class="axis-btn px-4 py-2 rounded-lg border border-ink/15 text-sm hover:border-brand {{ $i === 0 ? 'is-selected border-brand bg-brand/10 font-semibold' : '' }}"
-                                        data-axis="{{ $axis }}" data-value="{{ $value }}">{{ $value }}</button>
-                            @endforeach
-                        </div>
-                    </div>
-                @endforeach
-            @elseif ($product->variants->count() > 1)
-                <div>
-                    <label class="text-sm font-medium">ভ্যারিয়েন্ট বাছাই করুন</label>
-                    <div class="mt-2 flex flex-wrap gap-2" id="variantPick">
-                        @foreach ($product->variants as $i => $v)
-                            <label class="cursor-pointer">
-                                <input type="radio" name="variant_id_flat" value="{{ $v->id }}" class="peer sr-only"
-                                       data-price="{{ number_format($v->selling_price) }}"
-                                       data-compare="{{ $v->compare_at_price ? number_format($v->compare_at_price) : '' }}"
-                                       data-savings="{{ $v->savingsAmount() ? number_format($v->savingsAmount()) : '' }}"
-                                       data-stock="{{ $v->stockCount() }}"
-                                       data-threshold="{{ $v->low_stock_threshold }}"
-                                       @checked($i === 0)>
-                                <span class="inline-block px-4 py-2 rounded-lg border border-ink/15 text-sm peer-checked:border-brand peer-checked:bg-brand/10 peer-checked:font-semibold">
-                                    {{ $v->variant_name }}
-                                </span>
-                            </label>
+            @if ($axes || $product->variants->count() > 1)
+                {{--
+                    Own bordered block for variant/option selection, visually
+                    separated (border-b) from the price block below it — so
+                    "which button picks the variant" and "what does it cost"
+                    never read as one mixed block.
+                --}}
+                <div class="space-y-4 pb-4 border-b border-ink/10">
+                    @if ($axes)
+                        {{-- Independent Size/Color-style selectors — each axis chosen separately, JS resolves the exact matching variant. --}}
+                        @foreach ($axes as $axis)
+                            <div>
+                                <label class="text-sm font-medium">{{ \Illuminate\Support\Str::title($axis) }} বাছাই করুন</label>
+                                <div class="mt-2 flex flex-wrap gap-2 axis-group" data-axis="{{ $axis }}">
+                                    @foreach ($axisValues[$axis] as $i => $value)
+                                        <button type="button"
+                                                class="axis-btn px-4 py-2 rounded-lg border border-ink/15 text-sm hover:border-brand {{ $i === 0 ? 'is-selected border-brand bg-brand/10 font-semibold' : '' }}"
+                                                data-axis="{{ $axis }}" data-value="{{ $value }}">{{ $value }}</button>
+                                    @endforeach
+                                </div>
+                            </div>
                         @endforeach
-                    </div>
+                    @else
+                        <div>
+                            <label class="text-sm font-medium">ভ্যারিয়েন্ট বাছাই করুন</label>
+                            <div class="mt-2 flex flex-wrap gap-2" id="variantPick">
+                                @foreach ($product->variants as $i => $v)
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="variant_id_flat" value="{{ $v->id }}" class="peer sr-only"
+                                               data-price="{{ number_format($v->selling_price) }}"
+                                               data-compare="{{ $v->compare_at_price ? number_format($v->compare_at_price) : '' }}"
+                                               data-savings="{{ $v->savingsAmount() ? number_format($v->savingsAmount()) : '' }}"
+                                               data-stock="{{ $v->stockCount() }}"
+                                               data-threshold="{{ $v->low_stock_threshold }}"
+                                               @checked($i === 0)>
+                                        <span class="inline-block px-4 py-2 rounded-lg border border-ink/15 text-sm peer-checked:border-brand peer-checked:bg-brand/10 peer-checked:font-semibold">
+                                            {{ $v->variant_name }}
+                                        </span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
                 </div>
             @endif
 

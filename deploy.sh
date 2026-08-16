@@ -8,12 +8,38 @@ export COMPOSER_HOME=/home/u162248930/.composer
 GIT_PROJECT="/home/u162248930/domains/metasoftbd.com/apps/shopsaas-git"
 LIVE_PROJECT="/home/u162248930/domains/metasoftbd.com/apps/shopsaas"
 
+# node/npm are NOT installed on this shared-hosting host (confirmed: `which
+# node npm` finds neither), so this script can only ever install Composer
+# packages and rsync whatever is already committed — it can never run
+# `npm run build` itself. If you changed any Blade/CSS Tailwind classes,
+# you MUST run `npm run build` locally and commit the resulting
+# public/build/ files BEFORE pushing, or production silently keeps serving
+# the old compiled CSS/JS with your new classes missing from it (this
+# already happened once — see BuiltAssetsTest.php for the regression
+# guard). The manifest check below only catches a missing/uncommitted
+# build entirely; it cannot detect a build that's merely stale.
 echo "===== MetaSoft SaaS Deployment Started ====="
 
 cd "$GIT_PROJECT"
 
 echo "Pulling latest code..."
 git pull origin main
+
+echo "Verifying frontend assets were built and committed..."
+if [ -f "public/build/manifest.json" ]; then
+    php -r '
+        $m = json_decode(file_get_contents("public/build/manifest.json"), true);
+        foreach ($m as $entry) {
+            if (isset($entry["file"]) && ! is_file("public/build/" . $entry["file"])) {
+                fwrite(STDERR, "Manifest references missing built asset: " . $entry["file"] . "\n");
+                exit(1);
+            }
+        }
+    '
+else
+    echo "ERROR: public/build/manifest.json not found — run \`npm run build\` locally and commit public/build/ before deploying." >&2
+    exit 1
+fi
 
 echo "Installing Composer packages..."
 /usr/local/bin/composer install --no-dev --optimize-autoloader --no-interaction

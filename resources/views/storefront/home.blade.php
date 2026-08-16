@@ -41,24 +41,22 @@
 @endif
 
 {{--
-    Offer strip — real discounted products only (never fabricated), one row,
-    slowly auto-sliding via the same CSS-marquee technique as the announcement
-    bar (two duplicated copies, translateX 0 -> -50% loops seamlessly, respects
-    prefers-reduced-motion). Duration is tied to the product count so the loop
-    moves roughly one product per second. Paused on hover so a card is
-    actually clickable rather than sliding away under the cursor.
+    Offer section — real discounted products only (never fabricated), same
+    card component and same header+grid pattern as the featured-products
+    section below (title + "সব দেখুন" link, plain grid, no carousel/marquee
+    chrome). Capped to 2 products here; the "সব দেখুন" link goes to the full
+    filtered listing (storefront.products?offer=1).
 --}}
 @if ($offers->isNotEmpty())
     <div class="mb-8">
-        <h2 class="font-disp font-bold text-xl mb-4">অফার পন্য</h2>
-        <div class="overflow-hidden">
-            <div class="flex gap-4 offer-marquee" style="--offer-duration: {{ max($offers->count(), 4) }}s">
-                @foreach ($offers->concat($offers) as $product)
-                    <div class="w-1/2 md:w-1/4 shrink-0">
-                        @include('storefront._card', ['product' => $product])
-                    </div>
-                @endforeach
-            </div>
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="font-disp font-bold text-xl">অফার পন্য</h2>
+            <a href="{{ route('storefront.products', ['offer' => 1]) }}" class="text-sm text-brand hover:underline">সব দেখুন →</a>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            @foreach ($offers->take(2) as $product)
+                @include('storefront._card', ['product' => $product])
+            @endforeach
         </div>
     </div>
 @endif
