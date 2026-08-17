@@ -130,19 +130,31 @@ class MetaCapiService
     }
 
     /**
-     * Validates the Pixel ID + access token pair without sending any
-     * tracking event (no Purchase, no synthetic event of any kind) — so it
-     * cannot pollute a tenant's ad reporting or interact with Test
-     * Mode/Test Event Code, both of which only apply to actual events.
+     * Validates the Pixel/Dataset ID + access token pair without ever
+     * creating a tracking event (no Purchase, no synthetic event of any
+     * kind) — so it cannot pollute a tenant's ad reporting or interact
+     * with Test Mode/Test Event Code, both of which only apply to actual
+     * events.
+     *
+     * Deliberately hits the SAME endpoint+verb as sendPurchase()
+     * (POST /{pixel_id}/events) rather than a plain GET on the pixel node.
+     * A CAPI-only access token (the kind Events Manager's "Generate Access
+     * Token" produces) is routinely NOT permissioned to read the pixel
+     * node directly — that GET returns "(#100) Missing Permission" even
+     * when the token is fully valid for sending real events, which is a
+     * false negative. Posting an intentionally empty `data` array reaches
+     * the real permission check first; Meta then rejects the payload
+     * itself ("data must be non-empty") without creating anything, so a
+     * validation-shaped error here means the credentials are good.
      *
      * @return array{success: bool, http_status: ?int, message: string}
      */
     public function testConnection(): array
     {
         try {
-            $response = Http::get("{$this->base}/{$this->pixelId}", [
-                'fields' => 'id',
+            $response = Http::post("{$this->base}/{$this->pixelId}/events", [
                 'access_token' => $this->accessToken,
+                'data' => [],
             ]);
         } catch (\Throwable $e) {
             Log::warning('[MetaCAPI] Test connection failed (exception)', [
@@ -156,23 +168,29 @@ class MetaCapiService
 
         $json = $response->json() ?? [];
         $metaError = $json['error'] ?? null;
+        $message = (string) ($metaError['message'] ?? '');
 
-        if ($response->successful() && ! $metaError && ($json['id'] ?? null)) {
-            return ['success' => true, 'http_status' => $response->status(), 'message' => 'সংযোগ সফল — Pixel ID ও Access Token সঠিক।'];
+        // Reaching Meta's payload validation (rather than being rejected
+        // for permission) proves the token can authenticate and is
+        // authorized to send events for this pixel/dataset.
+        $authorizedForEvents = $metaError && str_contains(strtolower($message), 'non-empty');
+
+        if ($authorizedForEvents || ($response->successful() && ! $metaError)) {
+            return ['success' => true, 'http_status' => $response->status(), 'message' => 'সংযোগ সফল — Pixel/Dataset ID ও Access Token সঠিক এবং ইভেন্ট পাঠানোর অনুমতি আছে।'];
         }
 
-        $message = $this->sanitize((string) ($metaError['message'] ?? 'Pixel ID অথবা Access Token সঠিক নয়।'));
+        $sanitizedMessage = $this->sanitize($message ?: 'Pixel ID অথবা Access Token সঠিক নয়।');
 
         Log::warning('[MetaCAPI] Test connection rejected by Meta', [
             'tenant_id' => app()->bound('currentTenant') ? app('currentTenant')->id : null,
             'http_status' => $response->status(),
             'error_code' => $metaError['code'] ?? null,
             'error_type' => $metaError['type'] ?? null,
-            'error_message' => $message,
+            'error_message' => $sanitizedMessage,
             'timestamp' => now()->toIso8601String(),
         ]);
 
-        return ['success' => false, 'http_status' => $response->status(), 'message' => $message];
+        return ['success' => false, 'http_status' => $response->status(), 'message' => $sanitizedMessage];
     }
 
     /** Defense in depth: strip any access_token that could have ended up in a URL/message. */
