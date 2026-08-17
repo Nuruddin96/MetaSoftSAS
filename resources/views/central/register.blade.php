@@ -6,12 +6,12 @@
 <div class="min-h-screen flex items-center justify-center px-4 py-10">
     <div class="w-full max-w-lg">
         <a href="/" class="flex items-center gap-2 justify-center mb-8">
-            <span class="w-9 h-9 rounded bg-leaf grid place-items-center text-white font-bold text-lg">M</span>
+            <x-ui.brand-mark />
             <span class="font-disp font-bold text-xl">MetaSoft BD</span>
         </a>
 
         <div class="bg-white rounded-2xl shadow-sm border border-ink/5 p-8">
-            <h1 class="font-disp font-bold text-2xl text-center">আপনার দোকান খুলুন</h1>
+            <h1 class="font-disp font-bold text-2xl text-center">আপনার শপ খুলুন</h1>
             <p class="text-mute text-sm text-center mt-2">৭ দিন ফ্রি — কোনো কার্ড লাগবে না</p>
 
             @if ($errors->any())
@@ -68,7 +68,7 @@
                     </div>
                 </div>
                 <button class="w-full py-3.5 rounded-xl bg-leaf text-white font-bold hover:bg-leafdk">
-                    দোকান তৈরি করুন →
+                    শপ তৈরি করুন →
                 </button>
             </form>
         </div>

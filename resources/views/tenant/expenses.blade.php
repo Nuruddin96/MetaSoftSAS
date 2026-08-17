@@ -11,7 +11,7 @@
         <p class="font-bold text-sm mb-4">নতুন খরচ যোগ করুন</p>
         <form method="POST" action="{{ route('tenant.expenses.store') }}" class="space-y-3">
             @csrf
-            <input name="title" required placeholder="খরচের বিবরণ (যেমন: দোকান ভাড়া)"
+            <input name="title" required placeholder="খরচের বিবরণ (যেমন: শপ ভাড়া)"
                    class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
             <input name="amount" type="number" step="0.01" min="0" required placeholder="টাকার পরিমাণ"
                    class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
@@ -21,7 +21,7 @@
                    class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
             <datalist id="catList">
                 @foreach ($categories as $c)<option value="{{ $c->name }}">@endforeach
-                <option value="দোকান ভাড়া"><option value="বেতন"><option value="বিজ্ঞাপন"><option value="যাতায়াত"><option value="বিদ্যুৎ বিল">
+                <option value="শপ ভাড়া"><option value="বেতন"><option value="বিজ্ঞাপন"><option value="যাতায়াত"><option value="বিদ্যুৎ বিল">
             </datalist>
             <x-ui.button type="submit" variant="accent" size="sm" class="w-full">যোগ করুন</x-ui.button>
         </form>

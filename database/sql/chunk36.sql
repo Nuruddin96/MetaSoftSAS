@@ -1,0 +1,22 @@
+-- Distinguishes AI-generated outgoing Messenger replies from genuine human
+-- staff replies, additive only.
+--
+-- Both App\Jobs\ProcessAiAgentMessage (AI) and Tenant\MessengerInboxController
+-- ::reply() (human panel reply) have always written the exact same
+-- messenger_messages row shape (direction='out', status='contacted') --
+-- there was previously NO way to tell them apart, retroactively or going
+-- forward. This matters now that the AI Agent's tone is learned from real
+-- historical human replies (see App\Services\AI\AiConversationStyleService):
+-- without this column, the AI would risk learning from its own past
+-- replies and reinforcing whatever robotic phrasing it already produces,
+-- rather than the business's actual human voice.
+--
+-- DEFAULT 'human' is deliberately the safe choice for every pre-existing
+-- row: the AI Agent has only ever been enabled for a single tenant, for a
+-- few minutes, immediately before this column was added, so the
+-- overwhelming majority of existing outbound rows are genuinely
+-- human-written. A small number of already-known AI-generated rows from
+-- that brief window will need a one-time manual backfill to 'ai' after
+-- this is imported -- deliberately NOT done automatically here, since this
+-- file only ever changes schema, never data.
+ALTER TABLE messenger_messages ADD COLUMN sent_by ENUM('human','ai') NOT NULL DEFAULT 'human' AFTER direction;

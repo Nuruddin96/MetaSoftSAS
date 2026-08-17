@@ -1,0 +1,18 @@
+-- Plan feature management (Super Admin checkbox system, additive).
+--
+-- The existing allow_pos/allow_custom_domain boolean columns stay exactly
+-- as they are — they're capability toggles this schema already handles
+-- fine as individual columns, and nothing about this change requires
+-- touching them. What's missing is an OPEN-ENDED feature list (Facebook,
+-- Messenger, WhatsApp, Message Automation, Auto Order, ...) that Super
+-- Admin can grow over time without a schema change every time — a single
+-- column per new feature doesn't scale for that, so this is one JSON
+-- column storing an array of enabled feature KEYS, validated against the
+-- fixed catalog in config/features.php (same "fixed catalog in a config
+-- file, referenced by key" shape config/themes.php already uses for
+-- storefront themes — not a new architectural pattern for this codebase).
+--
+-- Schema-only for now: Plan::hasFeature() exists for later enforcement,
+-- but nothing yet gates tenant-facing functionality on it — Super Admin
+-- configuration + landing-page display only, per this phase's scope.
+ALTER TABLE plans ADD COLUMN features JSON DEFAULT NULL AFTER allow_meta_ads;

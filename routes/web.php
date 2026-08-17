@@ -7,22 +7,30 @@ use App\Http\Controllers\CentralAuth\RegisterController;
 use App\Http\Controllers\FacebookOAuthCallbackController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MessengerWebhookController;
+use App\Http\Controllers\PwaController;
 use App\Http\Controllers\ServicesController;
 use App\Http\Controllers\Storefront\CartController;
 use App\Http\Controllers\Storefront\CheckoutController;
 use App\Http\Controllers\Storefront\HomeController as StorefrontHome;
 use App\Http\Controllers\Storefront\PageController as StorefrontPage;
 use App\Http\Controllers\Storefront\ProductController as StorefrontProduct;
+use App\Http\Controllers\SuperAdmin\AdvertisingController as SuperAdvertisingController;
 use App\Http\Controllers\SuperAdmin\AffiliateController as SuperAffiliateController;
+use App\Http\Controllers\SuperAdmin\AiCreditController as SuperAiCreditController;
+use App\Http\Controllers\SuperAdmin\AnnouncementController;
 use App\Http\Controllers\SuperAdmin\AuthController;
 use App\Http\Controllers\SuperAdmin\ClientController;
 use App\Http\Controllers\SuperAdmin\ClientPaymentController;
+use App\Http\Controllers\SuperAdmin\DomainRequestController;
 use App\Http\Controllers\SuperAdmin\PaymentController;
 use App\Http\Controllers\SuperAdmin\PlanController;
 use App\Http\Controllers\SuperAdmin\SourceOrderController;
 use App\Http\Controllers\SuperAdmin\SourceProductController;
 use App\Http\Controllers\SuperAdmin\TenantController;
 use App\Http\Controllers\TelegramController;
+use App\Http\Controllers\Tenant\AdvertisingController;
+use App\Http\Controllers\Tenant\AiChatController;
+use App\Http\Controllers\Tenant\AiMemoryController;
 use App\Http\Controllers\Tenant\BarcodeController;
 use App\Http\Controllers\Tenant\BillingController;
 use App\Http\Controllers\Tenant\CategoryController;
@@ -32,18 +40,26 @@ use App\Http\Controllers\Tenant\DashboardController;
 use App\Http\Controllers\Tenant\ExpenseController;
 use App\Http\Controllers\Tenant\FacebookConnectController;
 use App\Http\Controllers\Tenant\FraudCheckController;
+use App\Http\Controllers\Tenant\InboxController;
 use App\Http\Controllers\Tenant\IncompleteOrderController;
 use App\Http\Controllers\Tenant\InventoryController;
 use App\Http\Controllers\Tenant\MessengerInboxController;
+use App\Http\Controllers\Tenant\NotificationController;
+use App\Http\Controllers\Tenant\NotificationPreferenceController;
 use App\Http\Controllers\Tenant\OrderController;
 use App\Http\Controllers\Tenant\PosController;
 use App\Http\Controllers\Tenant\ProductController;
 use App\Http\Controllers\Tenant\ProductImportController;
 use App\Http\Controllers\Tenant\ProductSourceController;
+use App\Http\Controllers\Tenant\PushSubscriptionController;
+use App\Http\Controllers\Tenant\PwaController as TenantPwaController;
 use App\Http\Controllers\Tenant\ReportController;
 use App\Http\Controllers\Tenant\SettingController;
 use App\Http\Controllers\Tenant\WebsiteController;
+use App\Http\Controllers\Tenant\WhatsAppConnectController;
+use App\Http\Controllers\Tenant\WhatsAppInboxController;
 use App\Http\Controllers\TenantAuth\LoginController;
+use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
@@ -55,6 +71,13 @@ use Illuminate\Support\Facades\Route;
 Route::domain(config('app.central_domain'))->group(function () {
 
     Route::get('/', [LandingController::class, 'index'])->name('landing');
+
+    // Backs the landing page's "Install App" button — see PwaController's
+    // docblock for why this can't just reuse Tenant\PwaController's
+    // manifest (different scope), and why it's still not a second PWA
+    // mechanism (same service-worker script, same icon set).
+    Route::get('/manifest.json', [PwaController::class, 'manifest'])->name('central.pwa.manifest');
+    Route::get('/sw.js', [PwaController::class, 'serviceWorker'])->name('central.pwa.sw');
 
     Route::get('/services', [ServicesController::class, 'index'])->name('services');
 
@@ -103,7 +126,16 @@ Route::domain(config('app.central_domain'))->group(function () {
             Route::post('tenants/{tenant}/extend', [TenantController::class, 'extend'])->name('tenants.extend');
             Route::post('tenants/{tenant}/domain/verify', [TenantController::class, 'verifyDomainDns'])->name('tenants.domain.verify');
             Route::post('tenants/{tenant}/domain/approve', [TenantController::class, 'approveDomain'])->name('tenants.domain.approve');
+            Route::post('tenants/{tenant}/domain/connect', [TenantController::class, 'connectDomain'])->name('tenants.domain.connect');
+            Route::post('tenants/{tenant}/domain/refresh', [TenantController::class, 'refreshDomainConnection'])->name('tenants.domain.refresh');
+            Route::post('tenants/{tenant}/domain/activate', [TenantController::class, 'activateDomain'])->name('tenants.domain.activate');
+            Route::post('tenants/{tenant}/domain/deactivate', [TenantController::class, 'deactivateDomain'])->name('tenants.domain.deactivate');
             Route::post('tenants/{tenant}/domain/reject', [TenantController::class, 'rejectDomain'])->name('tenants.domain.reject');
+            Route::delete('tenants/{tenant}/domain', [TenantController::class, 'destroyDomain'])->name('tenants.domain.destroy');
+
+            // Cross-tenant "Custom Domain Requests" list — see
+            // DomainRequestController's docblock.
+            Route::get('domain-requests', [DomainRequestController::class, 'index'])->name('domain-requests');
 
             Route::get('payments', [PaymentController::class, 'index'])->name('payments');
 
@@ -122,6 +154,38 @@ Route::domain(config('app.central_domain'))->group(function () {
 
             Route::get('plans', [PlanController::class, 'index'])->name('plans');
             Route::put('plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
+
+            // "Tenant Announcement" — global, not per-tenant (see
+            // App\Models\PlatformAnnouncement's docblock).
+            Route::get('announcement', [AnnouncementController::class, 'index'])->name('announcement');
+            Route::post('announcement', [AnnouncementController::class, 'update'])->name('announcement.update');
+            Route::delete('announcement', [AnnouncementController::class, 'destroy'])->name('announcement.destroy');
+
+            // Advertising / Ads Billing — full visibility (incl. Meta spend/margin), admin-only mutations
+            Route::prefix('advertising')->name('advertising.')->group(function () {
+                Route::get('/', [SuperAdvertisingController::class, 'index'])->name('index');
+                Route::get('{tenant}', [SuperAdvertisingController::class, 'show'])->name('show');
+                Route::post('{tenant}/activate', [SuperAdvertisingController::class, 'activate'])->name('activate');
+                Route::put('{tenant}/settings', [SuperAdvertisingController::class, 'updateSettings'])->name('settings');
+                Route::post('{tenant}/payments', [SuperAdvertisingController::class, 'storePayment'])->name('payments.store');
+                Route::post('{tenant}/charges', [SuperAdvertisingController::class, 'storeCharge'])->name('charges.store');
+                Route::post('{tenant}/adjustments', [SuperAdvertisingController::class, 'storeAdjustment'])->name('adjustments.store');
+            });
+
+            // AI Agent credit/wallet — allocation and manual adjustment only;
+            // no "activate"/module-settings step, unlike Advertising above,
+            // since an AI credit wallet has no separate module-enabled
+            // switch — see AiCreditAccount's docblock.
+            Route::prefix('ai-credit')->name('ai-credit.')->group(function () {
+                Route::get('/', [SuperAiCreditController::class, 'index'])->name('index');
+                Route::get('{tenant}', [SuperAiCreditController::class, 'show'])->name('show');
+                Route::post('{tenant}/allocate', [SuperAiCreditController::class, 'allocate'])->name('allocate');
+                Route::post('{tenant}/adjustments', [SuperAiCreditController::class, 'adjust'])->name('adjustments.store');
+                // Phase 14 — platform-level AI Agent pause, independent of
+                // credit — see Tenant::isAiPaused()'s docblock.
+                Route::post('{tenant}/pause-ai', [SuperAiCreditController::class, 'pauseAi'])->name('pause-ai');
+                Route::post('{tenant}/resume-ai', [SuperAiCreditController::class, 'resumeAi'])->name('resume-ai');
+            });
 
             Route::get('source/products', [SourceProductController::class, 'index'])->name('source.products');
             Route::get('source/products/create', [SourceProductController::class, 'create'])->name('source.products.create');
@@ -167,9 +231,43 @@ $tenantRoutes = function () {
         Route::match(['get', 'post'], 'billing/callback/{gateway}', [BillingController::class, 'callback'])
             ->name('billing.callback')->withoutMiddleware([ValidateCsrfToken::class]);
 
+        // Public PWA endpoints — dynamic per-tenant (see PwaController docblock
+        // for why this can't be a static public/manifest.json under path
+        // tenancy). Deliberately OUTSIDE auth:tenant/check.subscription: the
+        // browser must be able to fetch these from the (unauthenticated)
+        // login page itself to discover/install the PWA before a session
+        // exists. Only 'resolve.tenant' (applied at the group above) is
+        // required — both handlers read app('currentTenant') alone and never
+        // touch session/auth state or tenant business data.
+        Route::get('manifest.json', [TenantPwaController::class, 'manifest'])->name('pwa.manifest');
+        Route::get('sw.js', [TenantPwaController::class, 'serviceWorker'])->name('pwa.sw');
+
         Route::middleware(['auth:tenant', 'check.subscription'])->group(function () {
 
             Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+            // AI Agent panel chat (Phase 4) — the first live consumer of
+            // the AI tool registry; see Tenant\AiChatController's docblock
+            // for why this is tenant-authenticated only, unlike the
+            // public Messenger auto-reply flow.
+            Route::get('ai-chat', [AiChatController::class, 'index'])->name('ai-chat');
+            Route::post('ai-chat/messages', [AiChatController::class, 'send'])->name('ai-chat.send');
+            // Phase 5 confirmation system — the only routes that ever
+            // trigger a mutating tool's actual execution (see
+            // AiChatController's docblock).
+            Route::post('ai-chat/actions/{pendingAction}/confirm', [AiChatController::class, 'confirm'])->name('ai-chat.actions.confirm');
+            Route::post('ai-chat/actions/{pendingAction}/reject', [AiChatController::class, 'reject'])->name('ai-chat.actions.reject');
+
+            // Notification bell "mark seen" beacon (session-based, see NotificationController)
+            Route::post('notifications/seen', [NotificationController::class, 'markSeen'])->name('notifications.seen');
+
+            // Web Push (VAPID) — subscribe/unsubscribe this browser, and the
+            // per-category preferences screen. See App\Services\Notifications
+            // and the mobile audit's Part C-H for the full architecture.
+            Route::post('push/subscribe', [PushSubscriptionController::class, 'store'])->name('push.subscribe');
+            Route::post('push/unsubscribe', [PushSubscriptionController::class, 'destroy'])->name('push.unsubscribe');
+            Route::get('notifications/preferences', [NotificationPreferenceController::class, 'edit'])->name('notifications.preferences');
+            Route::post('notifications/preferences', [NotificationPreferenceController::class, 'update'])->name('notifications.preferences.update');
 
             // Billing
             Route::get('billing', [BillingController::class, 'index'])->name('billing');
@@ -205,9 +303,11 @@ $tenantRoutes = function () {
             Route::get('orders/create', [OrderController::class, 'create'])->name('orders.create');
             Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
             Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+            Route::post('orders/{order}/complete', [OrderController::class, 'complete'])->name('orders.complete');
             Route::post('orders/{order}/status', [OrderController::class, 'updateStatus'])->name('orders.status');
             Route::post('orders/{order}/channel', [OrderController::class, 'updateChannel'])->name('orders.channel');
             Route::post('orders/{order}/courier', [CourierController::class, 'send'])->name('orders.courier');
+            Route::post('orders/{order}/courier/refresh', [CourierController::class, 'refreshStatus'])->name('orders.courier.refresh');
             Route::post('orders/bulk-status', [OrderController::class, 'bulkStatus'])->name('orders.bulk-status');
             Route::post('orders/bulk-courier', [OrderController::class, 'bulkCourier'])->name('orders.bulk-courier');
             Route::post('fraud-check', [FraudCheckController::class, 'check'])->name('fraud.check');
@@ -253,6 +353,9 @@ $tenantRoutes = function () {
             Route::get('website/page/{page}/edit', [WebsiteController::class, 'editPage'])->name('website.page.edit');
             Route::put('website/page/{page}', [WebsiteController::class, 'updatePage'])->name('website.page.update');
             Route::delete('website/page/{page}', [WebsiteController::class, 'destroyPage'])->name('website.page.destroy');
+            Route::post('website/review', [WebsiteController::class, 'storeReview'])->name('website.review.store');
+            Route::put('website/review/{review}', [WebsiteController::class, 'updateReview'])->name('website.review.update');
+            Route::delete('website/review/{review}', [WebsiteController::class, 'destroyReview'])->name('website.review.destroy');
 
             // Product Source
             Route::get('product-source', [ProductSourceController::class, 'index'])->name('product-source.index');
@@ -260,20 +363,47 @@ $tenantRoutes = function () {
             Route::get('product-source/{product}', [ProductSourceController::class, 'show'])->name('product-source.show');
             Route::post('product-source/{product}/order', [ProductSourceController::class, 'order'])->name('product-source.order');
 
+            // Unified Inbox (Phase 5) — read-model list only; opening a
+            // conversation hands off to that channel's own native route
+            // below (messenger.show, unchanged; whatsapp.show, new).
+            Route::get('inbox', [InboxController::class, 'index'])->name('inbox');
+            Route::get('inbox/more', [InboxController::class, 'more'])->name('inbox.more');
+
             // Messenger inbox
             Route::get('messenger', [MessengerInboxController::class, 'index'])->name('messenger.index');
+            Route::get('messenger/updates', [MessengerInboxController::class, 'updates'])->name('messenger.updates');
             Route::get('messenger/{psid}', [MessengerInboxController::class, 'show'])->name('messenger.show');
             Route::post('messenger/{psid}/reply', [MessengerInboxController::class, 'reply'])->name('messenger.reply');
             Route::post('messenger/{psid}/status', [MessengerInboxController::class, 'updateStatus'])->name('messenger.status');
+            Route::post('messenger/{psid}/resume-ai', [MessengerInboxController::class, 'resumeAi'])->name('messenger.resume-ai');
+
+            // Advertising / Ads Billing — read-only for tenants, gated by
+            // AdvertisingBalanceService::isEnabled() inside the controller
+            Route::prefix('advertising')->name('advertising.')->group(function () {
+                Route::get('/', [AdvertisingController::class, 'overview'])->name('overview');
+                Route::get('ledger', [AdvertisingController::class, 'ledger'])->name('ledger');
+                Route::get('payments', [AdvertisingController::class, 'payments'])->name('payments');
+                Route::get('charges', [AdvertisingController::class, 'charges'])->name('charges');
+            });
 
             // Settings
             Route::get('settings', [SettingController::class, 'index'])->name('settings');
             Route::post('settings/marketing', [SettingController::class, 'marketing'])->name('settings.marketing');
             Route::post('settings/marketing/test-capi', [SettingController::class, 'testCapiConnection'])->name('settings.marketing.test-capi');
             Route::post('settings/domain', [SettingController::class, 'requestDomain'])->name('settings.domain');
+            Route::delete('settings/domain', [SettingController::class, 'cancelDomainRequest'])->name('settings.domain.cancel');
             Route::post('settings/messenger', [SettingController::class, 'messenger'])->name('settings.messenger');
             Route::post('settings/courier', [SettingController::class, 'courier'])->name('settings.courier');
             Route::post('settings/store', [SettingController::class, 'store'])->name('settings.store');
+            Route::post('settings/ai-agent', [SettingController::class, 'aiAgent'])->name('settings.ai-agent');
+
+            // "Teach Your AI Agent" — tenant-authored Q&A memory
+            // (App\Models\AiTenantMemory). {aiMemory} route binding is
+            // tenant-isolated via App\Traits\BelongsToTenant::
+            // resolveRouteBinding() — see AiMemoryController's docblock.
+            Route::post('ai-memory', [AiMemoryController::class, 'store'])->name('ai-memory.store');
+            Route::put('ai-memory/{aiMemory}', [AiMemoryController::class, 'update'])->name('ai-memory.update');
+            Route::delete('ai-memory/{aiMemory}', [AiMemoryController::class, 'destroy'])->name('ai-memory.destroy');
 
             // Facebook OAuth "Connect Facebook" (Phase 1). The callback these
             // redirect out to is registered separately, outside this tenant
@@ -283,6 +413,42 @@ $tenantRoutes = function () {
             Route::get('facebook/pages', [FacebookConnectController::class, 'pages'])->name('facebook.pages');
             Route::post('facebook/pages/{pageId}/connect', [FacebookConnectController::class, 'connect'])->name('facebook.pages.connect');
             Route::post('facebook/pages/{page}/disconnect', [FacebookConnectController::class, 'disconnect'])->name('facebook.pages.disconnect');
+
+            // WhatsApp Embedded Signup "Connect WhatsApp" (Phase 4). No
+            // separate central callback route needed here, unlike Facebook
+            // above — the signup popup runs entirely inside this
+            // already-tenant-authenticated Settings page, so complete()
+            // stays a normal panel route. See WhatsAppConnectController's
+            // docblock for why.
+            //
+            // 'feature:whatsapp' gates connecting and using the inbox behind
+            // the tenant's Plan (config/features.php + Plan::hasFeature()) —
+            // disconnect is deliberately NOT gated, same reasoning
+            // CheckSubscription always allows tenant.billing/tenant.logout:
+            // a tenant who loses the feature (downgrade, or was never
+            // granted it) must still be able to turn an existing connection
+            // off, not get stuck unable to reach the one action that exits
+            // the feature.
+            Route::post('whatsapp/connect', [WhatsAppConnectController::class, 'complete'])->middleware('feature:whatsapp')->name('whatsapp.connect.complete');
+            Route::post('whatsapp/{phone}/disconnect', [WhatsAppConnectController::class, 'disconnect'])->name('whatsapp.disconnect');
+
+            // WhatsApp inbox (Phase 5) — channel-native thread view, mirrors
+            // the Messenger inbox routes above wherever the concept
+            // genuinely matches. 'updates' registered before the {waId}
+            // wildcard so it isn't swallowed by it, same ordering Messenger
+            // uses for messenger/updates vs messenger/{psid}.
+            Route::middleware('feature:whatsapp')->group(function () {
+                Route::get('whatsapp/updates', [WhatsAppInboxController::class, 'updates'])->name('whatsapp.updates');
+                // Two segments ('whatsapp/media/{id}'), so this never collides
+                // with the single-segment 'whatsapp/{waId}' wildcard below
+                // regardless of registration order — kept next to 'updates'
+                // for the same "register the non-wildcard route first" clarity.
+                Route::get('whatsapp/media/{id}', [WhatsAppInboxController::class, 'media'])->name('whatsapp.media');
+                Route::get('whatsapp/{waId}', [WhatsAppInboxController::class, 'show'])->name('whatsapp.show');
+                Route::post('whatsapp/{waId}/reply', [WhatsAppInboxController::class, 'reply'])->name('whatsapp.reply');
+                Route::post('whatsapp/{waId}/status', [WhatsAppInboxController::class, 'updateStatus'])->name('whatsapp.status');
+                Route::post('whatsapp/{waId}/resume-ai', [WhatsAppInboxController::class, 'resumeAi'])->name('whatsapp.resume-ai');
+            });
         });
     });
 
@@ -304,6 +470,18 @@ $tenantRoutes = function () {
         Route::post('/checkout', [CheckoutController::class, 'place'])->name('checkout.place');
         Route::get('/order-success/{orderNumber}', [CheckoutController::class, 'success'])->name('order.success');
     });
+
+    // Custom-domain self-verification ping — SuperAdmin\TenantController::
+    // connectDomain()/refreshDomainConnection() hit this over the
+    // tenant's REAL candidate domain (not /shop/{slug}) to prove
+    // end-to-end connectivity actually works before ever marking that
+    // domain Active, per this app's "never falsely mark a domain
+    // verified" rule — see App\Services\Domain\CloudflareDomainService's
+    // docblock. Deliberately outside check.subscription (a lapsed
+    // subscription must not make an otherwise-correct domain connection
+    // look broken) and returns only a tenant id, nothing sensitive.
+    Route::get('/__custom-domain-check', fn () => response()->json(['ok' => true, 'tenant_id' => app('currentTenant')->id]))
+        ->name('custom-domain.check');
 };
 
 /*
@@ -362,6 +540,18 @@ Route::get('/webhook/messenger', [MessengerWebhookController::class, 'verify'])-
 Route::post('/webhook/messenger', [MessengerWebhookController::class, 'receive'])
     ->withoutMiddleware([ValidateCsrfToken::class])
     ->name('messenger.webhook.receive');
+
+/*
+|--------------------------------------------------------------------------
+| WHATSAPP WEBHOOK (single global URL — same "one URL, many tenants" shape
+| as the Messenger webhook above; tenant is resolved per-event inside the
+| controller via phone_number_id, never from this route)
+|--------------------------------------------------------------------------
+*/
+Route::get('/webhook/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('whatsapp.webhook.verify');
+Route::post('/webhook/whatsapp', [WhatsAppWebhookController::class, 'receive'])
+    ->withoutMiddleware([ValidateCsrfToken::class])
+    ->name('whatsapp.webhook.receive');
 
 /*
 |--------------------------------------------------------------------------

@@ -6,7 +6,7 @@
 <header class="bg-paper/90 backdrop-blur border-b border-ink/10">
     <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <a href="/" class="flex items-center gap-2">
-            <span class="w-8 h-8 rounded bg-leaf grid place-items-center text-white font-bold text-lg">M</span>
+            <x-ui.brand-mark size="sm" />
             <span class="font-disp font-bold text-lg">MetaSoft BD</span>
         </a>
         <a href="/" class="text-sm text-mute hover:text-ink">← হোমে ফিরুন</a>

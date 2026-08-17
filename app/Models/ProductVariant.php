@@ -65,4 +65,41 @@ class ProductVariant extends Model
     {
         return $this->totalStock() <= $this->low_stock_threshold;
     }
+
+    /**
+     * Storefront-safe stock read: uses the already-loaded `inventory`
+     * relation (via with('variants.inventory')) instead of totalStock()'s
+     * fresh aggregate query — calling totalStock() per variant on a
+     * paginated product grid would be a real N+1. Falls back to
+     * totalStock() when inventory wasn't eager-loaded (e.g. an isolated
+     * call site), so this is always correct, just not always free.
+     */
+    public function stockCount(): int
+    {
+        return $this->relationLoaded('inventory')
+            ? (int) $this->inventory->sum('quantity')
+            : $this->totalStock();
+    }
+
+    /** Whole-percent discount off this variant's own selling price, or null when there's nothing to show. */
+    public function discountPercent(): ?int
+    {
+        if (! $this->hasOffer()) {
+            return null;
+        }
+
+        return (int) round((($this->compare_at_price - $this->selling_price) / $this->compare_at_price) * 100);
+    }
+
+    /** True only when compare_at_price is a real, higher reference price — never invented, never shown for a plain single-price variant. */
+    public function hasOffer(): bool
+    {
+        return $this->compare_at_price !== null && (float) $this->compare_at_price > (float) $this->selling_price;
+    }
+
+    /** Flat taka amount saved (compare_at_price - selling_price), or null when there's no offer. */
+    public function savingsAmount(): ?float
+    {
+        return $this->hasOffer() ? (float) $this->compare_at_price - (float) $this->selling_price : null;
+    }
 }

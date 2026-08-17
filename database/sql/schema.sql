@@ -208,12 +208,19 @@ CREATE TABLE products (
     INDEX idx_tenant_active (tenant_id, is_active)
 );
 
+-- created_at/updated_at were missing from this definition even though the
+-- real, live database (and App\Models\ProductImage's $timestamps = true)
+-- already has both columns — confirmed directly against production, which
+-- already has real rows with real timestamps. This file is corrected to
+-- match reality; no ALTER TABLE chunk was needed since production was
+-- never actually missing these columns, only this tracked baseline was.
 CREATE TABLE product_images (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     tenant_id BIGINT UNSIGNED NOT NULL,
     product_id BIGINT UNSIGNED NOT NULL,
     image_path VARCHAR(255) NOT NULL,
     sort_order INT DEFAULT 0,
+    created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 );
 

@@ -22,7 +22,7 @@
         </p>
         <form method="POST" action="{{ route('tenant.products.import') }}" enctype="multipart/form-data" class="space-y-4">
             @csrf
-            <input type="file" name="file" accept=".csv" required class="w-full text-sm">
+            <input type="file" name="file" accept=".csv" required class="w-full text-sm border border-dashed border-ink/25 rounded-btn px-3 py-2.5 cursor-pointer hover:bg-paper transition file:mr-3 file:px-3 file:py-1.5 file:rounded-btn file:border-0 file:bg-ink/5 file:text-xs file:font-semibold file:cursor-pointer">
             <x-ui.button type="submit" variant="accent" size="sm">আপলোড করুন</x-ui.button>
         </form>
     </x-ui.card>

@@ -64,8 +64,16 @@ class OAuthCallbackControllerTest extends FacebookFeatureTestCase
         $response->assertStatus(403);
     }
 
-    public function test_replayed_state_is_rejected_on_second_callback_hit(): void
+    public function test_a_benign_duplicate_callback_after_a_successful_connection_redirects_instead_of_403(): void
     {
+        // Mobile WebView/app flows can deliver the exact same callback
+        // twice. The first delivery consumes the state and completes the
+        // connection; the state's single-use protection still rejects the
+        // second delivery's own validateAndConsumeState() call — but
+        // because independent evidence (a FacebookConnection row updated
+        // at/after the state's used_at) proves the original request
+        // already succeeded, the controller now redirects to the Page
+        // picker instead of a hard 403 that would look like a failure.
         $tenant = $this->makeTenant();
         $user = $this->makeUser($tenant->id);
         $state = (new FacebookOAuthService)->createState($tenant, $user);
@@ -78,6 +86,39 @@ class OAuthCallbackControllerTest extends FacebookFeatureTestCase
         $this->actingAs($user, 'tenant')
             ->get('/panel/facebook/callback?state='.$state->state.'&code=real-code')
             ->assertRedirect($tenant->url().'/panel/facebook/pages');
+
+        $sentAfterFirstCall = count(Http::recorded());
+
+        $second = $this->actingAs($user, 'tenant')
+            ->get('/panel/facebook/callback?state='.$state->state.'&code=real-code');
+
+        $second->assertRedirect($tenant->url().'/panel/facebook/pages');
+        $second->assertSessionHas('success');
+
+        // Single-use is still enforced underneath — the second request
+        // never re-runs the token exchange, and only one connection row
+        // exists.
+        $this->assertCount($sentAfterFirstCall, Http::recorded(), 'the duplicate callback must never repeat the token exchange');
+        $this->assertSame(1, FacebookConnection::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count());
+    }
+
+    public function test_a_replayed_state_without_a_completed_connection_is_still_rejected_with_403(): void
+    {
+        // The state was consumed (used_at set) but no FacebookConnection
+        // was ever created for it — e.g. the first callback hit the
+        // "missing code" branch and returned before reaching the token
+        // exchange. A replay of that same state must NOT be treated as a
+        // benign duplicate — there is no completed connection to redirect
+        // to, so this must remain a hard 403.
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $state = (new FacebookOAuthService)->createState($tenant, $user);
+
+        $this->actingAs($user, 'tenant')
+            ->get('/panel/facebook/callback?state='.$state->state)
+            ->assertRedirect($tenant->url().'/panel/facebook/pages'); // consumes the state, no code -> no connection
+
+        $this->assertSame(0, FacebookConnection::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count());
 
         $second = $this->actingAs($user, 'tenant')
             ->get('/panel/facebook/callback?state='.$state->state.'&code=real-code');

@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Middleware\CheckSubscription;
+use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\ResolveTenant;
+use App\Http\Middleware\ResolveTenantSessionCookie;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -18,12 +20,22 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'resolve.tenant' => ResolveTenant::class,
             'check.subscription' => CheckSubscription::class,
+            'feature' => EnsureFeatureEnabled::class,
         ]);
 
         // Must run before routing (not a route middleware) so a verified
         // custom-domain request can be rewritten to the existing /shop/{slug}
         // shape before the router ever tries to match it.
         $middleware->prepend(ResolveCustomDomain::class);
+
+        // Must also run before routing — specifically before StartSession,
+        // which lives inside the 'web' route-middleware group and therefore
+        // executes before route-level middleware like resolve.tenant. Names
+        // the per-tenant session cookie (subdomain tenancy mode only) early
+        // enough for StartSession to actually find it on the incoming
+        // request. See ResolveTenantSessionCookie's docblock for the bug
+        // this closes.
+        $middleware->prepend(ResolveTenantSessionCookie::class);
 
         // This app has no route named "login" — it has three, one per guard
         // (tenant.login, super.login, affiliate.login). Without this,

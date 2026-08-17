@@ -67,6 +67,22 @@ class MessengerApiTest extends TestCase
         $this->assertSame('invalid recipient', $result['error']['message']);
     }
 
+    public function test_send_typing_on_posts_the_correct_sender_action_shape(): void
+    {
+        Http::fake(['*/me/messages*' => Http::response([])]);
+
+        (new MessengerApi)->sendTypingOn('psid-42', 'tok');
+
+        Http::assertSent(function ($request) {
+            $body = json_decode((string) $request->body(), true);
+
+            return $request->method() === 'POST'
+                && $body['recipient']['id'] === 'psid-42'
+                && $body['sender_action'] === 'typing_on'
+                && ! isset($body['message']);
+        });
+    }
+
     public function test_get_profile_uses_the_configured_graph_api_version_and_token(): void
     {
         config(['facebook.graph_version' => 'v26.0']);
@@ -84,12 +100,25 @@ class MessengerApiTest extends TestCase
         });
     }
 
-    public function test_get_profile_returns_null_on_graph_api_error(): void
+    /**
+     * getProfile() now returns the raw Response (not null) on a Graph API
+     * error — FacebookMessengerCustomerService needs the actual status/
+     * error body to log it and to decide whether to persist a minimal
+     * identity row despite the failure (see its class docblock). Callers
+     * decide success/failure via $response->successful(), not getProfile()
+     * itself collapsing that decision into null.
+     */
+    public function test_get_profile_returns_the_response_with_error_details_on_graph_api_error(): void
     {
-        Http::fake(['*/psid-99*' => Http::response(['error' => ['message' => 'permission denied', 'code' => 10]], 403)]);
+        Http::fake(['*/psid-99*' => Http::response(['error' => ['message' => 'permission denied', 'type' => 'OAuthException', 'code' => 10, 'error_subcode' => 2018001]], 403)]);
 
-        $profile = (new MessengerApi)->getProfile('psid-99', 'tok');
+        $response = (new MessengerApi)->getProfile('psid-99', 'tok');
 
-        $this->assertNull($profile);
+        $this->assertFalse($response->successful());
+        $this->assertSame(403, $response->status());
+        $this->assertSame('permission denied', $response->json('error.message'));
+        $this->assertSame('OAuthException', $response->json('error.type'));
+        $this->assertSame(10, $response->json('error.code'));
+        $this->assertSame(2018001, $response->json('error.error_subcode'));
     }
 }

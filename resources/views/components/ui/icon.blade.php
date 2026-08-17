@@ -11,7 +11,7 @@
     Props:
       name: 'storefront' | 'shield-check' | 'chart-trending' | 'megaphone'
           | 'whatsapp' | 'upload' | 'globe' | 'cart' | 'warehouse' | 'chevron-down' | 'rocket'
-          | 'image'
+          | 'image' | 'x'
 --}}
 @props(['name'])
 
@@ -49,6 +49,11 @@
         @case('shield-check')
             <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z" />
             <path d="M9 12l2 2 4-4" />
+            @break
+
+        @case('x')
+            <path d="M6 6l12 12" />
+            <path d="M18 6L6 18" />
             @break
 
         @case('chart-trending')

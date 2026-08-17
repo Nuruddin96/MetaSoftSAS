@@ -3,14 +3,19 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
+use App\Models\AiTenantMemory;
 use App\Models\CourierSetting;
 use App\Models\FacebookConnection;
 use App\Models\FacebookPage;
 use App\Models\MarketingSetting;
 use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
+use App\Models\WhatsAppBusinessAccount;
+use App\Models\WhatsAppPhoneNumber;
+use App\Services\AI\AiCreditService;
 use App\Services\Domain\DomainManager;
 use App\Services\Marketing\MetaCapiService;
+use App\Services\WhatsApp\WhatsAppOAuthService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
@@ -26,17 +31,53 @@ class SettingController extends Controller
         // card) keeps working exactly as before rather than 500ing.
         $facebookReady = FacebookPage::tablesReady();
 
+        // Same additive-table guard for WhatsApp (database/sql/chunk26.sql).
+        $whatsappReady = WhatsAppPhoneNumber::tablesReady();
+        $whatsappAccount = $whatsappReady ? WhatsAppBusinessAccount::first() : null;
+        $whatsappPhoneNumbers = $whatsappReady ? WhatsAppPhoneNumber::orderByDesc('id')->get() : collect();
+
+        // Embedded into the Connect/Reconnect WhatsApp button for the
+        // Settings page's JS to submit back with the signup result — minted
+        // whenever the tenant might plausibly click that button (no
+        // connection at all, or an existing one that needs reconnecting/
+        // retrying), never when a fully active connection already exists,
+        // since it would be meaningless there. currentOrNewState() also
+        // avoids leaving a fresh unused row behind on every page view a
+        // tenant makes without clicking Connect — see its docblock.
+        $hasFullyActiveNumber = $whatsappPhoneNumbers->contains(
+            fn ($p) => $p->is_active && $p->status === 'active'
+        );
+        $whatsappConnectState = ($whatsappReady && ! $hasFullyActiveNumber)
+            ? (new WhatsAppOAuthService)->currentOrNewState($tenant, auth('tenant')->user())
+            : null;
+
         return view('tenant.settings', [
             'messenger' => MessengerSetting::first(),
             'facebookConnection' => $facebookReady ? FacebookConnection::first() : null,
             'facebookPages' => $facebookReady ? FacebookPage::orderByDesc('id')->get() : collect(),
+            'whatsappAccount' => $whatsappAccount,
+            'whatsappPhoneNumbers' => $whatsappPhoneNumbers,
+            'whatsappConnectState' => $whatsappConnectState,
+            // Cosmetic mirror of the server-side 'feature:whatsapp' route
+            // gate (EnsureFeatureEnabled) — this only decides what the
+            // Connect button looks like; the actual enforcement lives in the
+            // middleware, same "UI reflects it, server enforces it" split as
+            // the custom-domain card below (($tenant->plan?->allow_custom_domain).
+            'whatsappFeatureEnabled' => (bool) $tenant->plan?->hasFeature('whatsapp'),
             'tenant' => $tenant,
             'couriers' => CourierSetting::get()->keyBy('provider'),
             'marketing' => MarketingSetting::firstOrNew(['tenant_id' => app('currentTenant')->id]),
             'store' => StoreSetting::pluck('value', 'key'),
-            'domainTxtValue' => $tenant->custom_domain_verification_token
-                ? DomainManager::expectedTxtValue($tenant->custom_domain_verification_token)
-                : null,
+            // Read-only display only — the balance itself is only ever
+            // mutated by Super Admin via AiCreditService (see
+            // SuperAdmin\AiCreditController). null = never allocated any
+            // credit yet, distinct from "0" (allocated once, now spent).
+            'aiCreditBalance' => app(AiCreditService::class)->balance($tenant->id),
+            // "Teach Your AI Agent" — additive table (database/sql/
+            // chunk41.sql), same tablesReady() guard as Facebook/WhatsApp
+            // above so a deploy that lands before the chunk is imported
+            // just shows an empty list instead of a 500.
+            'aiMemories' => AiTenantMemory::tablesReady() ? AiTenantMemory::orderByDesc('id')->get() : collect(),
         ]);
     }
 
@@ -189,13 +230,100 @@ class SettingController extends Controller
         return back()->with('success', 'স্টোর সেটিংস সেভ হয়েছে।');
     }
 
-    /** Tenant requests their own domain (e.g. myshop.com); super admin approves manually. */
+    /**
+     * AI Customer Support Agent ON/OFF toggles. Reuses store_settings the
+     * same way store() above does for delivery charges — no dedicated
+     * table for two booleans. StoreSetting's BelongsToTenant scope (and
+     * updateOrCreate's own tenant_id auto-fill on create) is what makes
+     * this tenant-isolated: this method never needs to name a tenant_id
+     * itself, and there is no way for this request to reach or modify
+     * another tenant's row.
+     *
+     * Three independent toggles, saved together from the same Settings
+     * card: ai_agent_enabled is the master AI switch (the panel chat and
+     * every channel below share it); messenger_ai_auto_reply_enabled and
+     * whatsapp_ai_auto_reply_enabled are each channel-specific — a tenant
+     * can leave the master switch on while turning either channel's
+     * auto-reply off, and inbound messages on that channel still arrive
+     * and sit in the inbox as normal, just without an automatic reply.
+     * See MessengerWebhookController::maybeDispatchAiAgent() and
+     * WhatsAppWebhookController::maybeDispatchAiAgent()'s docblocks for
+     * how each set of three is enforced together.
+     *
+     * Also saves ai_custom_instructions (Phase 3) — free-text, per-tenant
+     * behavior instructions ("বন্ধুসুলভভাবে কথা বলবে", "discount নিজে
+     * থেকে দিবে না", etc.), read by AiAgentService::systemPrompt() and
+     * spliced into every reply's prompt with an explicit "cannot override
+     * the safety rules above" boundary — see that method's docblock.
+     */
+    public function aiAgent(Request $request)
+    {
+        $data = $request->validate([
+            'ai_agent_enabled' => 'nullable|boolean',
+            'messenger_ai_auto_reply_enabled' => 'nullable|boolean',
+            'whatsapp_ai_auto_reply_enabled' => 'nullable|boolean',
+            // Free-text tenant instructions (Phase 3) — capped well below
+            // ai_usage_ledger-cost-relevant territory; this text is
+            // injected into every single AI reply's prompt (see
+            // AiAgentService::systemPrompt()), so an unbounded textarea
+            // would let one tenant silently inflate their own per-message
+            // token cost with no limit. 2000 chars is generous for
+            // realistic business instructions while staying bounded.
+            'ai_custom_instructions' => 'nullable|string|max:2000',
+        ]);
+
+        StoreSetting::updateOrCreate(
+            ['key' => 'ai_agent_enabled'],
+            ['value' => $request->boolean('ai_agent_enabled') ? '1' : '0']
+        );
+
+        StoreSetting::updateOrCreate(
+            ['key' => 'messenger_ai_auto_reply_enabled'],
+            ['value' => $request->boolean('messenger_ai_auto_reply_enabled') ? '1' : '0']
+        );
+
+        StoreSetting::updateOrCreate(
+            ['key' => 'whatsapp_ai_auto_reply_enabled'],
+            ['value' => $request->boolean('whatsapp_ai_auto_reply_enabled') ? '1' : '0']
+        );
+
+        StoreSetting::updateOrCreate(
+            ['key' => 'ai_custom_instructions'],
+            ['value' => trim((string) ($data['ai_custom_instructions'] ?? ''))]
+        );
+
+        return back()->with('success', 'AI এজেন্ট সেটিংস সেভ হয়েছে।');
+    }
+
+    /**
+     * Tenant requests their own domain (e.g. myshop.com); super admin
+     * reviews/approves and, after manually finishing DNS/SSL setup
+     * outside this app, activates it — see SuperAdmin\TenantController::
+     * approveDomain()/activateDomain(). No DNS/server details are ever
+     * asked of the tenant (kept purely to custom_domain_requested +
+     * status) — that verification_token/DNS-TXT flow still exists in the
+     * schema and DomainDriver for an admin who wants to use it as an
+     * optional convenience, but is no longer required or shown to the
+     * tenant; see Tenant::customDomainDisplayStatus()'s docblock.
+     *
+     * Also doubles as "edit a request" — resubmitting while a request is
+     * still pending/approved/rejected simply overwrites it with the
+     * corrected domain, same "cancel + resubmit" shape the existing
+     * cancelDomainRequest() flow already relied on. Blocked only once the
+     * domain is genuinely ACTIVE (custom_domain_verified) — changing that
+     * live mapping needs an explicit admin deactivate/delete first, never
+     * a silent overwrite from this endpoint.
+     */
     public function requestDomain(Request $request)
     {
         $tenant = app('currentTenant');
 
         if (! $tenant->plan?->allow_custom_domain) {
             return back()->with('error', 'কাস্টম ডোমেইন ফিচারটি আপনার প্ল্যানে নেই। Pro প্ল্যানে আপগ্রেড করুন।');
+        }
+
+        if ($tenant->custom_domain_verified && $tenant->custom_domain) {
+            return back()->with('error', 'আপনার একটি সক্রিয় কাস্টম ডোমেইন আছে। পরিবর্তনের প্রয়োজন হলে অ্যাডমিনের সাথে যোগাযোগ করুন।');
         }
 
         $data = $request->validate([
@@ -211,6 +339,40 @@ class SettingController extends Controller
             'custom_domain_dns_verified_at' => null,
         ]);
 
-        return back()->with('success', 'ডোমেইন রিকোয়েস্ট পাঠানো হয়েছে — DNS TXT রেকর্ড যোগ করুন, আমাদের টিম যাচাই করে চালু করে দেবে।');
+        return back()->with('success', 'ডোমেইন রিকোয়েস্ট পাঠানো হয়েছে — আমাদের টিম রিভিউ করে ম্যানুয়ালি সেটআপ শেষে চালু করে দেবে।');
+    }
+
+    /**
+     * Cancel a not-yet-active domain request (pending, the legacy
+     * dns_verified state, or already-approved-but-not-yet-live), e.g. the
+     * tenant made a typo or changed their mind. Only ever touches the
+     * request-workflow columns (custom_domain_requested,
+     * custom_domain_request_status, custom_domain_verification_token,
+     * custom_domain_dns_verified_at) — never the separate custom_domain /
+     * custom_domain_verified columns that ResolveCustomDomain middleware
+     * actually routes production traffic on, so an already-active, live
+     * domain mapping can never be touched by this action (must go through
+     * SuperAdmin\TenantController::deactivateDomain()/destroyDomain()
+     * instead).
+     */
+    public function cancelDomainRequest(Request $request)
+    {
+        $tenant = app('currentTenant');
+
+        if (! in_array($tenant->custom_domain_request_status, ['pending', 'dns_verified', 'approved'], true)) {
+            return back()->with('error', 'বাতিল করার মতো কোনো পেন্ডিং ডোমেইন রিকোয়েস্ট নেই।');
+        }
+
+        $tenant->update([
+            'custom_domain_requested' => null,
+            // 'none' (not null) — matches this column's existing
+            // ENUM('none','pending','dns_verified','approved','rejected')
+            // DEFAULT 'none' convention (database/sql/chunk20.sql).
+            'custom_domain_request_status' => 'none',
+            'custom_domain_verification_token' => null,
+            'custom_domain_dns_verified_at' => null,
+        ]);
+
+        return back()->with('success', 'ডোমেইন রিকোয়েস্ট বাতিল করা হয়েছে।');
     }
 }

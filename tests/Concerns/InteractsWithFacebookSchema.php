@@ -25,21 +25,27 @@ trait InteractsWithFacebookSchema
 {
     /**
      * @param  bool  $includeFacebookOauthTables  Pass false to simulate an
-     *   environment where database/sql/chunk23.sql hasn't been imported at
-     *   all — tenants/users/messenger_settings/messenger_messages still get
-     *   created (so the legacy flow has something to fall back to), but
-     *   facebook_oauth_states/facebook_connections/facebook_pages are left
-     *   absent, exactly as FacebookPage::tablesReady() is meant to detect.
+     *                                            environment where database/sql/chunk23.sql hasn't been imported at
+     *                                            all — tenants/users/messenger_settings/messenger_messages still get
+     *                                            created (so the legacy flow has something to fall back to), but
+     *                                            facebook_oauth_states/facebook_connections/facebook_pages are left
+     *                                            absent, exactly as FacebookPage::tablesReady() is meant to detect.
      * @param  bool  $includeFacebookPageIdColumn  Pass false to simulate a
-     *   PARTIAL chunk23.sql import: the three tables above exist, but the
-     *   trailing `ALTER TABLE messenger_messages ADD COLUMN facebook_page_id
-     *   ...` statement in that same file did not run. Independent of
-     *   $includeFacebookOauthTables so both failure modes can be tested on
-     *   their own.
+     *                                             PARTIAL chunk23.sql import: the three tables above exist, but the
+     *                                             trailing `ALTER TABLE messenger_messages ADD COLUMN facebook_page_id
+     *                                             ...` statement in that same file did not run. Independent of
+     *                                             $includeFacebookOauthTables so both failure modes can be tested on
+     *                                             their own.
+     * @param  bool  $includeAttachmentColumns  Pass false to simulate
+     *                                          database/sql/chunk25.sql not having been imported yet — the
+     *                                          attachment_type/attachment_name columns are absent, exactly as
+     *                                          MessengerMessage::attachmentColumnsReady() is meant to detect.
      */
     protected function setUpFacebookSchema(
         bool $includeFacebookOauthTables = true,
         bool $includeFacebookPageIdColumn = true,
+        bool $includeAttachmentColumns = true,
+        bool $includeMessengerCustomersTable = true,
     ): void {
         if (! Schema::hasTable('tenants')) {
             Schema::create('tenants', function (Blueprint $table) {
@@ -47,6 +53,10 @@ trait InteractsWithFacebookSchema
                 $table->string('subdomain')->unique();
                 $table->string('store_name');
                 $table->string('status')->default('active');
+                // Phase 14 — see database/sql/chunk39.sql's docblock.
+                $table->timestamp('ai_paused_at')->nullable();
+                $table->unsignedBigInteger('ai_paused_by_super_admin_id')->nullable();
+                $table->string('ai_paused_reason', 255)->nullable();
                 $table->timestamp('trial_ends_at')->nullable();
                 $table->timestamp('subscription_ends_at')->nullable();
                 $table->string('custom_domain')->nullable();
@@ -165,8 +175,49 @@ trait InteractsWithFacebookSchema
             });
         }
 
+        // Unrelated to Facebook, but layouts/panel.blade.php (rendered by
+        // every real panel page, including Settings) unconditionally queries
+        // all four for the notification-bell badge count — needed so a full
+        // HTTP-level render of a panel page doesn't fail on a missing table.
+        if (! Schema::hasTable('orders')) {
+            Schema::create('orders', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('status', 20)->default('pending');
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('product_variants')) {
+            Schema::create('product_variants', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->integer('low_stock_threshold')->default(5);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('inventory')) {
+            Schema::create('inventory', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('variant_id');
+                $table->integer('quantity')->default(0);
+                $table->timestamp('updated_at')->nullable();
+            });
+        }
+
+        if (! Schema::hasTable('incomplete_orders')) {
+            Schema::create('incomplete_orders', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('status', 20)->default('abandoned');
+                $table->timestamps();
+            });
+        }
+
         if (! Schema::hasTable('messenger_messages')) {
-            Schema::create('messenger_messages', function (Blueprint $table) use ($includeFacebookPageIdColumn) {
+            Schema::create('messenger_messages', function (Blueprint $table) use ($includeFacebookPageIdColumn, $includeAttachmentColumns) {
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
                 if ($includeFacebookPageIdColumn) {
@@ -177,8 +228,53 @@ trait InteractsWithFacebookSchema
                 $table->string('customer_name', 150)->nullable();
                 $table->text('message_text')->nullable();
                 $table->string('attachment_url', 500)->nullable();
+                if ($includeAttachmentColumns) {
+                    $table->string('attachment_type', 20)->nullable();
+                    $table->string('attachment_name', 255)->nullable();
+                }
                 $table->string('direction', 10)->default('in');
+                $table->string('sent_by', 10)->default('human');
                 $table->string('status', 20)->default('new');
+                $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        // Mirrors database/sql/chunk28.sql — see that file's header comment
+        // for the UNIQUE(tenant_id, psid) / nullable facebook_page_id
+        // rationale. No real FK constraint here (SQLite test schema
+        // convention throughout this file), just the column shape
+        // FacebookMessengerCustomerService/MessengerCustomer touch.
+        if ($includeMessengerCustomersTable && ! Schema::hasTable('messenger_customers')) {
+            Schema::create('messenger_customers', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('facebook_page_id')->nullable();
+                $table->string('psid', 100);
+                $table->string('first_name', 100)->nullable();
+                $table->string('last_name', 100)->nullable();
+                $table->string('name', 150)->nullable();
+                $table->string('profile_pic_url', 500)->nullable();
+                $table->timestamp('profile_pic_fetched_at')->nullable();
+                $table->timestamp('identity_fetched_at')->nullable();
+                $table->timestamps();
+                $table->unique(['tenant_id', 'psid']);
+            });
+        }
+
+        // See database/sql/chunk38.sql (Phase 13 human handoff) for the
+        // real (MySQL) definition — the ENUM there becomes a plain string
+        // column here, same simplification every other schema trait in
+        // this suite makes.
+        if (! Schema::hasTable('ai_handoffs')) {
+            Schema::create('ai_handoffs', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('channel', 20);
+                $table->string('external_id', 100);
+                $table->string('reason', 50);
+                $table->unsignedBigInteger('triggered_by_message_id')->nullable();
+                $table->timestamp('resolved_at')->nullable();
+                $table->unsignedBigInteger('resolved_by_user_id')->nullable();
                 $table->timestamp('created_at')->nullable();
             });
         }

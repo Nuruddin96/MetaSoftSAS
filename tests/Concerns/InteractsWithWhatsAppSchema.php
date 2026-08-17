@@ -1,0 +1,492 @@
+<?php
+
+namespace Tests\Concerns;
+
+use App\Models\Plan;
+use App\Models\Tenant;
+use App\Models\User;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+
+/**
+ * Minimal, test-only schema for the WhatsApp Cloud API feature tests.
+ * Same rationale as InteractsWithFacebookSchema: this project's real schema
+ * lives in database/sql/ (see CLAUDE.md — "NOT migration-driven"), not
+ * database/migrations/, so RefreshDatabase against the stock cache/jobs
+ * migrations wouldn't create any of the tables these tests need. This trait
+ * hand-builds only the exact columns these tests touch, via Schema::create
+ * — nothing here is deployed or read by the app outside the test run.
+ *
+ * Deliberately self-contained rather than composed with
+ * InteractsWithFacebookSchema/InteractsWithCommerceSchema — same
+ * trait-collision avoidance those two already follow relative to each
+ * other (see InteractsWithCommerceSchema's docblock).
+ */
+trait InteractsWithWhatsAppSchema
+{
+    /**
+     * @param  bool  $includeAllTables  Pass false to simulate an environment
+     *                                  where database/sql/chunk26.sql hasn't been imported at all —
+     *                                  tenants/users still get created, but none of the four WhatsApp
+     *                                  tables exist, exactly as WhatsAppPhoneNumber::tablesReady() is
+     *                                  meant to detect.
+     */
+    protected function setUpWhatsAppSchema(bool $includeAllTables = true): void
+    {
+        // Needed so Tenant::plan()/Plan::hasFeature('whatsapp') can be
+        // exercised by the feature-gate tests, and so makeTenant() can grant
+        // the feature by default without every other WhatsApp test having to
+        // know that gate exists — mirrors production's tenants.plan_id
+        // NOT NULL FK (schema.sql), except nullable here since this stub
+        // schema (unlike production) predates the feature-gate phase and
+        // some tests may want an explicitly plan-less tenant.
+        if (! Schema::hasTable('plans')) {
+            Schema::create('plans', function (Blueprint $table) {
+                $table->id();
+                $table->string('name', 100);
+                $table->string('slug', 100)->unique();
+                $table->json('features')->nullable();
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('tenants')) {
+            Schema::create('tenants', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('plan_id')->nullable();
+                $table->string('subdomain')->unique();
+                $table->string('store_name');
+                $table->string('status')->default('active');
+                // Phase 14 — see database/sql/chunk39.sql's docblock.
+                $table->timestamp('ai_paused_at')->nullable();
+                $table->unsignedBigInteger('ai_paused_by_super_admin_id')->nullable();
+                $table->string('ai_paused_reason', 255)->nullable();
+                $table->timestamp('trial_ends_at')->nullable();
+                $table->timestamp('subscription_ends_at')->nullable();
+                $table->string('custom_domain')->nullable();
+                $table->boolean('custom_domain_verified')->default(false);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('users')) {
+            Schema::create('users', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name');
+                $table->string('email');
+                $table->string('password');
+                $table->string('role')->default('owner');
+                $table->rememberToken();
+                $table->timestamps();
+            });
+        }
+
+        // Unrelated to WhatsApp, but layouts/panel.blade.php (rendered by
+        // every real panel page, including Settings) unconditionally
+        // queries all four for the notification-bell badge count, and
+        // SettingController::index() itself gathers courier/marketing/
+        // store/messenger data regardless of WhatsApp readiness — needed so
+        // a full HTTP-level render of the Settings page doesn't fail on a
+        // missing table. Mirrors InteractsWithFacebookSchema's identical
+        // stubs for the same reason.
+        if (! Schema::hasTable('courier_settings')) {
+            Schema::create('courier_settings', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('provider', 30);
+                $table->text('credentials')->nullable();
+                $table->boolean('is_active')->default(false);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('marketing_settings')) {
+            Schema::create('marketing_settings', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('fb_pixel_id', 50)->nullable();
+                $table->text('fb_capi_token')->nullable();
+                $table->string('fb_test_event_code', 50)->nullable();
+                $table->string('gtm_container_id', 20)->nullable();
+                $table->string('meta_app_id', 50)->nullable();
+                $table->text('meta_app_secret')->nullable();
+                $table->text('meta_access_token')->nullable();
+                $table->string('meta_ad_account_id', 50)->nullable();
+                $table->timestamp('updated_at')->nullable();
+            });
+        }
+
+        if (! Schema::hasTable('store_settings')) {
+            Schema::create('store_settings', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('key', 100);
+                $table->string('value', 255)->nullable();
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('messenger_settings')) {
+            Schema::create('messenger_settings', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id')->unique();
+                $table->string('page_id', 50)->unique();
+                $table->text('page_access_token');
+                $table->string('page_name', 150)->nullable();
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('orders')) {
+            Schema::create('orders', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('order_number', 30)->default('');
+                $table->string('messenger_psid', 100)->nullable();
+                $table->string('customer_name', 150)->default('');
+                $table->string('customer_phone', 20)->default('');
+                $table->text('customer_address')->nullable();
+                $table->string('status', 20)->default('pending');
+                $table->timestamps();
+            });
+        }
+
+        // WhatsAppInboxController::show() looks up Customer::whereIn('phone', ...)
+        // for the 'matchedCustomer' panel data on every thread render — same
+        // shape InteractsWithCommerceSchema uses.
+        if (! Schema::hasTable('customers')) {
+            Schema::create('customers', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 150);
+                $table->string('phone', 20);
+                $table->string('email', 150)->nullable();
+                $table->text('address')->nullable();
+                $table->unsignedInteger('division_id')->nullable();
+                $table->unsignedInteger('district_id')->nullable();
+                $table->unsignedInteger('upazila_id')->nullable();
+                $table->decimal('due_balance', 12, 2)->default(0);
+                $table->integer('total_orders')->default(0);
+                $table->decimal('total_spent', 14, 2)->default(0);
+                $table->text('note')->nullable();
+                $table->timestamps();
+                $table->unique(['tenant_id', 'phone']);
+            });
+        }
+
+        // Phase 5 (AiProductKnowledgeService) needs the real product/variant
+        // shape, not just the low_stock_threshold-only stub the panel's
+        // notification badge previously needed here — mirrors
+        // InteractsWithAiAgentSchema's fuller definition rather than a
+        // second, differently-shaped stub.
+        if (! Schema::hasTable('categories')) {
+            Schema::create('categories', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 150);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('products')) {
+            Schema::create('products', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('category_id')->nullable();
+                $table->string('name');
+                $table->string('slug', 280)->nullable();
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('product_variants')) {
+            Schema::create('product_variants', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('product_id');
+                $table->string('sku', 80)->nullable();
+                $table->string('barcode', 80)->nullable();
+                $table->string('variant_name', 150)->default('Default');
+                $table->decimal('purchase_price', 12, 2)->default(0);
+                $table->decimal('selling_price', 12, 2);
+                $table->integer('low_stock_threshold')->default(5);
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('warehouses')) {
+            Schema::create('warehouses', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 150);
+                $table->boolean('is_default')->default(false);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('inventory')) {
+            Schema::create('inventory', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('variant_id');
+                $table->unsignedBigInteger('warehouse_id')->nullable();
+                $table->integer('quantity')->default(0);
+                $table->timestamp('updated_at')->nullable();
+            });
+        }
+
+        if (! Schema::hasTable('incomplete_orders')) {
+            Schema::create('incomplete_orders', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('status', 20)->default('abandoned');
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('messenger_messages')) {
+            Schema::create('messenger_messages', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('sender_psid', 100);
+                $table->string('mid', 100)->nullable()->unique();
+                $table->string('customer_name', 150)->nullable();
+                $table->text('message_text')->nullable();
+                $table->string('attachment_url', 500)->nullable();
+                $table->string('direction', 10)->default('in');
+                $table->string('sent_by', 10)->default('human');
+                $table->string('status', 20)->default('new');
+                $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        if (! $includeAllTables) {
+            return;
+        }
+
+        if (! Schema::hasTable('whatsapp_oauth_states')) {
+            Schema::create('whatsapp_oauth_states', function (Blueprint $table) {
+                $table->id();
+                $table->string('state', 64)->unique();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('user_id');
+                $table->string('purpose', 30)->default('whatsapp');
+                $table->timestamp('expires_at');
+                $table->timestamp('used_at')->nullable();
+                $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        if (! Schema::hasTable('whatsapp_business_accounts')) {
+            Schema::create('whatsapp_business_accounts', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id')->unique();
+                $table->unsignedBigInteger('connected_by_user_id');
+                $table->string('waba_id', 64)->unique();
+                $table->string('business_id', 64)->nullable();
+                $table->string('business_name', 150)->nullable();
+                $table->text('user_access_token');
+                $table->timestamp('token_expires_at')->nullable();
+                $table->string('granted_scopes', 500)->nullable();
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('whatsapp_phone_numbers')) {
+            Schema::create('whatsapp_phone_numbers', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('whatsapp_business_account_id');
+                $table->string('phone_number_id', 64)->unique();
+                $table->string('display_phone_number', 30)->nullable();
+                $table->string('verified_name', 150)->nullable();
+                $table->string('quality_rating', 20)->nullable();
+                $table->string('status', 30)->default('active');
+                $table->boolean('is_active')->default(true);
+                $table->timestamp('subscribed_at')->nullable();
+                $table->timestamp('disconnected_at')->nullable();
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('whatsapp_messages')) {
+            Schema::create('whatsapp_messages', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('whatsapp_phone_number_id')->nullable();
+                $table->string('wa_id', 30);
+                $table->string('wamid', 100)->nullable()->unique();
+                $table->string('customer_name', 150)->nullable();
+                $table->string('message_type', 20)->nullable();
+                $table->text('message_text')->nullable();
+                $table->string('attachment_url', 500)->nullable();
+                $table->string('attachment_type', 20)->nullable();
+                $table->string('attachment_name', 255)->nullable();
+                $table->json('raw_payload')->nullable();
+                $table->string('direction', 10)->default('in');
+                $table->string('sent_by', 10)->default('human');
+                $table->string('status', 20)->default('new');
+                $table->string('delivery_status', 20)->nullable();
+                $table->string('error_code', 30)->nullable();
+                $table->string('error_message', 500)->nullable();
+                $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        // AI Agent credit/wallet (chunk32.sql) — needed for any test that
+        // exercises the AiCreditService gate. Same simplified-for-sqlite
+        // shape InteractsWithAiAgentSchema already uses.
+        if (! Schema::hasTable('ai_credit_accounts')) {
+            Schema::create('ai_credit_accounts', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id')->unique();
+                $table->decimal('balance', 12, 4)->default(0);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('ai_usage_ledger')) {
+            Schema::create('ai_usage_ledger', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('type', 20);
+                $table->decimal('credit_amount', 12, 4);
+                $table->decimal('balance_after', 12, 4);
+                $table->unsignedInteger('input_tokens')->nullable();
+                $table->unsignedInteger('output_tokens')->nullable();
+                $table->string('model', 100)->nullable();
+                $table->decimal('estimated_cost_usd', 10, 6)->nullable();
+                $table->string('context_type', 50)->nullable();
+                $table->unsignedBigInteger('context_id')->nullable();
+                $table->string('note', 255)->nullable();
+                $table->unsignedBigInteger('created_by')->nullable();
+                $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        // See database/sql/chunk38.sql (Phase 13 human handoff) for the
+        // real (MySQL) definition — the ENUM there becomes a plain string
+        // column here, same simplification every other schema trait in
+        // this suite makes.
+        if (! Schema::hasTable('ai_handoffs')) {
+            Schema::create('ai_handoffs', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('channel', 20);
+                $table->string('external_id', 100);
+                $table->string('reason', 50);
+                $table->unsignedBigInteger('triggered_by_message_id')->nullable();
+                $table->timestamp('resolved_at')->nullable();
+                $table->unsignedBigInteger('resolved_by_user_id')->nullable();
+                $table->timestamp('created_at')->nullable();
+            });
+        }
+
+        // See database/sql/chunk35.sql (WhatsApp AI Auto Reply) for the
+        // real (MySQL) definition — the WhatsApp counterpart of
+        // ai_agent_message_jobs.
+        if (! Schema::hasTable('ai_whatsapp_message_jobs')) {
+            Schema::create('ai_whatsapp_message_jobs', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('whatsapp_message_id')->unique();
+                $table->string('status', 20)->default('pending');
+                $table->timestamps();
+            });
+        }
+    }
+
+    protected function enableAiAgent(int $tenantId): void
+    {
+        DB::table('store_settings')->updateOrInsert(
+            ['tenant_id' => $tenantId, 'key' => 'ai_agent_enabled'],
+            ['value' => '1', 'created_at' => now(), 'updated_at' => now()]
+        );
+    }
+
+    /** Independent of enableAiAgent() — see WhatsAppWebhookController::maybeDispatchAiAgent()'s docblock. */
+    protected function enableWhatsAppAutoReply(int $tenantId): void
+    {
+        DB::table('store_settings')->updateOrInsert(
+            ['tenant_id' => $tenantId, 'key' => 'whatsapp_ai_auto_reply_enabled'],
+            ['value' => '1', 'created_at' => now(), 'updated_at' => now()]
+        );
+    }
+
+    /** Both toggles at once — the common case for tests exercising the full dispatch/job pipeline rather than the toggles themselves. */
+    protected function enableAiAgentAndWhatsAppAutoReply(int $tenantId): void
+    {
+        $this->enableAiAgent($tenantId);
+        $this->enableWhatsAppAutoReply($tenantId);
+    }
+
+    /** Directly seeds an ai_credit_accounts row — bypasses AiCreditService for tests that just need a starting balance. */
+    protected function allocateAiCredit(int $tenantId, float $balance): void
+    {
+        DB::table('ai_credit_accounts')->updateOrInsert(
+            ['tenant_id' => $tenantId],
+            ['balance' => $balance, 'created_at' => now(), 'updated_at' => now()]
+        );
+    }
+
+    /**
+     * Every WhatsApp connect/inbox route now sits behind 'feature:whatsapp'
+     * (EnsureFeatureEnabled, reading Plan::hasFeature()) — a tenant with no
+     * plan, or a plan whose features don't include 'whatsapp', gets
+     * redirected before ever reaching the controller. Defaulting every
+     * makeTenant() call to a plan that already has the feature keeps every
+     * existing connection/inbox test exercising the behavior it was written
+     * to test, not this gate; WhatsAppFeatureGateTest covers the gate itself
+     * (both the blocked and explicitly-plan-less-tenant cases).
+     */
+    protected function makeTenant(array $attrs = []): Tenant
+    {
+        if (! array_key_exists('plan_id', $attrs)) {
+            $attrs['plan_id'] = $this->makeWhatsAppEnabledPlan()->id;
+        }
+
+        $id = DB::table('tenants')->insertGetId(array_merge([
+            // routes/web.php constrains tenant_slug to [a-z0-9-]+ in path
+            // mode — Str::random() is mixed-case and would 404 before ever
+            // reaching resolve.tenant, so lowercase it explicitly here.
+            'subdomain' => 'test-'.strtolower(Str::random(10)),
+            'store_name' => 'Test Store',
+            'status' => 'active',
+            'subscription_ends_at' => now()->addYear(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], $attrs));
+
+        return Tenant::find($id);
+    }
+
+    protected function makeWhatsAppEnabledPlan(array $attrs = []): Plan
+    {
+        return Plan::create(array_merge([
+            'name' => 'Test Plan',
+            'slug' => 'test-plan-'.strtolower(Str::random(10)),
+            'features' => ['whatsapp'],
+        ], $attrs));
+    }
+
+    protected function makeUser(int $tenantId, array $attrs = []): User
+    {
+        $id = DB::table('users')->insertGetId(array_merge([
+            'tenant_id' => $tenantId,
+            'name' => 'Test Owner',
+            'email' => 'owner-'.Str::random(10).'@example.com',
+            'password' => bcrypt('password'),
+            'role' => 'owner',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], $attrs));
+
+        return User::find($id);
+    }
+}

@@ -1,0 +1,309 @@
+<?php
+
+namespace App\Services\Inbox;
+
+use App\Http\Controllers\MessengerWebhookController;
+use App\Models\MessengerCustomer;
+use App\Models\MessengerMessage;
+use App\Models\Order;
+use App\Models\WhatsAppMessage;
+use App\Models\WhatsAppPhoneNumber;
+use Illuminate\Support\Collection;
+
+/**
+ * Read-model/query layer that merges Messenger + WhatsApp conversations for
+ * the unified inbox list — a pure query-and-merge service, never a table.
+ * messenger_messages and whatsapp_messages stay completely independent;
+ * nothing here writes to either table or changes either channel's own
+ * behavior. See PROJECT_KNOWLEDGE.md / the Phase 5 design note for why a
+ * SQL UNION and a shared physical table were both rejected in favor of this
+ * approach.
+ *
+ * Runs inside the normal tenant panel context — every query below relies on
+ * BelongsToTenant's global scope (app('currentTenant') already bound by
+ * resolve.tenant), the same tenant-isolation mechanism every other
+ * tenant-scoped controller in this codebase uses. Nothing here ever calls
+ * withoutGlobalScopes().
+ */
+class UnifiedInboxService
+{
+    /**
+     * @param  ?string  $search  Matches conversations with at least one message whose
+     *   customer_name or platform id (sender_psid/wa_id) contains this string — a
+     *   "any message in the conversation," not just latest-message, semantic. Honest
+     *   about that limitation rather than pretending it's a full-text search.
+     * @param  bool  $unreadOnly  Applied as a HAVING on each channel's grouped query
+     *   (not a client-side post-filter) so keyset pagination stays correct across pages.
+     * @return array{conversations: Collection<int, UnifiedConversation>, nextCursor: ?string, hasMore: bool}
+     */
+    public function paginate(?string $cursor, int $perPage = 20, ?string $channelFilter = null, ?string $search = null, bool $unreadOnly = false): array
+    {
+        [$cursorAt, $cursorId] = $this->decodeCursor($cursor);
+
+        $messenger = ($channelFilter && $channelFilter !== 'messenger')
+            ? collect()
+            : $this->fetchMessengerCandidates($cursorAt, $cursorId, $perPage, $search, $unreadOnly);
+
+        // Guarded the same way every other WhatsApp-aware call site in this
+        // codebase is (chunk26.sql may not be imported yet on a given
+        // environment) — degrades to "no WhatsApp conversations" instead of
+        // a raw SQL error, so the unified inbox (and Messenger's own
+        // conversations within it) keep working for a tenant who hasn't
+        // reached WhatsApp at all yet.
+        $whatsapp = ($channelFilter && $channelFilter !== 'whatsapp') || ! WhatsAppPhoneNumber::tablesReady()
+            ? collect()
+            : $this->fetchWhatsAppCandidates($cursorAt, $cursorId, $perPage, $search, $unreadOnly);
+
+        // Both inputs are already sorted DESC individually — a stable sort
+        // on a zero-padded (timestamp, id) composite key gives a correct
+        // combined ordering without needing a custom merge routine. Never
+        // more than 2*$perPage rows are ever held in memory here, regardless
+        // of how many total messages either table has — see the class
+        // docblock / Phase 5 design note for why this bound holds across
+        // pages too (a channel's un-displayed leftover candidates are
+        // simply re-fetched on the next call, since they still sit before
+        // the next cursor).
+        $merged = $messenger->concat($whatsapp)
+            ->sortByDesc(fn (UnifiedConversation $c) => sprintf('%020d%020d', $c->lastMessageAt->timestamp, $c->lastMessageId))
+            ->values();
+
+        $page = $merged->take($perPage);
+
+        // Conservative "maybe more" signal, not an exact count — avoids a
+        // separate COUNT(*) query per channel per request. Worst case a
+        // "load more" click returns an empty next page, which is a harmless
+        // UI no-op, not a correctness issue.
+        $hasMore = $merged->count() > $page->count()
+            || $messenger->count() >= $perPage
+            || $whatsapp->count() >= $perPage;
+
+        return [
+            'conversations' => $page,
+            'nextCursor' => $hasMore ? $page->last()?->cursorToken() : null,
+            'hasMore' => $hasMore,
+        ];
+    }
+
+    /** Sum of both channels' unread-inbound counts — same definition Messenger's own nav badge already uses, applied per channel and summed. */
+    public function unreadCount(): int
+    {
+        $count = MessengerMessage::where('status', 'new')->where('direction', 'in')->count();
+
+        if (WhatsAppPhoneNumber::tablesReady()) {
+            $count += WhatsAppMessage::where('status', 'new')->where('direction', 'in')->count();
+        }
+
+        return $count;
+    }
+
+    /**
+     * @return Collection<int, UnifiedConversation>
+     */
+    protected function fetchMessengerCandidates(?int $cursorAt, ?int $cursorId, int $limit, ?string $search = null, bool $unreadOnly = false): Collection
+    {
+        $query = MessengerMessage::query()
+            ->selectRaw('sender_psid, MAX(id) as latest_id, MAX(created_at) as last_at, SUM(CASE WHEN status = "new" AND direction = "in" THEN 1 ELSE 0 END) as unread_c')
+            ->groupBy('sender_psid');
+
+        $this->applySearchFilter($query, 'sender_psid', $search);
+
+        $this->applyCursorHaving($query, $cursorAt, $cursorId);
+
+        if ($unreadOnly) {
+            $query->having('unread_c', '>', 0);
+        }
+
+        $candidates = $query->orderByRaw('last_at DESC, latest_id DESC')->limit($limit)->get();
+
+        if ($candidates->isEmpty()) {
+            return collect();
+        }
+
+        $rows = MessengerMessage::whereIn('id', $candidates->pluck('latest_id'))->get()->keyBy('id');
+        $psids = $candidates->pluck('sender_psid');
+
+        // Same "don't trust the latest row's own customer_name — it might
+        // be an outbound row that never carries one" reasoning as
+        // MessengerInboxController::applyResolvedIdentities().
+        $resolvedNames = MessengerMessage::whereIn('sender_psid', $psids)
+            ->whereNotNull('customer_name')->orderByDesc('id')
+            ->get(['sender_psid', 'customer_name'])->unique('sender_psid')
+            ->pluck('customer_name', 'sender_psid');
+
+        // Canonical Facebook identity (name + photo) — batched into one
+        // query for every psid on this page, same "no N+1 on a list that
+        // gets polled/paginated" reasoning as $resolvedNames/$unreadCounts.
+        $identities = MessengerCustomer::tablesReady()
+            ? MessengerCustomer::whereIn('psid', $psids)->get()->keyBy('psid')
+            : collect();
+
+        // Fallback rung below Graph identity / genuine resolved message name:
+        // the business Customer name recorded on this psid's most recent
+        // Order that captured a real BD phone number — see
+        // MessengerInboxController::resolveOrderNames()'s docblock (mirrored
+        // here) for why this filters on customer_name (not customer_id —
+        // that can go NULL independently via ON DELETE SET NULL while the
+        // NOT NULL customer_name snapshot stays valid) excluding the literal
+        // DEFAULT_CUSTOMER_NAME placeholder, why no status filter applies,
+        // and why this never merges psids. Batched the same way as
+        // $resolvedNames/$identities/$unreadCounts — one query for the whole
+        // page, not one per conversation. Explicit tenant_id filter is
+        // redundant with BelongsToTenant's global scope (already active —
+        // this class's own docblock: "Nothing here ever calls
+        // withoutGlobalScopes()") but kept as defense-in-depth, matching
+        // MessengerInboxController::resolveOrderNames()'s identical query.
+        $orderNames = Order::whereIn('messenger_psid', $psids)
+            ->where('tenant_id', app('currentTenant')->id)
+            ->whereNotNull('customer_name')
+            ->where('customer_name', '!=', MessengerWebhookController::DEFAULT_CUSTOMER_NAME)
+            ->orderByDesc('id')
+            ->get(['messenger_psid', 'customer_name'])
+            ->unique('messenger_psid')
+            ->pluck('customer_name', 'messenger_psid');
+
+        $unreadCounts = MessengerMessage::whereIn('sender_psid', $psids)
+            ->where('status', 'new')->where('direction', 'in')
+            ->selectRaw('sender_psid, COUNT(*) as c')->groupBy('sender_psid')->pluck('c', 'sender_psid');
+
+        return $candidates->map(function ($c) use ($rows, $resolvedNames, $identities, $orderNames, $unreadCounts) {
+            $row = $rows->get($c->latest_id);
+            $identity = $identities->get($c->sender_psid);
+
+            // A resolved messenger_messages.customer_name equal to the
+            // placeholder MessengerWebhookController writes when nothing
+            // resolved is not an identity signal — see
+            // MessengerInboxController::excludePlaceholder() (same rule,
+            // applied independently here since this service never depends
+            // on that controller for its own name resolution).
+            $fromMessages = $resolvedNames->get($c->sender_psid);
+            $fromMessages = $fromMessages !== MessengerWebhookController::DEFAULT_CUSTOMER_NAME ? $fromMessages : null;
+
+            // Second, defense-in-depth exclusion pass on the Order-sourced
+            // name — the query above already filters the placeholder out at
+            // the SQL level, but this mirrors MessengerInboxController's
+            // belt-and-suspenders posture rather than trusting the query
+            // alone to never regress.
+            $fromOrder = $orderNames->get($c->sender_psid);
+            $fromOrder = $fromOrder !== MessengerWebhookController::DEFAULT_CUSTOMER_NAME ? $fromOrder : null;
+
+            return new UnifiedConversation(
+                channel: 'messenger',
+                externalCustomerId: $c->sender_psid,
+                customerName: $identity?->display_name ?: ($fromMessages ?: ($fromOrder ?: $row->customer_name)),
+                avatarUrl: $identity?->profile_pic_url,
+                lastMessageText: $row->message_text,
+                lastMessageAttachmentType: $row->attachment_type, // null-safe: missing column just reads as null, same as everywhere else this project reads it
+                lastMessageDirection: $row->direction,
+                lastMessageAt: $row->created_at,
+                lastMessageId: $row->id,
+                status: $row->status,
+                unreadCount: (int) ($unreadCounts->get($c->sender_psid) ?? 0),
+                showUrl: route('tenant.messenger.show', $c->sender_psid),
+            );
+        })->values();
+    }
+
+    /**
+     * @return Collection<int, UnifiedConversation>
+     */
+    protected function fetchWhatsAppCandidates(?int $cursorAt, ?int $cursorId, int $limit, ?string $search = null, bool $unreadOnly = false): Collection
+    {
+        $query = WhatsAppMessage::query()
+            ->selectRaw('wa_id, MAX(id) as latest_id, MAX(created_at) as last_at, SUM(CASE WHEN status = "new" AND direction = "in" THEN 1 ELSE 0 END) as unread_c')
+            ->groupBy('wa_id');
+
+        $this->applySearchFilter($query, 'wa_id', $search);
+
+        $this->applyCursorHaving($query, $cursorAt, $cursorId);
+
+        if ($unreadOnly) {
+            $query->having('unread_c', '>', 0);
+        }
+
+        $candidates = $query->orderByRaw('last_at DESC, latest_id DESC')->limit($limit)->get();
+
+        if ($candidates->isEmpty()) {
+            return collect();
+        }
+
+        $rows = WhatsAppMessage::whereIn('id', $candidates->pluck('latest_id'))->get()->keyBy('id');
+        $waIds = $candidates->pluck('wa_id');
+
+        $resolvedNames = WhatsAppMessage::whereIn('wa_id', $waIds)
+            ->whereNotNull('customer_name')->orderByDesc('id')
+            ->get(['wa_id', 'customer_name'])->unique('wa_id')
+            ->pluck('customer_name', 'wa_id');
+
+        $unreadCounts = WhatsAppMessage::whereIn('wa_id', $waIds)
+            ->where('status', 'new')->where('direction', 'in')
+            ->selectRaw('wa_id, COUNT(*) as c')->groupBy('wa_id')->pluck('c', 'wa_id');
+
+        return $candidates->map(function ($c) use ($rows, $resolvedNames, $unreadCounts) {
+            $row = $rows->get($c->latest_id);
+
+            return new UnifiedConversation(
+                channel: 'whatsapp',
+                externalCustomerId: $c->wa_id,
+                customerName: $resolvedNames->get($c->wa_id) ?: $row->customer_name,
+                avatarUrl: null, // WhatsApp has no profile-photo source in this integration
+                lastMessageText: $row->message_text,
+                lastMessageAttachmentType: $row->attachment_type,
+                lastMessageDirection: $row->direction,
+                lastMessageAt: $row->created_at,
+                lastMessageId: $row->id,
+                status: $row->status,
+                unreadCount: (int) ($unreadCounts->get($c->wa_id) ?? 0),
+                showUrl: route('tenant.whatsapp.show', $c->wa_id),
+            );
+        })->values();
+    }
+
+    /**
+     * Pre-filters the grouped query to only the conversation ids that have at
+     * least one message matching $search on customer_name or the platform id
+     * itself — applied as a whereIn() ahead of the GROUP BY, not a HAVING on
+     * a resolved name (the grouped query has no resolved-name column to
+     * HAVING against, since name resolution happens in a separate lookup
+     * after candidates are picked). Same idColumn/model-agnostic shape for
+     * both channels so this isn't duplicated per fetch*Candidates() method.
+     */
+    protected function applySearchFilter($query, string $idColumn, ?string $search): void
+    {
+        if (! $search) {
+            return;
+        }
+
+        $modelClass = get_class($query->getModel());
+
+        $matchingIds = $modelClass::where(fn ($q) => $q->where('customer_name', 'like', "%{$search}%")
+            ->orWhere($idColumn, 'like', "%{$search}%"))
+            ->distinct()->pluck($idColumn);
+
+        $query->whereIn($idColumn, $matchingIds);
+    }
+
+    protected function applyCursorHaving($query, ?int $cursorAt, ?int $cursorId): void
+    {
+        if ($cursorAt === null) {
+            return;
+        }
+
+        $cursorAtFormatted = date('Y-m-d H:i:s', $cursorAt);
+
+        $query->havingRaw('(MAX(created_at) < ?) OR (MAX(created_at) = ? AND MAX(id) < ?)', [
+            $cursorAtFormatted, $cursorAtFormatted, $cursorId,
+        ]);
+    }
+
+    /** @return array{0: ?int, 1: ?int} */
+    protected function decodeCursor(?string $cursor): array
+    {
+        if (! $cursor || ! str_contains($cursor, ':')) {
+            return [null, null];
+        }
+
+        [$at, $id] = explode(':', $cursor, 2);
+
+        return [(int) $at, (int) $id];
+    }
+}

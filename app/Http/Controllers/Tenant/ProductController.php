@@ -80,6 +80,8 @@ class ProductController extends Controller
                         'variant_name' => $v['variant_name'] ?: 'Default',
                         'purchase_price' => $v['purchase_price'] ?? 0,
                         'selling_price' => $v['selling_price'],
+                        'compare_at_price' => $v['compare_at_price'] ?? null,
+                        'attributes' => $this->attributesFromInput($v),
                         'low_stock_threshold' => $v['low_stock_threshold'] ?? 5,
                     ]);
 
@@ -135,9 +137,10 @@ class ProductController extends Controller
         $data = $this->validateProduct($request);
 
         $uploadedPaths = [];
+        $tenant = app('currentTenant');
 
         try {
-            DB::transaction(function () use ($request, $data, $product, &$uploadedPaths) {
+            DB::transaction(function () use ($request, $data, $product, $tenant, &$uploadedPaths) {
                 $product->update([
                     'name' => $data['name'],
                     'category_id' => $data['category_id'] ?? null,
@@ -161,21 +164,63 @@ class ProductController extends Controller
                     }
                 }
 
-                // update existing variants' prices (stock changes go through Inventory page)
+                // Existing variants: price/attribute changes only — stock for
+                // an ALREADY-EXISTING variant still goes through the
+                // Inventory page (its own audited adjust()/StockMovement
+                // trail), never overwritten here.
+                //
+                // Bug fix: a variant added on this exact edit screen (no
+                // ->id yet) used to be created with no Inventory row at
+                // all — stockCount()/totalStock() would return 0 forever,
+                // and checkout's decrement() would silently affect zero
+                // rows. New variants now get the same Inventory (+
+                // StockMovement, when a real starting quantity was given)
+                // treatment store() already gives every variant on initial
+                // product creation.
+                $warehouse = null;
+
                 foreach ($data['variants'] as $v) {
                     if (! empty($v['id'])) {
                         $product->variants()->where('id', $v['id'])->update([
                             'variant_name' => $v['variant_name'] ?: 'Default',
                             'purchase_price' => $v['purchase_price'] ?? 0,
                             'selling_price' => $v['selling_price'],
+                            'compare_at_price' => $v['compare_at_price'] ?? null,
+                            'attributes' => $this->attributesFromInput($v),
                         ]);
                     } else {
-                        $product->variants()->create([
+                        $variant = $product->variants()->create([
                             'tenant_id' => $product->tenant_id,
                             'variant_name' => $v['variant_name'] ?: 'Default',
                             'purchase_price' => $v['purchase_price'] ?? 0,
                             'selling_price' => $v['selling_price'],
+                            'compare_at_price' => $v['compare_at_price'] ?? null,
+                            'attributes' => $this->attributesFromInput($v),
                         ]);
+
+                        $warehouse ??= Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
+                        $qty = (int) ($v['stock'] ?? 0);
+
+                        if ($warehouse) {
+                            Inventory::create([
+                                'tenant_id' => $tenant->id,
+                                'variant_id' => $variant->id,
+                                'warehouse_id' => $warehouse->id,
+                                'quantity' => $qty,
+                            ]);
+
+                            if ($qty > 0) {
+                                StockMovement::create([
+                                    'tenant_id' => $tenant->id,
+                                    'variant_id' => $variant->id,
+                                    'warehouse_id' => $warehouse->id,
+                                    'type' => 'purchase',
+                                    'quantity' => $qty,
+                                    'reference_type' => 'initial',
+                                    'user_id' => auth('tenant')->id(),
+                                ]);
+                            }
+                        }
                     }
                 }
             });
@@ -247,10 +292,52 @@ class ProductController extends Controller
             'variants.*.variant_name' => 'nullable|string|max:150',
             'variants.*.purchase_price' => 'nullable|numeric|min:0',
             'variants.*.selling_price' => 'required|numeric|min:0',
+            // Offer/discount price — optional, and only meaningful as a
+            // "was" price shown struck through when it's genuinely higher
+            // than what the customer actually pays (selling_price). See
+            // AiProductKnowledgeService/ProductVariant::discountPercent()
+            // and the storefront card/detail views, which already read
+            // this column — this was the missing write side.
+            'variants.*.compare_at_price' => 'nullable|numeric|gt:variants.*.selling_price',
             'variants.*.stock' => 'nullable|integer|min:0',
             'variants.*.low_stock_threshold' => 'nullable|integer|min:0',
+            // Up to two option axes per variant (e.g. Size, Color) —
+            // stored into the existing (previously write-never-used)
+            // attributes JSON column. Deliberately capped at two: covers
+            // this codebase's real product shapes (size, color, or both)
+            // without building a fully dynamic N-axis option-type editor.
+            'variants.*.attr1_name' => 'nullable|string|max:40',
+            'variants.*.attr1_value' => 'nullable|string|max:60',
+            'variants.*.attr2_name' => 'nullable|string|max:40',
+            'variants.*.attr2_value' => 'nullable|string|max:60',
         ], [
             'variants.*.selling_price.required' => 'বিক্রয় মূল্য দিতে হবে।',
+            'variants.*.compare_at_price.gt' => 'অফার/আগের মূল্য অবশ্যই বিক্রয় মূল্যের চেয়ে বেশি হতে হবে।',
         ]);
+    }
+
+    /**
+     * Builds the attributes JSON payload from up to two optional name/value
+     * pairs the form submits per variant row (attr1_name/attr1_value,
+     * attr2_name/attr2_value) — null when neither pair was filled in, so a
+     * plain single-price product's variant keeps attributes = null exactly
+     * as before this feature existed, never an empty array on-disk.
+     *
+     * @return array<string, string>|null
+     */
+    protected function attributesFromInput(array $v): ?array
+    {
+        $attrs = [];
+
+        foreach ([1, 2] as $n) {
+            $name = trim((string) ($v["attr{$n}_name"] ?? ''));
+            $value = trim((string) ($v["attr{$n}_value"] ?? ''));
+
+            if ($name !== '' && $value !== '') {
+                $attrs[$name] = $value;
+            }
+        }
+
+        return $attrs ?: null;
     }
 }

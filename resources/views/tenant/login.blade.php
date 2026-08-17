@@ -1,4 +1,4 @@
-@extends('layouts.central')
+@extends('layouts.tenant-auth')
 
 @section('title', app('currentTenant')->store_name . ' — প্যানেল লগইন')
 
@@ -12,7 +12,7 @@
         <div class="bg-white rounded-2xl shadow-sm border border-ink/5 p-8">
             @if (request('registered'))
                 <p class="mb-4 bg-leaf/10 border border-leaf/30 text-leafdk text-sm rounded-lg p-3">
-                    🎉 অভিনন্দন! আপনার দোকান তৈরি হয়ে গেছে। ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন।
+                    🎉 অভিনন্দন! আপনার শপ তৈরি হয়ে গেছে। ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন।
                 </p>
             @endif
             @error('email')
@@ -33,7 +33,7 @@
                 </div>
                 <div class="flex items-center justify-between text-sm">
                     <label class="flex items-center gap-2 text-mute">
-                        <input type="checkbox" name="remember" class="rounded"> মনে রাখুন
+                        <input type="checkbox" name="remember" checked class="rounded"> মনে রাখুন
                     </label>
                     <a href="https://{{ config('app.central_domain') }}/forgot-password" class="text-leaf hover:underline">পাসওয়ার্ড ভুলে গেছেন?</a>
                 </div>

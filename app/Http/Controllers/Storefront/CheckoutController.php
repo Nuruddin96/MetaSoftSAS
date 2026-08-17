@@ -10,8 +10,8 @@ use App\Models\MarketingSetting;
 use App\Models\Order;
 use App\Models\ProductVariant;
 use App\Models\StockMovement;
-use App\Models\StoreSetting;
 use App\Models\Warehouse;
+use App\Services\DeliveryChargeService;
 use App\Services\Marketing\MetaCapiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +24,7 @@ class CheckoutController extends Controller
         return 'cart_'.app('currentTenant')->id;
     }
 
-    public function show()
+    public function show(DeliveryChargeService $deliveryCharge)
     {
         $cart = session($this->cartKey(), []);
         if (empty($cart)) {
@@ -36,18 +36,13 @@ class CheckoutController extends Controller
             'variant' => $v, 'qty' => $cart[$v->id], 'total' => $cart[$v->id] * $v->selling_price,
         ]);
 
-        $charges = StoreSetting::whereIn('key', ['delivery_charge_inside_dhaka', 'delivery_charge_outside_dhaka'])
-            ->pluck('value', 'key');
-
-        return view('storefront.checkout', [
+        return view('storefront.checkout', array_merge([
             'tenant' => app('currentTenant'),
             'items' => $items,
             'subtotal' => $items->sum('total'),
             'divisions' => DB::table('bd_divisions')->orderBy('id')->get(),
             'districts' => DB::table('bd_districts')->orderBy('name')->get(),
-            'chargeInside' => (float) ($charges['delivery_charge_inside_dhaka'] ?? 60),
-            'chargeOutside' => (float) ($charges['delivery_charge_outside_dhaka'] ?? 120),
-        ]);
+        ], $deliveryCharge->chargesForView()));
     }
 
     /** AJAX: save half-filled checkout as incomplete order.
@@ -89,7 +84,7 @@ class CheckoutController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function place(Request $request)
+    public function place(Request $request, DeliveryChargeService $deliveryChargeService)
     {
         $data = $request->validate([
             'customer_name' => 'required|string|max:150',
@@ -105,16 +100,41 @@ class CheckoutController extends Controller
         $cart = session($this->cartKey(), []);
         abort_if(empty($cart), 400);
 
+        // Tenant-scoped via ProductVariant's own BelongsToTenant global
+        // scope (app('currentTenant') is bound on every storefront
+        // request) — any other tenant's id that ended up in this session's
+        // cart array simply isn't returned here, the same protection
+        // CartController::index() already relies on.
         $variants = ProductVariant::with('product')->whereIn('id', array_keys($cart))->get();
 
-        $dhakaDivisionId = (int) DB::table('bd_divisions')->where('name', 'Dhaka')->value('id');
-        $charges = StoreSetting::whereIn('key', ['delivery_charge_inside_dhaka', 'delivery_charge_outside_dhaka'])
-            ->pluck('value', 'key');
-        $deliveryCharge = (int) $data['division_id'] === $dhakaDivisionId
-            ? (float) ($charges['delivery_charge_inside_dhaka'] ?? 60)
-            : (float) ($charges['delivery_charge_outside_dhaka'] ?? 120);
+        if ($variants->count() !== count($cart)) {
+            return back()->with('error', 'কার্টের কিছু প্রোডাক্ট আর পাওয়া যাচ্ছে না। কার্ট চেক করুন।');
+        }
 
-        $order = DB::transaction(function () use ($data, $cart, $variants, $deliveryCharge) {
+        $deliveryCharge = $deliveryChargeService->calculate((int) $data['division_id']);
+
+        try {
+            $order = DB::transaction(function () use ($data, $cart, $variants, $deliveryCharge) {
+            // Re-verify stock at the actual moment of decrementing it, row-
+            // locked so two simultaneous checkouts for the last unit can't
+            // both succeed — the cart page and the buy button already show
+            // stock at add-to-cart time, but that can go stale by the time
+            // someone actually places the order.
+            $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
+
+            if ($warehouse) {
+                foreach ($variants as $v) {
+                    $available = Inventory::where('variant_id', $v->id)
+                        ->where('warehouse_id', $warehouse->id)
+                        ->lockForUpdate()
+                        ->sum('quantity');
+
+                    if ($available < $cart[$v->id]) {
+                        throw new \RuntimeException("insufficient_stock:{$v->product->name}");
+                    }
+                }
+            }
+
             $customer = Customer::firstOrCreate(
                 ['phone' => $data['customer_phone']],
                 ['name' => $data['customer_name'], 'address' => $data['customer_address'],
@@ -139,8 +159,6 @@ class CheckoutController extends Controller
                 'note' => $data['note'] ?? null,
                 'fb_event_id' => (string) Str::uuid(),
             ]);
-
-            $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
 
             foreach ($variants as $v) {
                 $qty = $cart[$v->id];
@@ -177,7 +195,16 @@ class CheckoutController extends Controller
             $customer->increment('total_spent', $order->total);
 
             return $order;
-        });
+            });
+        } catch (\RuntimeException $e) {
+            if (str_starts_with($e->getMessage(), 'insufficient_stock:')) {
+                $productName = substr($e->getMessage(), strlen('insufficient_stock:'));
+
+                return back()->withInput()->with('error', "দুঃখিত, \"{$productName}\" এখন পর্যাপ্ত স্টকে নেই। কার্ট চেক করুন।");
+            }
+
+            throw $e;
+        }
 
         // clear cart + mark incomplete order recovered
         session()->forget($this->cartKey());

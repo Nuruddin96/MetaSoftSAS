@@ -20,6 +20,13 @@
         </div>
 
         <div>
+            <label class="text-sm font-medium">পেজ হেডার</label>
+            <input name="page_header" value="{{ $page->page_header }}" maxlength="200" placeholder="খালি রাখলে পেজের নাম-ই হেডার হিসেবে দেখাবে"
+                   class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
+            <p class="text-xs text-mute mt-1">পেজের ভেতরে বড়, বোল্ড হেডিং হিসেবে দেখায় — মেনুর নাম থেকে আলাদা রাখতে পারেন।</p>
+        </div>
+
+        <div>
             <label class="text-sm font-medium">পেজের লেখা</label>
             <textarea name="content" rows="16"
                       class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm font-mono focus:ring-2 focus:ring-leaf outline-none">{{ $page->content }}</textarea>

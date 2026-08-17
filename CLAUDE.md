@@ -21,7 +21,7 @@ php artisan test tests/Feature/SomeTest.php
 vendor/bin/pint         # code style (Laravel Pint, no custom pint.json — defaults apply)
 ```
 
-There is currently no real test suite — `tests/Feature/ExampleTest.php` and `tests/Unit/ExampleTest.php` are the framework stubs. Note this when asked to "run the tests"; there's nothing meaningful to run yet unless new tests have been added.
+There is now a real, substantial test suite (96 test files, 850+ tests as of the AI Agent 2.0 work) — `tests/Feature/ExampleTest.php` and `tests/Unit/ExampleTest.php` are leftover framework stubs, not representative of coverage. The AI Agent feature set in particular (`tests/Feature/AiAgent/`) has extensive coverage including a dedicated tenant-isolation audit (`TenantIsolationAuditTest`/`TenantIsolationAuditWhatsAppTest`) — see `docs/AI_AGENT_2_TEST_MATRIX.md` for what is and isn't covered by it.
 
 ## Database: NOT migration-driven
 
