@@ -11,7 +11,7 @@
                 <span class="text-xs px-2.5 py-1 rounded-pill font-semibold bg-amber/15 text-ink">📩 মেসেঞ্জার থেকে — পেন্ডিং</span>
             @endif
         </h1>
-        <p class="text-xs text-mute mt-1">{{ $order->created_at->format('d M Y, h:i A') }}</p>
+        <p class="text-xs text-mute mt-1">{{ $order->order_date?->format('d M Y') ?? $order->created_at->format('d M Y, h:i A') }}</p>
     </div>
     <a href="{{ route('tenant.orders.index') }}" class="shrink-0 text-sm text-mute hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">← সব অর্ডার</a>
 </div>
@@ -157,6 +157,10 @@
                     <div>
                         <label class="text-sm font-medium">ঠিকানা</label>
                         <textarea name="customer_address" rows="2" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 focus:ring-2 focus:ring-leaf outline-none">{{ old('customer_address', $order->customer_address) }}</textarea>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">অর্ডারের তারিখ</label>
+                        <input type="date" name="order_date" value="{{ old('order_date', optional($order->order_date)->format('Y-m-d') ?? now()->format('Y-m-d')) }}" max="{{ now()->format('Y-m-d') }}" class="mt-1 w-full max-w-full rounded-btn border border-ink/15 px-3 py-3 focus:ring-2 focus:ring-leaf outline-none">
                     </div>
                     <div class="grid sm:grid-cols-2 gap-4">
                         <div>

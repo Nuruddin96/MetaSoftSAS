@@ -25,6 +25,10 @@
             <label class="text-sm font-medium">ঠিকানা</label>
             <textarea name="customer_address" rows="2" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none"></textarea>
         </div>
+        <div>
+            <label class="text-sm font-medium">অর্ডারের তারিখ</label>
+            <input type="date" name="order_date" value="{{ old('order_date', now()->format('Y-m-d')) }}" max="{{ now()->format('Y-m-d') }}" class="mt-1 w-full max-w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
+        </div>
         <div class="grid md:grid-cols-2 gap-4">
             <div>
                 <label class="text-sm font-medium">বিভাগ</label>

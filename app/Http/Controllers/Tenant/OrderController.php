@@ -63,6 +63,7 @@ class OrderController extends Controller
             'district_id' => 'nullable|integer|exists:bd_districts,id',
             'channel' => 'required|in:website,facebook,instagram,whatsapp,call,others',
             'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
+            'order_date' => 'nullable|date|before_or_equal:today',
             // delivery_charge is deliberately NOT an accepted input — the
             // New Order form no longer has a manual field for it at all
             // (see create.blade.php). The server always computes it from
@@ -113,6 +114,7 @@ class OrderController extends Controller
                 'payment_method' => $data['payment_method'],
                 'status' => 'confirmed',
                 'confirmed_at' => now(),
+                'order_date' => $data['order_date'] ?? now()->toDateString(),
                 'note' => $data['note'] ?? null,
                 'fb_event_id' => (string) Str::uuid(),
             ]);
@@ -161,6 +163,7 @@ class OrderController extends Controller
             'division_id' => 'nullable|integer|exists:bd_divisions,id',
             'district_id' => 'nullable|integer|exists:bd_districts,id',
             'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
+            'order_date' => 'nullable|date|before_or_equal:today',
             // Same "no manual delivery_charge input" rule as store() — see
             // its comment. The confirm form no longer submits this field.
             'discount' => 'nullable|numeric|min:0',
@@ -216,6 +219,7 @@ class OrderController extends Controller
                 'note' => $data['note'] ?? $order->note,
                 'status' => 'confirmed',
                 'confirmed_at' => now(),
+                'order_date' => $data['order_date'] ?? now()->toDateString(),
             ]);
 
             $this->attachItems($order, $variants, $data['variant_ids'], $data['quantities']);

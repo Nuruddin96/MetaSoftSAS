@@ -76,7 +76,7 @@
             <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
                     <p class="font-semibold text-sm text-leaf break-words">{{ $order->order_number }}</p>
-                    <p class="text-xs text-mute mt-0.5">{{ $order->created_at->format('d M, h:i A') }}</p>
+                    <p class="text-xs text-mute mt-0.5">{{ $order->order_date?->format('d M, Y') ?? $order->created_at->format('d M, h:i A') }}</p>
                 </div>
                 <span class="shrink-0 px-2.5 py-1 rounded-pill text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span>
             </div>
@@ -141,7 +141,7 @@
                 </td>
                 <td class="px-4 py-3 font-semibold">{{ number_format($order->total) }}৳</td>
                 <td class="px-4 py-3"><span class="px-2.5 py-1 rounded-pill text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span></td>
-                <td class="px-4 py-3 text-xs text-mute">{{ $order->created_at->format('d M, h:i A') }}</td>
+                <td class="px-4 py-3 text-xs text-mute">{{ $order->order_date?->format('d M, Y') ?? $order->created_at->format('d M, h:i A') }}</td>
                 <td class="px-4 py-3">
                     <button type="button" onclick="quickFraudCheck({{ $order->id }}, '{{ $order->customer_phone }}', this)"
                             class="text-xs text-mute hover:text-ink border border-ink/10 rounded-btn px-2 py-1 transition">🔍 ফ্রড</button>
