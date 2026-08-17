@@ -17,5 +17,7 @@ class MarketingSetting extends Model
         'fb_capi_token' => 'encrypted',
         'meta_app_secret' => 'encrypted',
         'meta_access_token' => 'encrypted',
+        'capi_test_mode' => 'boolean',
+        'capi_last_event_at' => 'datetime',
     ];
 }

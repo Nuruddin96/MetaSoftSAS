@@ -201,7 +201,12 @@ class CheckoutController extends Controller
         try {
             $order->load('items');
 
-            (new MetaCapiService($mk->fb_pixel_id, $mk->fb_capi_token, $mk->fb_test_event_code))
+            // Test Event Code only ever leaves the server when the tenant has
+            // explicitly switched Test Mode on — otherwise a leftover test
+            // code must never tag a real production Purchase.
+            $testEventCode = $mk->capi_test_mode ? $mk->fb_test_event_code : null;
+
+            $result = (new MetaCapiService($mk->fb_pixel_id, $mk->fb_capi_token, $testEventCode))
                 ->sendPurchase(
                     $order,
                     $request->ip(),
@@ -209,6 +214,13 @@ class CheckoutController extends Controller
                     $request->cookie('_fbp'),
                     $request->cookie('_fbc'),
                 );
+
+            $mk->forceFill([
+                'capi_last_status' => $result['success'] ? 'success' : 'failed',
+                'capi_last_http_status' => $result['http_status'],
+                'capi_last_error' => $result['success'] ? null : $result['error_message'],
+                'capi_last_event_at' => now(),
+            ])->save();
         } catch (\Throwable $e) {
             // never break checkout because of an ad-tracking failure
             report($e);

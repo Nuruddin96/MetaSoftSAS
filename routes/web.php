@@ -269,6 +269,7 @@ $tenantRoutes = function () {
             // Settings
             Route::get('settings', [SettingController::class, 'index'])->name('settings');
             Route::post('settings/marketing', [SettingController::class, 'marketing'])->name('settings.marketing');
+            Route::post('settings/marketing/test-capi', [SettingController::class, 'testCapiConnection'])->name('settings.marketing.test-capi');
             Route::post('settings/domain', [SettingController::class, 'requestDomain'])->name('settings.domain');
             Route::post('settings/messenger', [SettingController::class, 'messenger'])->name('settings.messenger');
             Route::post('settings/courier', [SettingController::class, 'courier'])->name('settings.courier');

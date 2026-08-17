@@ -138,6 +138,10 @@
                 <label class="text-xs text-mute">Test Event Code (টেস্টের সময়)</label>
                 <input name="fb_test_event_code" value="{{ $marketing->fb_test_event_code }}" placeholder="TEST12345"
                        class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                <label class="flex items-center gap-2 text-xs mt-2">
+                    <input type="checkbox" name="capi_test_mode" value="1" @checked($marketing->capi_test_mode)>
+                    Test Mode চালু (চালু থাকলেই শুধু Test Event Code পাঠানো হবে — বন্ধ থাকলে আসল অর্ডারে কখনো যাবে না)
+                </label>
             </div>
             <div>
                 <label class="text-xs text-mute">Meta Ad Account ID</label>
@@ -148,7 +152,65 @@
                 <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
             </div>
         </form>
+
+        <div class="mt-5 pt-4 border-t border-ink/10 text-sm space-y-1.5">
+            <p class="font-semibold text-xs text-mute uppercase tracking-wide mb-2">Meta CAPI স্ট্যাটাস</p>
+            <p>CAPI কনফিগার্ড: <b>{{ ($marketing->fb_pixel_id && $marketing->fb_capi_token) ? 'হ্যাঁ' : 'না' }}</b></p>
+            <p>Test Mode: <b class="{{ $marketing->capi_test_mode ? 'text-amber-600' : 'text-green-700' }}">{{ $marketing->capi_test_mode ? 'ON' : 'OFF' }}</b></p>
+            <p>
+                সর্বশেষ CAPI ইভেন্ট:
+                <b>
+                    @if ($marketing->capi_last_status === 'success') সফল
+                    @elseif ($marketing->capi_last_status === 'failed') ব্যর্থ
+                    @else পাঠানো হয়নি
+                    @endif
+                </b>
+                @if ($marketing->capi_last_event_at)
+                    — {{ $marketing->capi_last_event_at->format('d M Y, h:i A') }}
+                @endif
+            </p>
+            @if ($marketing->capi_last_http_status)
+                <p class="text-mute text-xs">HTTP স্ট্যাটাস: {{ $marketing->capi_last_http_status }}</p>
+            @endif
+            @if ($marketing->capi_last_error)
+                <p class="text-red-600 text-xs">সর্বশেষ এরর: {{ $marketing->capi_last_error }}</p>
+            @endif
+
+            <div class="pt-2">
+                <button type="button" id="test-capi-btn"
+                        class="rounded-btn border border-ink/15 px-3 py-1.5 text-xs font-semibold hover:bg-ink/5">
+                    Test CAPI Connection
+                </button>
+                <span id="test-capi-result" class="text-xs ml-2"></span>
+            </div>
+        </div>
     </x-ui.card>
+
+    <script>
+        document.getElementById('test-capi-btn')?.addEventListener('click', async function () {
+            const btn = this;
+            const out = document.getElementById('test-capi-result');
+            btn.disabled = true;
+            out.textContent = 'চেক করা হচ্ছে...';
+            out.className = 'text-xs ml-2 text-mute';
+
+            const res = await fetch('{{ route('tenant.settings.marketing.test-capi') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+            }).then(r => r.json()).catch(() => null);
+
+            btn.disabled = false;
+
+            if (!res) {
+                out.textContent = 'চেক করা যায়নি।';
+                out.className = 'text-xs ml-2 text-red-600';
+                return;
+            }
+
+            out.textContent = res.message;
+            out.className = 'text-xs ml-2 ' + (res.success ? 'text-green-700' : 'text-red-600');
+        });
+    </script>
 
     <x-ui.card>
         <p class="font-bold mb-1">🌐 কাস্টম ডোমেইন</p>

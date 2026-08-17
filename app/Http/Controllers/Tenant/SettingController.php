@@ -10,6 +10,7 @@ use App\Models\MarketingSetting;
 use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
 use App\Services\Domain\DomainManager;
+use App\Services\Marketing\MetaCapiService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 
@@ -126,11 +127,15 @@ class SettingController extends Controller
             'meta_app_secret' => 'nullable|string',
             'meta_access_token' => 'nullable|string',
             'meta_ad_account_id' => 'nullable|string|max:50',
+            'capi_test_mode' => 'nullable|boolean',
         ]);
 
         $setting = MarketingSetting::firstOrNew(['tenant_id' => app('currentTenant')->id]);
 
         foreach ($data as $key => $value) {
+            if ($key === 'capi_test_mode') {
+                continue; // checkbox, handled explicitly below
+            }
             // blank secret fields keep their saved value
             if (in_array($key, ['fb_capi_token', 'meta_app_secret', 'meta_access_token']) && $value === null) {
                 continue;
@@ -138,11 +143,36 @@ class SettingController extends Controller
             $setting->{$key} = $value;
         }
 
+        // Explicit ON/OFF: unchecked box means the key is absent from the
+        // request entirely, so this must default to false, not "unchanged".
+        $setting->capi_test_mode = $request->boolean('capi_test_mode');
+
         $setting->tenant_id = app('currentTenant')->id;
         $setting->updated_at = now();
         $setting->save();
 
         return back()->with('success', 'মার্কেটিং সেটিংস সেভ হয়েছে।');
+    }
+
+    /** Priority 4: validates the tenant's Pixel ID + CAPI token without sending any tracking event. */
+    public function testCapiConnection(Request $request)
+    {
+        $mk = MarketingSetting::first();
+
+        if (! $mk || ! $mk->fb_pixel_id || ! $mk->fb_capi_token) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pixel ID ও Conversion API Access Token দুটোই আগে সেভ করুন।',
+            ]);
+        }
+
+        $result = (new MetaCapiService($mk->fb_pixel_id, $mk->fb_capi_token))
+            ->testConnection();
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['message'],
+        ]);
     }
 
     public function store(Request $request)
