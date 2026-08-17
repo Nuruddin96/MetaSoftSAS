@@ -255,6 +255,46 @@ class MessengerAiDispatchTest extends TestCase
         Queue::assertNotPushed(ProcessAiAgentMessage::class);
     }
 
+    public function test_a_recent_human_reply_stops_the_dispatch(): void
+    {
+        Queue::fake();
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-human-pause', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        DB::table('messenger_messages')->insert([
+            'tenant_id' => $tenant->id, 'sender_psid' => 'cust-human-pause', 'direction' => 'out',
+            'sent_by' => 'human', 'message_text' => 'staff reply', 'created_at' => now()->subMinutes(5),
+        ]);
+
+        $payload = $this->inboundMessengerPayload('page-human-pause', 'cust-human-pause', 'mid-human-pause', 'দাম কত?');
+
+        $this->postSignedMessengerWebhook($payload)->assertOk();
+
+        Queue::assertNotPushed(ProcessAiAgentMessage::class);
+    }
+
+    public function test_an_expired_human_pause_does_not_stop_the_dispatch(): void
+    {
+        Queue::fake();
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-human-expired', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        DB::table('messenger_messages')->insert([
+            'tenant_id' => $tenant->id, 'sender_psid' => 'cust-human-expired', 'direction' => 'out',
+            'sent_by' => 'human', 'message_text' => 'staff reply', 'created_at' => now()->subMinutes(16),
+        ]);
+
+        $payload = $this->inboundMessengerPayload('page-human-expired', 'cust-human-expired', 'mid-human-expired', 'দাম কত?');
+
+        $this->postSignedMessengerWebhook($payload)->assertOk();
+
+        Queue::assertPushed(ProcessAiAgentMessage::class);
+    }
+
     public function test_a_platform_paused_tenant_stops_the_dispatch(): void
     {
         // Phase 14 — purely an optimization (the job re-checks this

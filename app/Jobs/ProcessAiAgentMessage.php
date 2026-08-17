@@ -186,6 +186,16 @@ class ProcessAiAgentMessage implements ShouldQueue
             return false;
         }
 
+        // A genuine staff reply pauses the AI for ONLY this conversation
+        // for MessengerMessage::HUMAN_PAUSE_MINUTES minutes — separate
+        // from the handoff above (which is permanent until a staff member
+        // explicitly resolves it): this lazily expires on its own once
+        // the latest human reply falls outside the window, no action
+        // required. See MessengerMessage::isHumanPaused()'s docblock.
+        if (MessengerMessage::isHumanPaused($this->tenantId, $psid)) {
+            return false;
+        }
+
         // Phase 9 — an image attachment is now a valid reason to reply on
         // its own, even with no caption text at all; see
         // resolveImageUrl()'s docblock.
@@ -211,6 +221,18 @@ class ProcessAiAgentMessage implements ShouldQueue
         }
 
         if (! $message->message_text && ! $imageUrl) {
+            // Genuinely couldn't process this attachment (transcription
+            // failed/unavailable, or the image URL never resolved) —
+            // never hallucinate a reply. Hand off to a human for ONLY
+            // this conversation; the isActive() check above will keep
+            // silencing the AI here until a staff member resolves it,
+            // without touching any other customer or tenant.
+            if ($message->attachment_type === 'audio') {
+                $handoff->trigger($this->tenantId, 'messenger', $psid, AiHandoffService::REASON_UNSUPPORTED_AUDIO, $message->id);
+            } elseif ($message->attachment_type === 'image') {
+                $handoff->trigger($this->tenantId, 'messenger', $psid, AiHandoffService::REASON_UNSUPPORTED_IMAGE, $message->id);
+            }
+
             return false;
         }
 

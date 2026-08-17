@@ -1089,6 +1089,63 @@ class ProcessAiAgentMessageJobTest extends TestCase
         $this->assertNull(DB::table('messenger_messages')->where('id', $messageId)->value('message_text'));
     }
 
+    public function test_a_failed_transcription_triggers_a_customer_specific_handoff(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-voice-handoff', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $messageId = $this->seedPendingVoiceMessage($tenant->id, 'page-voice-handoff', 'cust-voice-handoff', 'mid-voice-handoff');
+
+        Http::fake([
+            'https://example.test/storage/*' => Http::response('fake-audio-bytes', 200, ['Content-Type' => 'audio/mpeg']),
+            '*/audio/transcriptions' => Http::response(['error' => ['message' => 'could not transcribe']], 400),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        $this->assertDatabaseHas('ai_handoffs', [
+            'tenant_id' => $tenant->id, 'channel' => 'messenger', 'external_id' => 'cust-voice-handoff',
+            'reason' => 'unsupported_audio',
+        ]);
+
+        // A second inbound message for the SAME customer must not
+        // auto-reply either (isActive() gate), but another customer for
+        // this same tenant must be completely unaffected.
+        $messageId2 = $this->seedPendingInboundMessage($tenant->id, 'cust-voice-handoff', 'mid-voice-handoff-2', 'আছেন?');
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId2);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+    }
+
+    public function test_an_unresolvable_image_triggers_a_customer_specific_handoff(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-image-handoff', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $messageId = DB::table('messenger_messages')->insertGetId([
+            'tenant_id' => $tenant->id, 'sender_psid' => 'cust-image-handoff', 'mid' => 'mid-image-handoff',
+            'message_text' => null, 'attachment_url' => null, 'attachment_type' => 'image',
+            'direction' => 'in', 'status' => 'new', 'created_at' => now(),
+        ]);
+        DB::table('ai_agent_message_jobs')->insert([
+            'tenant_id' => $tenant->id, 'messenger_message_id' => $messageId, 'status' => 'pending',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        $this->assertDatabaseHas('ai_handoffs', [
+            'tenant_id' => $tenant->id, 'channel' => 'messenger', 'external_id' => 'cust-image-handoff',
+            'reason' => 'unsupported_image',
+        ]);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+    }
+
     // --- Phase 12: response humanization -------------------------------------------------------
 
     public function test_human_delay_seconds_stays_within_the_configured_bounds(): void

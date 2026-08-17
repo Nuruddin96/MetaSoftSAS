@@ -35,6 +35,10 @@ class AiHandoffService
 {
     public const REASON_CUSTOMER_REQUESTED = 'customer_requested';
 
+    public const REASON_UNSUPPORTED_AUDIO = 'unsupported_audio';
+
+    public const REASON_UNSUPPORTED_IMAGE = 'unsupported_image';
+
     protected const REQUEST_PHRASES = [
         'talk to a human', 'speak to a human', 'human agent', 'live agent',
         'talk to a person', 'speak to a person', 'talk to someone', 'speak to someone',

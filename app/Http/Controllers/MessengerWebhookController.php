@@ -418,6 +418,15 @@ class MessengerWebhookController extends Controller
             return;
         }
 
+        // Same "purely an optimization, the job re-checks this itself
+        // too" reasoning as the two checks above — a human/admin reply
+        // within the last HUMAN_PAUSE_MINUTES minutes must not queue a
+        // job that would only immediately no-op. See
+        // MessengerMessage::isHumanPaused()'s docblock.
+        if (MessengerMessage::isHumanPaused($tenantId, $message->sender_psid)) {
+            return;
+        }
+
         AiAgentMessageJob::withoutGlobalScopes()->create([
             'tenant_id' => $tenantId,
             'messenger_message_id' => $message->id,
