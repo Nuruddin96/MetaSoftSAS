@@ -11,7 +11,7 @@
         </a>
 
         <div class="bg-white rounded-2xl shadow-sm border border-ink/5 p-8">
-            <h1 class="font-disp font-bold text-2xl text-center">আপনার দোকান খুলুন</h1>
+            <h1 class="font-disp font-bold text-2xl text-center">আপনার শপ খুলুন</h1>
             <p class="text-mute text-sm text-center mt-2">৭ দিন ফ্রি — কোনো কার্ড লাগবে না</p>
 
             @if ($errors->any())
@@ -68,7 +68,7 @@
                     </div>
                 </div>
                 <button class="w-full py-3.5 rounded-xl bg-leaf text-white font-bold hover:bg-leafdk">
-                    দোকান তৈরি করুন →
+                    শপ তৈরি করুন →
                 </button>
             </form>
         </div>

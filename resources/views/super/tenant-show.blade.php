@@ -58,7 +58,11 @@
             </p>
         </div>
 
-        @php $domainStatus = $tenant->customDomainDisplayStatus(); @endphp
+        @php
+            $domainStatus = $tenant->customDomainDisplayStatus();
+            $connStatus = $tenant->customDomainConnectionStatus();
+            $cloudflareReady = \App\Models\Tenant::cloudflareDomainColumnsReady();
+        @endphp
         @if ($domainStatus === 'pending')
             <div class="bg-amber/15 border border-amber/40 rounded-xl p-5">
                 <p class="font-bold text-sm mb-1">🌐 কাস্টম ডোমেইন রিকোয়েস্ট — Pending</p>
@@ -73,19 +77,45 @@
                         <button class="px-4 py-2 rounded-lg bg-red-50 text-red-600 text-sm font-semibold hover:bg-red-100">✕ প্রত্যাখ্যান করুন</button>
                     </form>
                 </div>
-                <p class="text-xs text-mute mt-3">অনুমোদনের পর ম্যানুয়ালি DNS/SSL সেটআপ করে Activate করুন — কোনো স্বয়ংক্রিয় DNS যাচাই প্রয়োজন নেই।</p>
+                <p class="text-xs text-mute mt-3">অনুমোদনের পর "Connect" চাপলে Cloudflare স্বয়ংক্রিয়ভাবে DNS/SSL চেষ্টা করবে (কনফিগার করা থাকলে) — নাহলে ম্যানুয়াল নির্দেশনা দেখাবে।</p>
             </div>
         @elseif ($domainStatus === 'approved')
             <div class="bg-leaf/10 border border-leaf/30 rounded-xl p-5">
                 <p class="font-bold text-sm mb-1">✅ অনুমোদিত (Approved) — <b>{{ $tenant->custom_domain_requested }}</b></p>
-                <p class="text-xs text-mute mb-3">এখন ম্যানুয়ালি ডোমেইন/DNS/SSL সেটআপ শেষ করে নিচের বাটনে ক্লিক করে Activate করুন।</p>
+
+                @if ($connStatus === 'dns_required' || (! $cloudflareReady))
+                    <div class="bg-white rounded-lg border border-ink/10 p-3 text-xs space-y-1 mb-3">
+                        <p class="font-semibold">📋 DNS নির্দেশনা (ম্যানুয়াল / Cloudflare কনফিগার করা নেই)</p>
+                        <p>Type: <b>CNAME</b> · Host: <b>@ (অথবা www)</b> · Value: <b>{{ $cloudflareReady ? app(\App\Services\Domain\CloudflareDomainService::class)->fallbackOriginTarget() : config('app.central_domain') }}</b></p>
+                        @if ($tenant->custom_domain_connect_error)
+                            <p class="text-red-600">সর্বশেষ ত্রুটি: {{ $tenant->custom_domain_connect_error }}</p>
+                        @endif
+                    </div>
+                @elseif (in_array($connStatus, ['connecting', 'connected'], true))
+                    <p class="text-xs text-mute mb-3">Cloudflare স্ট্যাটাস: <b>{{ $connStatus === 'connecting' ? 'Connecting…' : 'Connected (Cloudflare edge ready)' }}</b> — "স্ট্যাটাস রিফ্রেশ করুন" চাপুন।</p>
+                @elseif ($connStatus === 'failed')
+                    <p class="text-xs text-red-600 mb-3">Cloudflare কানেকশন ব্যর্থ: {{ $tenant->custom_domain_connect_error }}</p>
+                @endif
+
                 @if ($domainActivationInstructions)
                     <div class="bg-white rounded-lg border border-ink/10 p-3 text-xs font-mono whitespace-pre-line mb-3">{{ $domainActivationInstructions }}</div>
                 @endif
-                <div class="flex gap-3">
+
+                <div class="flex flex-wrap gap-3">
+                    @if ($cloudflareReady && ! $tenant->cf_custom_hostname_id)
+                        <form method="POST" action="{{ route('super.tenants.domain.connect', $tenant) }}">
+                            @csrf
+                            <button class="px-4 py-2 rounded-lg bg-ink text-white text-sm font-semibold hover:bg-ink/90">🔗 Connect</button>
+                        </form>
+                    @elseif ($cloudflareReady && $tenant->cf_custom_hostname_id)
+                        <form method="POST" action="{{ route('super.tenants.domain.refresh', $tenant) }}">
+                            @csrf
+                            <button class="px-4 py-2 rounded-lg bg-ink text-white text-sm font-semibold hover:bg-ink/90">🔄 স্ট্যাটাস রিফ্রেশ করুন</button>
+                        </form>
+                    @endif
                     <form method="POST" action="{{ route('super.tenants.domain.activate', $tenant) }}">
                         @csrf
-                        <button class="px-4 py-2 rounded-lg bg-leaf text-white text-sm font-semibold hover:bg-leafdk">🚀 চালু করুন (Activate)</button>
+                        <button class="px-4 py-2 rounded-lg bg-leaf text-white text-sm font-semibold hover:bg-leafdk">🚀 ম্যানুয়ালি চালু করুন (Activate)</button>
                     </form>
                     <form method="POST" action="{{ route('super.tenants.domain.reject', $tenant) }}">
                         @csrf

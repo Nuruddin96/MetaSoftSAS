@@ -32,9 +32,14 @@ class OrderController extends Controller
     /** Active products+variants, shaped for the product/variant picker JS shared by create.blade.php and show.blade.php. */
     protected function productsJson()
     {
-        return Product::with('variants')->where('is_active', 1)->orderBy('name')->get()
+        return Product::with(['variants', 'images' => fn ($q) => $q->orderBy('sort_order')])
+            ->where('is_active', 1)->orderBy('name')->get()
             ->map(fn ($p) => [
                 'name' => $p->name,
+                // First image only, as a small selector thumbnail — never
+                // the full gallery, this is just a visual identity check
+                // beside the name, not a product-detail view.
+                'image' => optional($p->images->first())->image_path,
                 'variants' => $p->variants->map(fn ($v) => [
                     'id' => $v->id,
                     'name' => $v->variant_name,

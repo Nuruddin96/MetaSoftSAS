@@ -67,7 +67,7 @@ class AiChatControllerTest extends TestCase
         $this->actingAs($user, 'tenant')
             ->get($this->panelUrl($tenant, 'ai-chat'))
             ->assertOk()
-            ->assertSee('AI এজেন্ট');
+            ->assertSee('Personal Assistant');
     }
 
     public function test_sending_a_message_when_ai_agent_is_off_does_not_call_the_provider(): void

@@ -3,6 +3,8 @@
 namespace Tests\Feature\Storefront;
 
 use App\Models\Category;
+use App\Models\Inventory;
+use App\Models\StoreSetting;
 use App\Models\Tenant;
 use Tests\Concerns\InteractsWithCommerceSchema;
 use Tests\TestCase;
@@ -103,7 +105,7 @@ class StorefrontRenderTest extends TestCase
     {
         $tenant = $this->makeTenant();
         $variant = $this->makeSellableVariant($tenant->id);
-        \App\Models\Inventory::where('variant_id', $variant->id)->update(['quantity' => 0]);
+        Inventory::where('variant_id', $variant->id)->update(['quantity' => 0]);
 
         $response = $this->get($this->storeUrl($tenant, 'product/'.$variant->product->slug));
 
@@ -159,16 +161,17 @@ class StorefrontRenderTest extends TestCase
         $response->assertDontSee('অফার পন্য');
     }
 
-    public function test_homepage_offer_section_shows_at_most_two_products_with_a_see_all_link(): void
+    public function test_homepage_offer_section_shows_at_most_four_products_with_a_see_all_link(): void
     {
         $tenant = $this->makeTenant();
         app()->instance('currentTenant', $tenant);
         // Featured section off — isolates the offer section so counting its
         // cards below isn't muddied by the same discounted products also
         // appearing in the regular "আমাদের প্রোডাক্ট" grid.
-        \App\Models\StoreSetting::create(['tenant_id' => $tenant->id, 'key' => 'show_featured', 'value' => '0']);
-        // Three distinct discounted products — the section must cap to 2.
-        foreach ([100, 200, 300] as $price) {
+        StoreSetting::create(['tenant_id' => $tenant->id, 'key' => 'show_featured', 'value' => '0']);
+        // Five distinct discounted products — the section must cap to 4
+        // (desktop grid-cols-4, mobile grid-cols-2).
+        foreach ([100, 200, 300, 400, 500] as $price) {
             $this->makeSellableVariant($tenant->id, ['selling_price' => $price, 'compare_at_price' => $price + 50]);
         }
 
@@ -179,7 +182,7 @@ class StorefrontRenderTest extends TestCase
         $response->assertSee(route('storefront.products', ['offer' => 1]), false);
         // No auto-sliding marquee chrome from the old carousel design.
         $response->assertDontSee('offer-marquee', false);
-        $this->assertSame(2, substr_count($response->getContent(), 'Save 50 Tk'));
+        $this->assertSame(4, substr_count($response->getContent(), 'Save 50 Tk'));
     }
 
     public function test_offer_filter_on_products_listing_shows_only_discounted_products(): void

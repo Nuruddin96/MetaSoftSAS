@@ -3,6 +3,17 @@
 @section('title', 'ড্যাশবোর্ড')
 
 @section('content')
+{{-- "Tenant Announcement" — global, Super-Admin-authored, never editable by the tenant. Renders nothing when empty. --}}
+@php $platformAnnouncement = \App\Models\PlatformAnnouncement::current(); @endphp
+@if ($platformAnnouncement !== '')
+    <x-ui.card padding="sm" tone="amber" class="mb-6">
+        <div class="flex items-start gap-2 text-sm">
+            <i data-lucide="megaphone" class="w-4 h-4 shrink-0 mt-0.5"></i>
+            <span>{{ $platformAnnouncement }}</span>
+        </div>
+    </x-ui.card>
+@endif
+
 @if ($tenant->status === 'trial')
     <x-ui.card padding="sm" tone="amber" class="mb-6">
         <div class="flex items-center gap-2 text-sm">
@@ -50,7 +61,7 @@
 
 @php
     $todoItems = array_filter([
-        $pendingOrders > 0 ? ['পেন্ডিং অর্ডার কনফার্ম করুন', $pendingOrders, route('tenant.orders.index', ['status' => 'pending']), 'clock', 'text-amber', 'bg-amber/10'] : null,
+        $pendingOrders > 0 ? ['পেন্ডিং অর্ডার', $pendingOrders, route('tenant.orders.index', ['status' => 'pending']), 'clock', 'text-amber', 'bg-amber/10'] : null,
         $lowStockCount > 0 ? ['লো স্টক প্রোডাক্ট রিস্টক করুন', $lowStockCount, route('tenant.inventory.low'), 'triangle-alert', 'text-red-600', 'bg-red-50'] : null,
         $newMessages > 0 ? ['নতুন মেসেঞ্জার মেসেজ দেখুন', $newMessages, route('tenant.messenger.index'), 'message-circle', 'text-blue-600', 'bg-blue-50'] : null,
         $newIncomplete > 0 ? ['অসম্পূর্ণ অর্ডারে কল করুন', $newIncomplete, route('tenant.incomplete'), 'phone-missed', 'text-mute', 'bg-ink/5'] : null,
@@ -73,17 +84,17 @@
         <p class="font-bold text-sm mb-3 flex items-center gap-2">
             <i data-lucide="clipboard-list" class="w-4 h-4 text-leafdk"></i> আজকে যা করতে হবে
         </p>
-        <div class="grid grid-cols-2 gap-2.5">
+        <div class="grid grid-cols-2 gap-2">
             @foreach ($todoItems as [$label, $count, $link, $icon, $textColor, $bgColor])
                 <a href="{{ $link }}"
-                   class="flex flex-col items-center text-center gap-1.5 px-3 py-4 rounded-[11px] border border-ink/5 hover:border-leaf/30 hover:bg-paper/60 active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2
+                   class="flex flex-col items-center text-center gap-1 px-2.5 py-3 rounded-[11px] border border-ink/5 hover:border-leaf/30 hover:bg-paper/60 active:scale-[0.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2
                           lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:text-left lg:px-4 lg:py-3 lg:rounded-btn">
-                    <span class="flex flex-col items-center gap-1.5 lg:flex-row lg:items-center lg:gap-2.5 lg:text-sm">
-                        <span class="relative w-9 h-9 rounded-[9px] {{ $bgColor }} grid place-items-center lg:w-auto lg:h-auto lg:rounded-none lg:bg-transparent">
-                            <i data-lucide="{{ $icon }}" class="w-5 h-5 {{ $textColor }} lg:w-4 lg:h-4"></i>
+                    <span class="flex flex-col items-center gap-1 lg:flex-row lg:items-center lg:gap-2.5 lg:text-sm">
+                        <span class="relative w-8 h-8 rounded-[9px] {{ $bgColor }} grid place-items-center lg:w-auto lg:h-auto lg:rounded-none lg:bg-transparent">
+                            <i data-lucide="{{ $icon }}" class="w-4 h-4 {{ $textColor }} lg:w-4 lg:h-4"></i>
                             <span class="lg:hidden absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-pill {{ $bgColor }} {{ $textColor }} text-[10px] font-bold grid place-items-center border-2 border-white">{{ $count }}</span>
                         </span>
-                        <span class="text-[15px] font-medium leading-tight lg:text-sm lg:font-normal">{{ $label }}</span>
+                        <span class="text-[13px] font-medium leading-tight lg:text-sm lg:font-normal">{{ $label }}</span>
                     </span>
                     <span class="hidden lg:grid w-6 h-6 rounded-pill {{ $bgColor }} place-items-center text-xs font-bold {{ $textColor }}">{{ $count }}</span>
                 </a>
@@ -123,21 +134,21 @@
 <div class="grid grid-cols-3 lg:grid-cols-6 gap-2 lg:gap-4">
     @php
         $stats = [
-            ['আজকের অর্ডার', $todayOrders, 'receipt', false, 'bg-amber-50 text-amber-600 lg:bg-paper lg:text-mute', route('tenant.orders.index')],
-            ['আজকের বিক্রি', number_format($todaySales) . '৳', 'trending-up', true, 'bg-leaf/10 text-leafdk', route('tenant.reports.sales')],
-            ['পেন্ডিং অর্ডার', $pendingOrders, 'clock', false, 'bg-blue-50 text-blue-600 lg:bg-paper lg:text-mute', route('tenant.orders.index', ['status' => 'pending'])],
+            ['আজকের অর্ডার', $todayOrders, 'receipt', false, 'bg-amber-50 text-amber-600 lg:bg-paper lg:text-mute', route('tenant.orders.index'), '!border-amber-200'],
+            ['আজকের বিক্রি', number_format($todaySales) . '৳', 'trending-up', true, 'bg-leaf/10 text-leafdk', route('tenant.reports.sales'), '!border-leaf/30'],
+            ['পেন্ডিং অর্ডার', $pendingOrders, 'clock', false, 'bg-blue-50 text-blue-600 lg:bg-paper lg:text-mute', route('tenant.orders.index', ['status' => 'pending']), '!border-blue-200'],
             // Was a plain Product::count() ("মোট প্রোডাক্ট") — repurposed to
             // count orders currently with a courier and not yet resolved
             // (delivered/cancelled/returned), since that's the actionable
             // number for this spot, not the static catalog size.
-            ['কুরিয়ারে পেন্ডিং', $courierPendingCount, 'truck', false, 'bg-purple-50 text-purple-600 lg:bg-paper lg:text-mute', route('tenant.orders.index', ['courier' => 'pending'])],
-            ['মোট কাস্টমার', $totalCustomers, 'users', false, 'bg-pink-50 text-pink-600 lg:bg-paper lg:text-mute', route('tenant.customers.index')],
-            ['খরচ', number_format($todayExpenses) . '৳', 'wallet', false, 'bg-red-50 text-red-600 lg:bg-paper lg:text-mute', route('tenant.expenses.index')],
+            ['কুরিয়ারে পেন্ডিং', $courierPendingCount, 'truck', false, 'bg-purple-50 text-purple-600 lg:bg-paper lg:text-mute', route('tenant.orders.index', ['courier' => 'pending']), '!border-purple-200'],
+            ['মোট কাস্টমার', $totalCustomers, 'users', false, 'bg-pink-50 text-pink-600 lg:bg-paper lg:text-mute', route('tenant.customers.index'), '!border-pink-200'],
+            ['খরচ', number_format($todayExpenses) . '৳', 'wallet', false, 'bg-red-50 text-red-600 lg:bg-paper lg:text-mute', route('tenant.expenses.index'), '!border-red-200'],
         ];
     @endphp
-    @foreach ($stats as [$label, $value, $icon, $isRevenue, $iconTone, $link])
+    @foreach ($stats as [$label, $value, $icon, $isRevenue, $iconTone, $link, $borderTone])
         <a href="{{ $link }}" class="block rounded-[10px] lg:rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
-            <x-ui.card hoverable padding="none" radius="none" class="flex flex-col rounded-[10px] lg:rounded-3xl shadow-sm p-2.5 lg:p-6 active:scale-[0.97] h-full">
+            <x-ui.card hoverable padding="none" radius="none" class="flex flex-col rounded-[10px] lg:rounded-3xl shadow-sm border {{ $borderTone }} p-2.5 lg:p-6 active:scale-[0.97] h-full">
                 <div class="order-1 w-7 h-7 lg:w-9 lg:h-9 rounded-[7px] lg:rounded-lg grid place-items-center {{ $iconTone }}">
                     <i data-lucide="{{ $icon }}" class="w-4 h-4 lg:w-[18px] lg:h-[18px]"></i>
                 </div>
@@ -201,7 +212,7 @@
         <div class="px-5 py-12 text-center text-mute text-sm">
             <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-3 text-mute/40"></i>
             এখনো কোনো অর্ডার আসেনি। <a href="{{ route('tenant.products.create') }}" class="text-leaf font-semibold hover:underline">প্রথম প্রোডাক্ট যোগ করুন</a>,
-            তারপর দোকানের লিংক শেয়ার করুন: <span class="font-semibold text-ink">{{ $tenant->url() }}</span>
+            তারপর শপের লিংক শেয়ার করুন: <span class="font-semibold text-ink">{{ $tenant->url() }}</span>
         </div>
     @else
         @php

@@ -1,12 +1,12 @@
 @extends('layouts.panel')
 
-@section('title', 'AI এজেন্ট')
+@section('title', 'Personal Assistant')
 
 @section('content')
 <div class="max-w-3xl mx-auto">
     <div class="flex items-center justify-between mb-4">
         <div>
-            <h1 class="font-disp font-bold text-xl">🤖 AI এজেন্ট</h1>
+            <h1 class="font-disp font-bold text-xl">🤖 Personal Assistant</h1>
             <p class="text-xs text-mute mt-0.5">আপনার অর্ডার, প্রোডাক্ট, কাস্টমার ও সেলস সম্পর্কে জিজ্ঞেস করুন।</p>
         </div>
         <div class="text-right text-xs">
@@ -23,7 +23,7 @@
 
     @if (! $aiAgentEnabled)
         <div class="rounded-xl border border-amber-200 bg-amber-50 text-amber-800 p-4 text-sm mb-4">
-            AI এজেন্ট বন্ধ আছে। <a href="{{ route('tenant.settings') }}" class="font-semibold underline">Settings</a> থেকে "AI এজেন্ট চালু" টিক দিন।
+            Personal Assistant বন্ধ আছে। <a href="{{ route('tenant.settings') }}" class="font-semibold underline">Settings</a> থেকে "Personal Assistant চালু" টিক দিন।
         </div>
     @elseif (is_null($aiCreditBalance) || (float) $aiCreditBalance <= 0)
         <div class="rounded-xl border border-red-200 bg-red-50 text-red-700 p-4 text-sm mb-4">
@@ -71,7 +71,7 @@
         <form id="aiChatForm" method="POST" action="{{ route('tenant.ai-chat.send') }}" class="border-t border-ink/5 p-3 flex gap-2">
             @csrf
             <input type="text" name="message" required maxlength="2000" autocomplete="off"
-                   placeholder="{{ $aiAgentEnabled ? 'একটি প্রশ্ন লিখুন...' : 'AI এজেন্ট বন্ধ আছে' }}"
+                   placeholder="{{ $aiAgentEnabled ? 'একটি প্রশ্ন লিখুন...' : 'Personal Assistant বন্ধ আছে' }}"
                    {{ $aiAgentEnabled ? '' : 'disabled' }}
                    class="flex-1 rounded-btn border border-ink/15 px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none disabled:bg-ink/5 disabled:text-mute">
             <x-ui.button type="submit" variant="accent" size="sm" :disabled="! $aiAgentEnabled">পাঠান</x-ui.button>

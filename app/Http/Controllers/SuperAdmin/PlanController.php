@@ -15,6 +15,7 @@ class PlanController extends Controller
             'plans' => Plan::orderBy('sort_order')->get(),
             'featureList' => config('features.list'),
             'featuresReady' => Plan::featuresColumnReady(),
+            'cmsReady' => Plan::cmsColumnsReady(),
         ]);
     }
 
@@ -22,6 +23,10 @@ class PlanController extends Controller
     {
         $data = $request->validate([
             'name' => 'required|string|max:100',
+            // Customer-facing marketing blurb shown under the plan name on
+            // the landing page (resources/views/central/landing.blade.php)
+            // — Super Admin content, never hardcoded in Blade.
+            'tagline' => 'nullable|string|max:150',
             'price_monthly' => 'required|numeric|min:0',
             'price_yearly' => 'required|numeric|min:0',
             'max_products' => 'nullable|integer|min:1',
@@ -41,6 +46,16 @@ class PlanController extends Controller
         // Already existed as a schema column (DEFAULT 1) but was never
         // wired to any controller/view before the Advertising module.
         $data['allow_meta_ads'] = $request->boolean('allow_meta_ads');
+
+        // Which plan gets the "জনপ্রিয়" (Popular) badge on the landing
+        // page — Super Admin's explicit choice, replacing the old
+        // `$loop->iteration === 2` hardcoded position (database/sql/
+        // chunk45.sql). Guarded the same way features/tagline are.
+        if (Plan::cmsColumnsReady()) {
+            $data['is_featured'] = $request->boolean('is_featured');
+        } else {
+            unset($data['tagline']);
+        }
 
         // Guarded the same way every other additive-column write in this
         // codebase is (chunk27.sql may not be imported yet on a given

@@ -12,7 +12,7 @@
         <div class="bg-white rounded-2xl shadow-sm border border-ink/5 p-8">
             @if (request('registered'))
                 <p class="mb-4 bg-leaf/10 border border-leaf/30 text-leafdk text-sm rounded-lg p-3">
-                    🎉 অভিনন্দন! আপনার দোকান তৈরি হয়ে গেছে। ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন।
+                    🎉 অভিনন্দন! আপনার শপ তৈরি হয়ে গেছে। ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করুন।
                 </p>
             @endif
             @error('email')

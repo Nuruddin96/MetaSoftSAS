@@ -29,7 +29,7 @@
             </div>
             <div>
                 <label class="text-sm font-medium">ছবি (থাম্বনেইল)</label>
-                <input type="file" name="thumbnail" accept="image/*" class="mt-1 w-full text-sm">
+                <input type="file" name="thumbnail" accept="image/*" class="mt-1 w-full text-sm border border-dashed border-ink/25 rounded-btn px-3 py-2.5 cursor-pointer hover:bg-paper transition file:mr-3 file:px-3 file:py-1.5 file:rounded-btn file:border-0 file:bg-ink/5 file:text-xs file:font-semibold file:cursor-pointer">
             </div>
         </div>
         <div>
@@ -39,7 +39,7 @@
         </div>
         @if ($product)
             <label class="flex items-center gap-2 text-sm">
-                <input type="checkbox" name="is_active" value="1" @checked($product->is_active)> অ্যাক্টিভ (দোকানে দেখাবে)
+                <input type="checkbox" name="is_active" value="1" @checked($product->is_active)> অ্যাক্টিভ (শপে দেখাবে)
             </label>
         @endif
     </x-ui.card>
@@ -67,7 +67,7 @@
 
         <div>
             <label class="text-sm font-medium">নতুন গ্যালারি ছবি যোগ করুন</label>
-            <input type="file" name="gallery[]" multiple accept="image/*" class="mt-1 w-full text-sm">
+            <input type="file" name="gallery[]" multiple accept="image/*" class="mt-1 w-full text-sm border border-dashed border-ink/25 rounded-btn px-3 py-2.5 cursor-pointer hover:bg-paper transition file:mr-3 file:px-3 file:py-1.5 file:rounded-btn file:border-0 file:bg-ink/5 file:text-xs file:font-semibold file:cursor-pointer">
         </div>
     </x-ui.card>
 

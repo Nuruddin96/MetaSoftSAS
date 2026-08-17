@@ -238,7 +238,7 @@
     </div>
 
     {{-- COURIER — kept visually separate from order status above --}}
-    <div class="order-5 lg:order-none lg:col-start-3 lg:row-start-5 min-w-0">
+    <div class="order-6 lg:order-none lg:col-start-3 lg:row-start-5 min-w-0">
         <x-ui.card padding="sm">
             <p class="font-bold text-sm mb-3">🚚 কুরিয়ার</p>
             @if ($order->courier_consignment_id)
@@ -269,7 +269,7 @@
 
     {{-- MESSENGER --}}
     @if ($messengerMessages->isNotEmpty())
-        <div class="order-6 lg:order-none lg:col-span-2 lg:row-start-2 min-w-0">
+        <div class="order-7 lg:order-none lg:col-span-2 lg:row-start-2 min-w-0">
             <x-ui.card padding="none" class="min-w-0">
                 <div class="px-5 py-3.5 border-b border-ink/5 font-bold text-sm flex flex-wrap items-center justify-between gap-2">
                     <span>📩 Messenger থেকে অর্ডার</span>
@@ -282,8 +282,8 @@
         </div>
     @endif
 
-    {{-- fraud check — not part of the core hierarchy, kept low-priority on mobile --}}
-    <div class="order-7 lg:order-none lg:col-start-3 lg:row-start-4 min-w-0">
+    {{-- fraud check — appears right after Status, before Courier and Message --}}
+    <div class="order-5 lg:order-none lg:col-start-3 lg:row-start-4 min-w-0">
         <x-ui.card padding="sm">
             <p class="font-bold text-sm mb-3">🔍 ফ্রড চেক</p>
             <button onclick="fraudCheck()" id="fraudBtn"
@@ -347,7 +347,7 @@
         const [cls, label] = styles[res.verdict] || styles.new;
         box.className = 'mt-3 text-sm rounded-lg p-3 ' + cls;
         const internal = res.internal
-            ? `<p class="text-xs mt-2 pt-2 border-t border-ink/10">এই দোকানের নিজস্ব অর্ডার: ${res.internal.total} · ডেলিভারড: ${res.internal.delivered} · বাতিল: ${res.internal.cancelled} · রিটার্ন: ${res.internal.returned} · পেন্ডিং: ${res.internal.pending}</p>`
+            ? `<p class="text-xs mt-2 pt-2 border-t border-ink/10">এই শপের নিজস্ব অর্ডার: ${res.internal.total} · ডেলিভারড: ${res.internal.delivered} · বাতিল: ${res.internal.cancelled} · রিটার্ন: ${res.internal.returned} · পেন্ডিং: ${res.internal.pending}</p>`
             : '';
         box.innerHTML = `<p class="font-bold">${label}${res.success_ratio !== null ? ' — সাকসেস ' + res.success_ratio + '%' : ''}</p>
             <p class="text-xs mt-1">মোট অর্ডার (কুরিয়ার): ${res.total} · ডেলিভারড: ${res.delivered} · রিটার্ন: ${res.returned}</p>
@@ -376,12 +376,16 @@
         div.className = 'flex flex-col sm:flex-row gap-3 sm:items-center border border-ink/10 sm:border-0 rounded-lg p-3 sm:p-0';
         div.id = 'row' + rowIdx;
 
-        let productOptions = products.map((p, pi) => `<option value="${pi}">${p.name}</option>`).join('');
-
         div.innerHTML = `
-            <select class="prodSelect w-full sm:flex-1 rounded-lg border border-ink/15 px-3 py-3 sm:py-2 text-sm bg-white" onchange="updateVariants(${rowIdx})">
-                <option value="">প্রোডাক্ট বাছাই করুন</option>${productOptions}
-            </select>
+            <div class="w-full sm:flex-1 flex items-center gap-2">
+                <img class="prodThumb w-9 h-9 rounded-lg object-cover border border-ink/10 shrink-0 hidden">
+                <div class="flex-1 min-w-0">
+                    <input type="text" class="prodSearch w-full rounded-lg border border-ink/15 px-3 py-2 text-sm mb-1 bg-white" placeholder="প্রোডাক্ট খুঁজুন..." oninput="filterProducts(${rowIdx})" autocomplete="off">
+                    <select class="prodSelect w-full rounded-lg border border-ink/15 px-3 py-3 sm:py-2 text-sm bg-white" onchange="updateVariants(${rowIdx})">
+                        <option value="">প্রোডাক্ট বাছাই করুন</option>
+                    </select>
+                </div>
+            </div>
             <select class="variantSelect w-full sm:w-48 rounded-lg border border-ink/15 px-3 py-3 sm:py-2 text-sm bg-white" onchange="calcTotal()"></select>
             <div class="flex items-center gap-3">
                 <input type="number" class="qtyInput w-20 shrink-0 rounded-lg border border-ink/15 px-3 py-3 sm:py-2 text-sm" value="1" min="1" onchange="calcTotal()">
@@ -390,15 +394,51 @@
             </div>
         `;
         wrap.appendChild(div);
+        renderProductOptions(rowIdx, '');
         rowIdx++;
+    }
+
+    /** Rebuilds a row's <select> options from `products`, filtered by a case-insensitive substring match against the search box — option `value` stays the original index into `products` (never re-indexed), so updateVariants()/calcTotal() need no changes. */
+    function renderProductOptions(idx, query) {
+        const row = document.getElementById('row' + idx);
+        const select = row.querySelector('.prodSelect');
+        const q = query.trim().toLowerCase();
+        const previouslySelected = select.value;
+
+        const matches = products
+            .map((p, pi) => [p, pi])
+            .filter(([p]) => q === '' || p.name.toLowerCase().includes(q));
+
+        select.innerHTML = '<option value="">প্রোডাক্ট বাছাই করুন</option>'
+            + matches.map(([p, pi]) => `<option value="${pi}">${p.name}</option>`).join('');
+
+        if (matches.some(([, pi]) => String(pi) === previouslySelected)) {
+            select.value = previouslySelected;
+        }
+    }
+
+    function filterProducts(idx) {
+        const row = document.getElementById('row' + idx);
+        renderProductOptions(idx, row.querySelector('.prodSearch').value);
     }
 
     function updateVariants(idx) {
         const row = document.getElementById('row' + idx);
         const pi = row.querySelector('.prodSelect').value;
         const variantSelect = row.querySelector('.variantSelect');
+        const thumb = row.querySelector('.prodThumb');
         variantSelect.innerHTML = '';
-        if (pi === '') { calcTotal(); return; }
+        if (pi === '') {
+            thumb.classList.add('hidden');
+            calcTotal();
+            return;
+        }
+        if (products[pi].image) {
+            thumb.src = '/storage/' + products[pi].image;
+            thumb.classList.remove('hidden');
+        } else {
+            thumb.classList.add('hidden');
+        }
         products[pi].variants.forEach(v => {
             const opt = document.createElement('option');
             opt.value = v.id; opt.dataset.price = v.price;

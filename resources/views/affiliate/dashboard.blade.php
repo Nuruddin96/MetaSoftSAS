@@ -48,7 +48,7 @@
 
         <div class="grid lg:grid-cols-2 gap-6">
             <div class="bg-white rounded-xl border border-ink/5">
-                <div class="px-5 py-3 border-b border-ink/5 font-bold text-sm">রেফার করা দোকান</div>
+                <div class="px-5 py-3 border-b border-ink/5 font-bold text-sm">রেফার করা শপ</div>
                 @forelse ($referredTenants as $t)
                     <div class="flex justify-between px-5 py-3 border-b border-ink/5 last:border-0 text-sm">
                         <span>{{ $t->store_name }}</span><span class="text-xs text-mute">{{ $t->status }}</span>

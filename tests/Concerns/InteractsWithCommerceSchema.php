@@ -70,6 +70,10 @@ trait InteractsWithCommerceSchema
                 $table->string('custom_domain_request_status')->default('none');
                 $table->string('custom_domain_verification_token', 64)->nullable();
                 $table->timestamp('custom_domain_dns_verified_at')->nullable();
+                // Cloudflare connection tracking — database/sql/chunk47.sql.
+                $table->string('custom_domain_connect_status', 20)->default('not_connected');
+                $table->string('cf_custom_hostname_id', 64)->nullable();
+                $table->string('custom_domain_connect_error', 255)->nullable();
                 $table->string('primary_color')->nullable();
                 $table->string('secondary_color')->nullable();
                 $table->timestamps();
@@ -200,6 +204,37 @@ trait InteractsWithCommerceSchema
                 $table->string('subtitle', 255)->nullable();
                 $table->string('button_text', 50)->nullable();
                 $table->string('button_link', 255)->nullable();
+                $table->integer('sort_order')->default(0);
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        // Customer Reviews — database/sql/chunk44.sql.
+        if (! Schema::hasTable('reviews')) {
+            Schema::create('reviews', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('customer_name', 150);
+                $table->string('photo_path', 255)->nullable();
+                $table->string('review_text', 500)->nullable();
+                $table->integer('sort_order')->default(0);
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        // pages — database/sql/chunk6.sql + chunk43.sql (page_header).
+        if (! Schema::hasTable('pages')) {
+            Schema::create('pages', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('title', 150);
+                $table->string('page_header', 200)->nullable();
+                $table->string('slug', 180);
+                $table->longText('content')->nullable();
+                $table->boolean('show_in_header')->default(false);
+                $table->boolean('show_in_footer')->default(true);
                 $table->integer('sort_order')->default(0);
                 $table->boolean('is_active')->default(true);
                 $table->timestamps();

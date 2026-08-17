@@ -6,14 +6,14 @@
 <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <div>
         <h1 class="font-disp font-bold text-2xl">ওয়েবসাইট সেটিংস</h1>
-        <p class="text-sm text-mute">আপনার দোকানের সাইট নিজের মতো সাজান</p>
+        <p class="text-sm text-mute">আপনার শপের সাইট নিজের মতো সাজান</p>
     </div>
     <a href="{{ $tenant->url() }}" target="_blank" class="px-4 py-2.5 rounded-btn border border-ink/15 font-semibold text-sm hover:bg-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">👁 সাইট দেখুন ↗</a>
 </div>
 
 {{-- tabs --}}
 <div class="flex flex-wrap gap-2 mb-6 border-b border-ink/10 pb-3" id="tabs">
-    @foreach ([['brand','🎨 ব্র্যান্ড ও লোগো'],['home','🏠 হোম পেজ'],['pages','📄 পেজ'],['footer','📌 ফুটার ও যোগাযোগ']] as [$id, $label])
+    @foreach ([['brand','🎨 ব্র্যান্ড ও লোগো'],['home','🏠 হোম পেজ'],['pages','📄 পেজ'],['reviews','⭐ কাস্টমার রিভিউ'],['footer','📌 ফুটার ও যোগাযোগ']] as [$id, $label])
         <button data-tab="{{ $id }}"
                 class="tab-btn px-4 py-2 rounded-btn text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 {{ $loop->first ? 'bg-ink text-white' : 'bg-white border border-ink/10 hover:border-leaf/40' }}">
             {{ $label }}
@@ -27,7 +27,7 @@
         @csrf
         <x-ui.card class="space-y-5">
         <div>
-            <label class="text-sm font-medium">দোকানের নাম</label>
+            <label class="text-sm font-medium">শপের নাম</label>
             <input name="store_name" value="{{ $tenant->store_name }}" required
                    class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
             <p class="text-xs text-mute mt-1">সাইটের উপরে ও ব্রাউজার ট্যাবে এই নামটাই দেখাবে</p>
@@ -44,7 +44,7 @@
                     @endif
                 </div>
                 <div class="flex-1">
-                    <input type="file" name="logo" accept="image/*" class="w-full text-sm">
+                    <input type="file" name="logo" accept="image/*" class="w-full text-sm border border-dashed border-ink/25 rounded-btn px-3 py-2.5 cursor-pointer hover:bg-paper transition file:mr-3 file:px-3 file:py-1.5 file:rounded-btn file:border-0 file:bg-ink/5 file:text-xs file:font-semibold file:cursor-pointer">
                     <p class="text-xs text-mute mt-1">PNG (স্বচ্ছ ব্যাকগ্রাউন্ড হলে সবচেয়ে ভালো), সর্বোচ্চ ২ MB</p>
                 </div>
             </div>
@@ -188,7 +188,7 @@
 
         <form method="POST" action="{{ route('tenant.website.banner.store') }}" enctype="multipart/form-data" class="space-y-3 border-t border-ink/10 pt-5">
             @csrf
-            <input type="file" name="image" accept="image/*" required class="w-full text-sm">
+            <input type="file" name="image" accept="image/*" required class="w-full text-sm border border-dashed border-ink/25 rounded-btn px-3 py-2.5 cursor-pointer hover:bg-paper transition file:mr-3 file:px-3 file:py-1.5 file:rounded-btn file:border-0 file:bg-ink/5 file:text-xs file:font-semibold file:cursor-pointer">
             <div class="grid md:grid-cols-2 gap-3">
                 <input name="title" placeholder="শিরোনাম (ঐচ্ছিক)" class="rounded-btn border border-ink/15 px-3 py-2.5 text-sm">
                 <input name="subtitle" placeholder="ছোট বর্ণনা (ঐচ্ছিক)" class="rounded-btn border border-ink/15 px-3 py-2.5 text-sm">
@@ -250,13 +250,54 @@
     </x-ui.card>
 </section>
 
+{{-- ============ REVIEWS ============ --}}
+<section data-panel="reviews" class="hidden max-w-3xl space-y-6">
+    <x-ui.card padding="none">
+        <div class="px-5 py-3.5 border-b border-ink/5 font-bold text-sm">কাস্টমার রিভিউ (স্টোরফ্রন্টে দেখাবে সর্বোচ্চ ৪টা)</div>
+        <div class="p-5 grid sm:grid-cols-2 gap-4">
+            @forelse ($reviews as $r)
+                <div class="flex items-center gap-3 border border-ink/10 rounded-btn p-3">
+                    <x-ui.avatar :name="$r->customer_name" :url="$r->photo_path ? asset('storage/'.$r->photo_path) : null" size="sm" />
+                    <div class="flex-1 min-w-0">
+                        <p class="font-medium text-sm truncate">{{ $r->customer_name }}</p>
+                        @if ($r->review_text)
+                            <p class="text-xs text-mute truncate">{{ $r->review_text }}</p>
+                        @endif
+                    </div>
+                    <form method="POST" action="{{ route('tenant.website.review.destroy', $r) }}" onsubmit="return confirm('মুছবেন?')">
+                        @csrf @method('DELETE')
+                        <button class="text-red-600 text-xs hover:underline shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">মুছুন</button>
+                    </form>
+                </div>
+            @empty
+                <p class="sm:col-span-2 text-sm text-mute text-center py-6 border border-dashed border-ink/15 rounded-btn">কোনো রিভিউ নেই</p>
+            @endforelse
+        </div>
+
+        <form method="POST" action="{{ route('tenant.website.review.store') }}" enctype="multipart/form-data" class="space-y-3 border-t border-ink/10 p-5">
+            @csrf
+            <p class="font-bold text-sm">নতুন রিভিউ যোগ করুন</p>
+            <div class="grid md:grid-cols-2 gap-3">
+                <input name="customer_name" required placeholder="কাস্টমারের নাম" class="rounded-btn border border-ink/15 px-3 py-2.5 text-sm">
+                <label class="flex items-center rounded-btn border border-dashed border-ink/25 px-3 py-2.5 text-sm cursor-pointer hover:bg-paper">
+                    📷 কাস্টমারের ছবি (ঐচ্ছিক)
+                    <input type="file" name="photo" accept="image/*" class="hidden" onchange="this.previousSibling.textContent = '📷 ' + (this.files[0]?.name ?? '')">
+                </label>
+            </div>
+            <textarea name="review_text" rows="2" maxlength="500" placeholder="রিভিউয়ের লেখা (ঐচ্ছিক)"
+                      class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm"></textarea>
+            <x-ui.button type="submit" variant="primary" size="sm">+ রিভিউ যোগ করুন</x-ui.button>
+        </form>
+    </x-ui.card>
+</section>
+
 {{-- ============ FOOTER ============ --}}
 <section data-panel="footer" class="hidden max-w-3xl">
     <x-ui.card class="space-y-5">
         <form method="POST" action="{{ route('tenant.website.footer') }}" class="space-y-5">
         @csrf
         <div>
-            <label class="text-sm font-medium">দোকান সম্পর্কে (ফুটারে দেখাবে)</label>
+            <label class="text-sm font-medium">শপ সম্পর্কে (ফুটারে দেখাবে)</label>
             <textarea name="footer_about" rows="3" maxlength="500"
                       class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">{{ $set['footer_about'] ?? '' }}</textarea>
         </div>

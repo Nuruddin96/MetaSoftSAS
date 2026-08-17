@@ -125,12 +125,16 @@
         div.className = 'flex flex-col sm:flex-row gap-3 sm:items-center border border-ink/10 sm:border-0 rounded-lg p-3 sm:p-0';
         div.id = 'row' + rowIdx;
 
-        let productOptions = products.map((p, pi) => `<option value="${pi}">${p.name}</option>`).join('');
-
         div.innerHTML = `
-            <select class="prodSelect w-full sm:flex-1 rounded-lg border border-ink/15 px-3 py-3 sm:py-2 text-sm bg-white" onchange="updateVariants(${rowIdx})">
-                <option value="">প্রোডাক্ট বাছাই করুন</option>${productOptions}
-            </select>
+            <div class="w-full sm:flex-1 flex items-center gap-2">
+                <img class="prodThumb w-9 h-9 rounded-lg object-cover border border-ink/10 shrink-0 hidden">
+                <div class="flex-1 min-w-0">
+                    <input type="text" class="prodSearch w-full rounded-lg border border-ink/15 px-3 py-2 text-sm mb-1 bg-white" placeholder="প্রোডাক্ট খুঁজুন..." oninput="filterProducts(${rowIdx})" autocomplete="off">
+                    <select class="prodSelect w-full rounded-lg border border-ink/15 px-3 py-3 sm:py-2 text-sm bg-white" onchange="updateVariants(${rowIdx})">
+                        <option value="">প্রোডাক্ট বাছাই করুন</option>
+                    </select>
+                </div>
+            </div>
             <select class="variantSelect w-full sm:w-48 rounded-lg border border-ink/15 px-3 py-3 sm:py-2 text-sm bg-white" onchange="calcTotal()"></select>
             <div class="flex items-center gap-3">
                 <input type="number" class="qtyInput w-20 shrink-0 rounded-lg border border-ink/15 px-3 py-3 sm:py-2 text-sm" value="1" min="1" onchange="calcTotal()">
@@ -139,7 +143,35 @@
             </div>
         `;
         wrap.appendChild(div);
+        renderProductOptions(rowIdx, '');
         rowIdx++;
+    }
+
+    /** Rebuilds a row's <select> options from `products`, filtered by a case-insensitive substring match against the search box — option `value` stays the original index into `products` (never re-indexed), so updateVariants()/calcTotal() need no changes. */
+    function renderProductOptions(idx, query) {
+        const row = document.getElementById('row' + idx);
+        const select = row.querySelector('.prodSelect');
+        const q = query.trim().toLowerCase();
+        const previouslySelected = select.value;
+
+        const matches = products
+            .map((p, pi) => [p, pi])
+            .filter(([p]) => q === '' || p.name.toLowerCase().includes(q));
+
+        select.innerHTML = '<option value="">প্রোডাক্ট বাছাই করুন</option>'
+            + matches.map(([p, pi]) => `<option value="${pi}">${p.name}</option>`).join('');
+
+        // Keep the current selection if it's still in the filtered list —
+        // typing a search after already picking a product must never
+        // silently clear that pick.
+        if (matches.some(([, pi]) => String(pi) === previouslySelected)) {
+            select.value = previouslySelected;
+        }
+    }
+
+    function filterProducts(idx) {
+        const row = document.getElementById('row' + idx);
+        renderProductOptions(idx, row.querySelector('.prodSearch').value);
     }
 
     /** No manual delivery-charge input exists at all — this is the only place the amount is decided client-side, purely for the live summary; the server independently recomputes the same way from division_id, never trusting anything submitted for it. */
@@ -152,8 +184,19 @@
         const row = document.getElementById('row' + idx);
         const pi = row.querySelector('.prodSelect').value;
         const variantSelect = row.querySelector('.variantSelect');
+        const thumb = row.querySelector('.prodThumb');
         variantSelect.innerHTML = '';
-        if (pi === '') { calcTotal(); return; }
+        if (pi === '') {
+            thumb.classList.add('hidden');
+            calcTotal();
+            return;
+        }
+        if (products[pi].image) {
+            thumb.src = '/storage/' + products[pi].image;
+            thumb.classList.remove('hidden');
+        } else {
+            thumb.classList.add('hidden');
+        }
         products[pi].variants.forEach(v => {
             const opt = document.createElement('option');
             opt.value = v.id; opt.dataset.price = v.price;

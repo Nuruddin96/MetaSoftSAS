@@ -17,6 +17,7 @@ use App\Http\Controllers\Storefront\ProductController as StorefrontProduct;
 use App\Http\Controllers\SuperAdmin\AdvertisingController as SuperAdvertisingController;
 use App\Http\Controllers\SuperAdmin\AffiliateController as SuperAffiliateController;
 use App\Http\Controllers\SuperAdmin\AiCreditController as SuperAiCreditController;
+use App\Http\Controllers\SuperAdmin\AnnouncementController;
 use App\Http\Controllers\SuperAdmin\AuthController;
 use App\Http\Controllers\SuperAdmin\ClientController;
 use App\Http\Controllers\SuperAdmin\ClientPaymentController;
@@ -125,6 +126,8 @@ Route::domain(config('app.central_domain'))->group(function () {
             Route::post('tenants/{tenant}/extend', [TenantController::class, 'extend'])->name('tenants.extend');
             Route::post('tenants/{tenant}/domain/verify', [TenantController::class, 'verifyDomainDns'])->name('tenants.domain.verify');
             Route::post('tenants/{tenant}/domain/approve', [TenantController::class, 'approveDomain'])->name('tenants.domain.approve');
+            Route::post('tenants/{tenant}/domain/connect', [TenantController::class, 'connectDomain'])->name('tenants.domain.connect');
+            Route::post('tenants/{tenant}/domain/refresh', [TenantController::class, 'refreshDomainConnection'])->name('tenants.domain.refresh');
             Route::post('tenants/{tenant}/domain/activate', [TenantController::class, 'activateDomain'])->name('tenants.domain.activate');
             Route::post('tenants/{tenant}/domain/deactivate', [TenantController::class, 'deactivateDomain'])->name('tenants.domain.deactivate');
             Route::post('tenants/{tenant}/domain/reject', [TenantController::class, 'rejectDomain'])->name('tenants.domain.reject');
@@ -151,6 +154,12 @@ Route::domain(config('app.central_domain'))->group(function () {
 
             Route::get('plans', [PlanController::class, 'index'])->name('plans');
             Route::put('plans/{plan}', [PlanController::class, 'update'])->name('plans.update');
+
+            // "Tenant Announcement" — global, not per-tenant (see
+            // App\Models\PlatformAnnouncement's docblock).
+            Route::get('announcement', [AnnouncementController::class, 'index'])->name('announcement');
+            Route::post('announcement', [AnnouncementController::class, 'update'])->name('announcement.update');
+            Route::delete('announcement', [AnnouncementController::class, 'destroy'])->name('announcement.destroy');
 
             // Advertising / Ads Billing — full visibility (incl. Meta spend/margin), admin-only mutations
             Route::prefix('advertising')->name('advertising.')->group(function () {
@@ -344,6 +353,9 @@ $tenantRoutes = function () {
             Route::get('website/page/{page}/edit', [WebsiteController::class, 'editPage'])->name('website.page.edit');
             Route::put('website/page/{page}', [WebsiteController::class, 'updatePage'])->name('website.page.update');
             Route::delete('website/page/{page}', [WebsiteController::class, 'destroyPage'])->name('website.page.destroy');
+            Route::post('website/review', [WebsiteController::class, 'storeReview'])->name('website.review.store');
+            Route::put('website/review/{review}', [WebsiteController::class, 'updateReview'])->name('website.review.update');
+            Route::delete('website/review/{review}', [WebsiteController::class, 'destroyReview'])->name('website.review.destroy');
 
             // Product Source
             Route::get('product-source', [ProductSourceController::class, 'index'])->name('product-source.index');
@@ -457,6 +469,18 @@ $tenantRoutes = function () {
         Route::post('/checkout', [CheckoutController::class, 'place'])->name('checkout.place');
         Route::get('/order-success/{orderNumber}', [CheckoutController::class, 'success'])->name('order.success');
     });
+
+    // Custom-domain self-verification ping — SuperAdmin\TenantController::
+    // connectDomain()/refreshDomainConnection() hit this over the
+    // tenant's REAL candidate domain (not /shop/{slug}) to prove
+    // end-to-end connectivity actually works before ever marking that
+    // domain Active, per this app's "never falsely mark a domain
+    // verified" rule — see App\Services\Domain\CloudflareDomainService's
+    // docblock. Deliberately outside check.subscription (a lapsed
+    // subscription must not make an otherwise-correct domain connection
+    // look broken) and returns only a tenant id, nothing sensitive.
+    Route::get('/__custom-domain-check', fn () => response()->json(['ok' => true, 'tenant_id' => app('currentTenant')->id]))
+        ->name('custom-domain.check');
 };
 
 /*

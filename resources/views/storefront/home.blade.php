@@ -10,7 +10,7 @@
 @endphp
 
 @if ($heroStyle !== 'none' && $banners->isNotEmpty())
-    <div class="relative rounded-2xl overflow-hidden mb-8" id="heroWrap">
+    <div class="relative rounded-2xl overflow-hidden mb-6" id="heroWrap">
         @foreach ($slides as $i => $b)
             <div class="hero-slide {{ $i > 0 ? 'hidden' : '' }} relative">
                 <img src="{{ asset('storage/' . $b->image_path) }}" alt="{{ $b->title }}"
@@ -48,13 +48,13 @@
     filtered listing (storefront.products?offer=1).
 --}}
 @if ($offers->isNotEmpty())
-    <div class="mb-8">
+    <div class="mb-6">
         <div class="flex items-center justify-between mb-4">
             <h2 class="font-disp font-bold text-xl">অফার পন্য</h2>
             <a href="{{ route('storefront.products', ['offer' => 1]) }}" class="text-sm text-brand hover:underline">সব দেখুন →</a>
         </div>
-        <div class="grid grid-cols-2 gap-4">
-            @foreach ($offers->take(2) as $product)
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            @foreach ($offers->take(4) as $product)
                 @include('storefront._card', ['product' => $product])
             @endforeach
         </div>
@@ -65,7 +65,7 @@
     <div class="text-center py-20">
         <p class="text-5xl">🛍️</p>
         <h1 class="font-disp font-bold text-2xl mt-4">{{ $tenant->store_name }}</h1>
-        <p class="text-mute mt-2">দোকান সাজানো হচ্ছে — খুব শিগগিরই প্রোডাক্ট আসছে!</p>
+        <p class="text-mute mt-2">শপ সাজানো হচ্ছে — খুব শিগগিরই প্রোডাক্ট আসছে!</p>
     </div>
 @elseif ($showFeat)
     <div class="flex items-center justify-between mb-6">
@@ -79,7 +79,31 @@
     </div>
 @endif
 
-<div class="grid grid-cols-3 gap-3 mt-8 text-center">
+@if ($reviews->isNotEmpty())
+    <div class="mt-6">
+        <h2 class="font-disp font-bold text-xl mb-4">কাস্টমার রিভিউ</h2>
+        {{-- 2-per-row on both mobile and desktop per spec — not the usual responsive breakpoint jump. --}}
+        <div class="grid grid-cols-2 gap-4">
+            @foreach ($reviews as $review)
+                <div class="bg-white rounded-card border border-ink/5 p-4">
+                    <div class="flex items-center gap-3">
+                        @if ($review->photo_path)
+                            <img src="{{ asset('storage/'.$review->photo_path) }}" alt="{{ $review->customer_name }}" class="w-10 h-10 rounded-full object-cover shrink-0">
+                        @else
+                            <div class="w-10 h-10 rounded-full bg-brand/10 text-brand font-bold grid place-items-center shrink-0">{{ mb_substr($review->customer_name, 0, 1) }}</div>
+                        @endif
+                        <p class="font-semibold text-sm truncate">{{ $review->customer_name }}</p>
+                    </div>
+                    @if ($review->review_text)
+                        <p class="text-xs text-mute mt-2 line-clamp-3">{{ $review->review_text }}</p>
+                    @endif
+                </div>
+            @endforeach
+        </div>
+    </div>
+@endif
+
+<div class="grid grid-cols-3 gap-3 mt-6 text-center">
     <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
         <p class="text-lg">✅</p>
         <p class="text-xs text-mute mt-1">ক্যাশ অন ডেলিভারি</p>

@@ -10,6 +10,9 @@
         <form method="POST" action="{{ route('super.plans.update', $plan) }}" class="bg-white rounded-xl border border-ink/5 p-6 space-y-3">
             @csrf @method('PUT')
             <input name="name" value="{{ $plan->name }}" class="w-full font-bold rounded-lg border border-ink/15 px-3 py-2">
+            @if ($cmsReady)
+                <input name="tagline" value="{{ $plan->tagline }}" maxlength="150" placeholder="ট্যাগলাইন (ল্যান্ডিং পেজে দেখাবে)" class="w-full text-sm rounded-lg border border-ink/15 px-3 py-2">
+            @endif
             <div class="grid grid-cols-2 gap-3">
                 <div><label class="text-xs text-mute">মাসিক দাম</label>
                     <input name="price_monthly" type="number" step="0.01" value="{{ $plan->price_monthly }}" class="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm"></div>
@@ -41,6 +44,9 @@
                 </div>
             @endif
 
+            @if ($cmsReady)
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="is_featured" value="1" @checked($plan->is_featured)> ⭐ জনপ্রিয় (Popular) ব্যাজ দেখাবে</label>
+            @endif
             <label class="flex items-center gap-2 text-sm pt-1"><input type="checkbox" name="is_active" value="1" @checked($plan->is_active)> অ্যাক্টিভ (ল্যান্ডিংয়ে দেখাবে)</label>
             <button class="w-full py-2.5 rounded-lg bg-leaf text-white font-semibold text-sm hover:bg-leafdk">সেভ করুন</button>
         </form>

@@ -269,4 +269,10 @@ return [
     'memory_match_scan_limit' => (int) env('AI_MEMORY_MATCH_SCAN_LIMIT', 200),
     'memory_match_max' => (int) env('AI_MEMORY_MATCH_MAX', 3),
     'memory_match_min_ratio' => (float) env('AI_MEMORY_MATCH_MIN_RATIO', 0.4),
+
+    // AiTenantMemoryService::bestAudioMatch() — stricter than
+    // memory_match_min_ratio above, since a match here skips OpenAI
+    // entirely and sends a specific pre-recorded voice clip; see that
+    // method's docblock for why a higher confidence bar is required.
+    'memory_audio_match_min_ratio' => (float) env('AI_MEMORY_AUDIO_MATCH_MIN_RATIO', 0.6),
 ];

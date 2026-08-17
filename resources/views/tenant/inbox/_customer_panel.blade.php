@@ -34,10 +34,10 @@
     @if ($handoffActive ?? false)
         <x-ui.card padding="sm" tone="amber">
             <p class="font-bold text-sm mb-1">🙋 মানুষের কাছে হস্তান্তরিত</p>
-            <p class="text-xs text-mute mb-3">কাস্টমার একজন মানুষের সাথে কথা বলতে চেয়েছেন — AI Agent এই কনভারসেশনে আর নিজে থেকে রিপ্লাই দিচ্ছে না, যতক্ষণ না আপনি নিচের বাটনে ক্লিক করেন।</p>
+            <p class="text-xs text-mute mb-3">কাস্টমার একজন মানুষের সাথে কথা বলতে চেয়েছেন — Personal Assistant এই কনভারসেশনে আর নিজে থেকে রিপ্লাই দিচ্ছে না, যতক্ষণ না আপনি নিচের বাটনে ক্লিক করেন।</p>
             <form method="POST" action="{{ $resumeAiUrl }}">
                 @csrf
-                <button type="submit" class="w-full text-center py-2.5 rounded-btn bg-leaf text-white font-semibold text-sm hover:bg-leafdk transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">AI Agent আবার চালু করুন</button>
+                <button type="submit" class="w-full text-center py-2.5 rounded-btn bg-leaf text-white font-semibold text-sm hover:bg-leafdk transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">Personal Assistant আবার চালু করুন</button>
             </form>
         </x-ui.card>
     @endif

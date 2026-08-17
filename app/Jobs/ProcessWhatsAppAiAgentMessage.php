@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\AiTenantMemory;
 use App\Models\AiWhatsAppMessageJob;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
@@ -221,6 +222,20 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
         }
 
         $history = $this->recentHistory($this->tenantId, $waId, $message->id);
+
+        // "AI মেমোরী" voice answers — a confident match is sent directly
+        // via the existing WhatsApp media-send path, entirely bypassing
+        // OpenAI (zero extra AI cost) — see AiTenantMemoryService::
+        // bestAudioMatch()'s docblock.
+        $audioMemory = $memories->bestAudioMatch(
+            $this->tenantId,
+            [...array_column($history, 'content'), (string) $message->message_text]
+        );
+
+        if ($audioMemory) {
+            return $this->sendAudioMemoryReply($audioMemory, $tenant, $waId, $whatsapp);
+        }
+
         // Phase 7 — real historical human-written WhatsApp replies for this
         // tenant, same "sent_by='human' only" guarantee Messenger's style
         // learning already relies on — see
@@ -460,6 +475,34 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
         }
 
         return 'data:'.$result['mimeType'].';base64,'.base64_encode($result['body']);
+    }
+
+    /**
+     * "AI মেমোরী" voice answers — WhatsApp counterpart of
+     * ProcessAiAgentMessage::sendAudioMemoryReply(), sending the tenant's
+     * own recorded/uploaded clip verbatim, never through OpenAI.
+     * WhatsAppSendService::sendMedia() persists the outbound
+     * whatsapp_messages row itself (success or failure) — see its own
+     * docblock — so this method must NOT create one too, same rule the
+     * text-reply path below already follows.
+     */
+    protected function sendAudioMemoryReply(AiTenantMemory $audioMemory, Tenant $tenant, string $waId, WhatsAppSendService $whatsapp): bool
+    {
+        $this->humanDelay();
+
+        $url = asset('storage/'.$audioMemory->answer_audio_path);
+        $sendResult = $whatsapp->sendMedia($tenant, $waId, 'audio', $url, sentBy: 'ai');
+
+        if (! $sendResult->successful) {
+            Log::warning('WhatsApp AI agent job: saved voice-memory WhatsApp send failed.', [
+                'tenant_id' => $this->tenantId,
+                'error_code' => $sendResult->errorCode,
+            ]);
+
+            return false;
+        }
+
+        return true;
     }
 
     /**

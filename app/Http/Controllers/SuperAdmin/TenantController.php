@@ -8,11 +8,13 @@ use App\Models\Plan;
 use App\Models\SubscriptionPayment;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\Domain\CloudflareDomainService;
 use App\Services\Domain\DomainManager;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 
 class TenantController extends Controller
 {
@@ -158,7 +160,123 @@ class TenantController extends Controller
     }
 
     /**
-     * Step 2 of 2 — staff clicks this after manually finishing DNS/SSL
+     * "Connect" — dynamic domain mapping via Cloudflare (task Part 21).
+     * Kicks off a Cloudflare Custom Hostname for this approved request
+     * (App\Services\Domain\CloudflareDomainService). Deliberately does
+     * NOT mark the domain Active itself — Cloudflare's DNS-control-
+     * validation + SSL issuance is asynchronous, and even once Cloudflare
+     * succeeds this app still independently verifies the domain actually
+     * reaches THIS tenant's storefront before ever touching
+     * custom_domain_verified — see refreshDomainConnection() below.
+     */
+    public function connectDomain(Tenant $tenant, CloudflareDomainService $cloudflare)
+    {
+        if (! $tenant->custom_domain_requested) {
+            return back()->with('error', 'কোনো ডোমেইন রিকোয়েস্ট নেই।');
+        }
+
+        if (! in_array($tenant->custom_domain_request_status, ['approved', 'dns_verified'], true)) {
+            return back()->with('error', 'আগে রিকোয়েস্টটি Approve করুন।');
+        }
+
+        if (! Tenant::cloudflareDomainColumnsReady()) {
+            return back()->with('error', 'এই ফিচারের জন্য প্রয়োজনীয় ডেটাবেজ কলাম এখনো ইম্পোর্ট করা হয়নি।');
+        }
+
+        $result = $cloudflare->createCustomHostname($tenant->custom_domain_requested);
+
+        if (! $result->configured) {
+            $tenant->update(['custom_domain_connect_status' => 'dns_required', 'custom_domain_connect_error' => null]);
+
+            return back()->with('error', 'Cloudflare কনফিগার করা নেই — নিচে ম্যানুয়াল DNS নির্দেশনা দেখানো হচ্ছে। CLOUDFLARE_API_TOKEN/CLOUDFLARE_ZONE_ID সেট করলে এটি স্বয়ংক্রিয় হবে।');
+        }
+
+        if (! $result->successful) {
+            $tenant->update(['custom_domain_connect_status' => 'failed', 'custom_domain_connect_error' => $result->errorMessage]);
+
+            return back()->with('error', 'Cloudflare কানেকশন ব্যর্থ হয়েছে: '.$result->errorMessage);
+        }
+
+        $tenant->update([
+            'cf_custom_hostname_id' => $result->id,
+            'custom_domain_connect_status' => $result->active ? 'connected' : 'connecting',
+            'custom_domain_connect_error' => null,
+        ]);
+
+        return back()->with('success', 'Cloudflare-এ কানেকশন শুরু হয়েছে — DNS/SSL সম্পন্ন হতে কিছুক্ষণ সময় লাগতে পারে। কিছুক্ষণ পর "স্ট্যাটাস রিফ্রেশ করুন" চাপুন।');
+    }
+
+    /**
+     * "Refresh status" — re-checks Cloudflare, and only once Cloudflare
+     * itself reports the hostname+SSL fully active, performs a REAL HTTP
+     * request to the tenant's own candidate domain (routes/web.php's
+     * __custom-domain-check route) to prove this app's ORIGIN actually
+     * serves that tenant's storefront — see CloudflareDomainService's
+     * docblock for exactly why that second check is required on this
+     * specific Hostinger shared-hosting environment (confirmed by direct
+     * testing: the origin 403s any unregistered Host header, independent
+     * of Cloudflare). Only when BOTH checks pass does this ever set
+     * custom_domain/custom_domain_verified — never a false "Active".
+     */
+    public function refreshDomainConnection(Tenant $tenant, CloudflareDomainService $cloudflare)
+    {
+        if (! Tenant::cloudflareDomainColumnsReady() || ! $tenant->cf_custom_hostname_id) {
+            return back()->with('error', 'কোনো Cloudflare কানেকশন শুরু করা হয়নি — আগে Connect করুন।');
+        }
+
+        $result = $cloudflare->getCustomHostnameStatus($tenant->cf_custom_hostname_id);
+
+        if (! $result->successful) {
+            $tenant->update(['custom_domain_connect_status' => 'failed', 'custom_domain_connect_error' => $result->errorMessage]);
+
+            return back()->with('error', 'Cloudflare স্ট্যাটাস চেক ব্যর্থ হয়েছে: '.$result->errorMessage);
+        }
+
+        if (! $result->active) {
+            $tenant->update(['custom_domain_connect_status' => 'connecting']);
+
+            return back()->with('success', 'এখনো প্রস্তুত হচ্ছে — Cloudflare স্ট্যাটাস: '.($result->cfStatus ?? '—').' / SSL: '.($result->sslStatus ?? '—'));
+        }
+
+        // Cloudflare's edge is ready — now prove OUR origin actually
+        // serves this exact domain (the origin-vhost gap this hosting
+        // plan has — see CloudflareDomainService's docblock). Never
+        // trust Cloudflare's status alone for something this consequential.
+        try {
+            $check = Http::timeout(10)->get('https://'.$tenant->custom_domain_requested.'/__custom-domain-check');
+            $verified = $check->successful() && (int) $check->json('tenant_id') === $tenant->id;
+        } catch (\Throwable $e) {
+            $verified = false;
+        }
+
+        if (! $verified) {
+            $tenant->update(['custom_domain_connect_status' => 'connected']);
+
+            return back()->with('error', 'Cloudflare-এ DNS/SSL রেডি, কিন্তু আমাদের সার্ভার এখনো এই ডোমেইনের জন্য সাড়া দিচ্ছে না — hPanel-এ ডোমেইনটি Parked/Addon Domain হিসেবে (শপসাস-এর একই public ফোল্ডার দেখিয়ে) যোগ করুন, তারপর আবার "স্ট্যাটাস রিফ্রেশ করুন"।');
+        }
+
+        try {
+            $tenant->update([
+                'custom_domain' => $tenant->custom_domain_requested,
+                'custom_domain_verified' => 1,
+                'custom_domain_connect_status' => 'connected',
+                'custom_domain_connect_error' => null,
+            ]);
+        } catch (QueryException $e) {
+            if ($e->getCode() === '23000') {
+                return back()->with('error', 'এই ডোমেইন ইতিমধ্যে অন্য একটি স্টোরে সক্রিয় আছে।');
+            }
+
+            throw $e;
+        }
+
+        return back()->with('success', $tenant->custom_domain.' এখন সম্পূর্ণ যাচাইকৃত ও সক্রিয় (Active)।');
+    }
+
+    /**
+     * Step 2 of 2 (manual fallback path — used when Cloudflare isn't
+     * configured, or an admin still wants to finish DNS/SSL by hand) —
+     * staff clicks this after manually finishing DNS/SSL
      * setup outside this app (adding the domain as a cPanel addon domain,
      * pointing DNS, issuing SSL — see the module's manual-hosting-
      * workflow docs). This is the ONE place custom_domain/
@@ -219,16 +337,31 @@ class TenantController extends Controller
     }
 
     /** Full reset — clears the mapping entirely so the tenant can submit a fresh request from scratch. */
-    public function destroyDomain(Tenant $tenant)
+    public function destroyDomain(Tenant $tenant, CloudflareDomainService $cloudflare)
     {
-        $tenant->update([
+        // Best-effort — never let a Cloudflare API failure block clearing
+        // the LOCAL mapping (the authoritative record). See
+        // CloudflareDomainService::deleteCustomHostname()'s docblock.
+        if (Tenant::cloudflareDomainColumnsReady() && $tenant->cf_custom_hostname_id) {
+            $cloudflare->deleteCustomHostname($tenant->cf_custom_hostname_id);
+        }
+
+        $update = [
             'custom_domain' => null,
             'custom_domain_verified' => 0,
             'custom_domain_requested' => null,
             'custom_domain_request_status' => 'none',
             'custom_domain_verification_token' => null,
             'custom_domain_dns_verified_at' => null,
-        ]);
+        ];
+
+        if (Tenant::cloudflareDomainColumnsReady()) {
+            $update['custom_domain_connect_status'] = 'not_connected';
+            $update['cf_custom_hostname_id'] = null;
+            $update['custom_domain_connect_error'] = null;
+        }
+
+        $tenant->update($update);
 
         return back()->with('success', 'কাস্টম ডোমেইন সম্পূর্ণ মুছে ফেলা হয়েছে।');
     }

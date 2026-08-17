@@ -257,6 +257,7 @@ class MessengerInboxController extends Controller
         $data = $request->validate([
             'message' => 'nullable|string|max:1000',
             'image' => 'nullable|image|max:8192',
+            'audio' => 'nullable|file|mimetypes:audio/webm,audio/ogg,audio/mpeg,audio/mp3,audio/mp4,audio/wav,audio/x-m4a,audio/aac|max:8192',
         ]);
 
         // nullable rules don't force the key into validate()'s return value
@@ -264,8 +265,8 @@ class MessengerInboxController extends Controller
         // but-empty) — normalize once so every use below is a plain lookup.
         $message = $data['message'] ?? null;
 
-        if (! $message && ! $request->hasFile('image')) {
-            return back()->with('error', 'মেসেজ অথবা ছবি — অন্তত একটি দিন।');
+        if (! $message && ! $request->hasFile('image') && ! $request->hasFile('audio')) {
+            return back()->with('error', 'মেসেজ, ছবি অথবা ভয়েস — অন্তত একটি দিন।');
         }
 
         $token = $this->resolveReplyToken($psid);
@@ -361,6 +362,45 @@ class MessengerInboxController extends Controller
 
             if (MessengerMessage::attachmentColumnsReady()) {
                 $attrs['attachment_type'] = 'image';
+            }
+
+            if (MessengerMessage::sentByColumnReady()) {
+                $attrs['sent_by'] = 'human';
+            }
+
+            MessengerMessage::create($attrs);
+        }
+
+        if ($request->hasFile('audio')) {
+            // Same "our own durable URL" convention as the image branch
+            // above — Meta's Send API fetches a URL, never a direct
+            // upload. Recorded (MediaRecorder, browser) and uploaded
+            // (existing file) voice notes both arrive here identically,
+            // as a normal multipart file — see resources/views/tenant/
+            // messenger/_conversation.blade.php's composer.
+            $path = $request->file('audio')->store('messenger/'.app('currentTenant')->id.'/outgoing', 'public');
+            $url = asset('storage/'.$path);
+
+            try {
+                $result = $api->sendAttachment($psid, $url, 'audio', $token);
+            } catch (\Throwable $e) {
+                return back()->with('error', 'ভয়েস মেসেজ পাঠানো যায়নি: '.$e->getMessage());
+            }
+
+            if (isset($result['error'])) {
+                return back()->with('error', 'ভয়েস মেসেজ পাঠানো যায়নি: '.($result['error']['message'] ?? 'Facebook API error'));
+            }
+
+            $attrs = [
+                'sender_psid' => $psid,
+                'mid' => $result['message_id'] ?? null,
+                'attachment_url' => $url,
+                'direction' => 'out',
+                'status' => 'contacted',
+            ];
+
+            if (MessengerMessage::attachmentColumnsReady()) {
+                $attrs['attachment_type'] = 'audio';
             }
 
             if (MessengerMessage::sentByColumnReady()) {

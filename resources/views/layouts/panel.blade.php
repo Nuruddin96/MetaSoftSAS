@@ -97,7 +97,7 @@
                 <p class="font-disp font-bold text-lg leading-tight truncate">{{ app('currentTenant')->store_name }}</p>
             </a>
 
-            {{-- Mobile-only — desktop already has the equivalent "দোকান দেখুন"
+            {{-- Mobile-only — desktop already has the equivalent "শপ দেখুন"
                  link in the sidebar nav below (line ~140). --}}
             <a href="{{ app('currentTenant')->url() }}" target="_blank"
                class="lg:hidden shrink-0 flex items-center gap-1.5 bg-white text-ink text-xs font-semibold px-3 py-1.5 rounded-full hover:bg-white/90 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-ink">
@@ -111,7 +111,7 @@
                 $groups = [
                     'সারসংক্ষেপ' => [
                         ['tenant.dashboard', 'ড্যাশবোর্ড', 'layout-dashboard'],
-                        ['tenant.ai-chat', 'AI এজেন্ট', 'bot'],
+                        ['tenant.ai-chat', 'Personal Assistant', 'bot'],
                     ],
                     'বিক্রি' => array_filter([
                         $tenant->plan?->allow_pos ? ['tenant.pos', 'POS বিক্রি', 'calculator'] : null,
@@ -182,7 +182,7 @@
             <div class="border-t border-white/10 mt-3 pt-3 px-4 space-y-1">
                 <a href="{{ app('currentTenant')->url() }}" target="_blank"
                    class="flex items-center gap-2 -mx-2 px-2 py-1.5 rounded-btn text-white/70 hover:text-white hover:bg-white/5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-ink">
-                    <i data-lucide="external-link" class="w-4 h-4"></i> দোকান দেখুন
+                    <i data-lucide="external-link" class="w-4 h-4"></i> শপ দেখুন
                 </a>
                 <form method="POST" action="{{ route('tenant.logout') }}">
                     @csrf
@@ -216,7 +216,7 @@
             <div class="relative {{ $adEnabled ? '' : 'ml-auto' }}">
                 <button id="notifBtn" data-seen-url="{{ route('tenant.notifications.seen') }}" data-csrf="{{ csrf_token() }}"
                         class="relative w-10 h-10 rounded-full hover:bg-ink/5 grid place-items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
-                    <i data-lucide="bell" class="w-5 h-5 text-ink"></i>
+                    <i data-lucide="bell" class="w-5 h-5 text-leaf"></i>
                     <span id="notifBadge" class="absolute top-1 right-1 bg-red-600 text-white text-[10px] font-bold w-4.5 h-4.5 rounded-full grid place-items-center {{ $notifTotal > 0 ? '' : 'hidden' }}">{{ $notifTotal > 9 ? '9+' : $notifTotal }}</span>
                 </button>
                 <div id="notifPanel" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-card shadow-xl border border-ink/10 overflow-hidden">
@@ -311,8 +311,22 @@
     </div>
 </div>
 
-{{-- mobile bottom tab bar --}}
-<nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-ink/10 flex items-center justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] z-30">
+{{-- mobile bottom tab bar — background is this tenant's own brand color
+     (primary_color, same token the storefront uses), with text/icon color
+     auto-picked for contrast (Tenant::primaryColorContrastText()) so
+     legibility never depends on which hex a tenant happened to pick. Home
+     is raised above the bar's own baseline (a negative top margin, not a
+     height change on the <nav> itself) with a subtle drop shadow and a
+     faint contrast-matched bubble behind it — every other tab keeps its
+     original size, only Home is emphasized. --}}
+@php
+    $navBg = app('currentTenant')->primary_color ?: '#128155';
+    $navFg = app('currentTenant')->primaryColorContrastText();
+    $navFgMuted = $navFg === '#ffffff' ? 'rgba(255,255,255,0.68)' : 'rgba(17,17,17,0.6)';
+    $homeBubbleBg = $navFg === '#ffffff' ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.07)';
+@endphp
+<nav class="lg:hidden fixed bottom-0 left-0 right-0 flex items-end justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] z-30 shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
+     style="background-color: {{ $navBg }};">
     @php
         // POS stays fully available (desktop sidebar + mobile hamburger menu,
         // routes/controller/permissions untouched) — this bottom bar is only a
@@ -328,13 +342,17 @@
         ];
     @endphp
     @foreach ($mobileTabs as [$route, $label, $icon])
-        @php $isActive = request()->routeIs(str_replace('.index', '', $route) . '*'); @endphp
-        {{-- Active = colored icon/label only, matching the reference exactly
-             — no pill/background highlight. A light matching fill on the
-             active icon stands in for Lucide's lack of true outline/filled
-             icon pairs, without pulling in a second icon set. --}}
-        <a href="{{ route($route) }}" class="flex flex-col items-center gap-1 px-2 py-1 rounded-btn transition-colors active:scale-[0.95] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf {{ $isActive ? 'text-leafdk' : 'text-mute' }}">
-            <i data-lucide="{{ $icon }}" class="w-5 h-5 {{ $isActive ? 'fill-leaf/20' : '' }}"></i>
+        @php
+            $isActive = request()->routeIs(str_replace('.index', '', $route) . '*');
+            $isHome = $route === 'tenant.dashboard';
+        @endphp
+        {{-- Active = full-strength text color only, matching the reference —
+             no pill/background highlight on non-Home tabs. --}}
+        <a href="{{ route($route) }}" class="flex flex-col items-center gap-1 px-2 py-1 rounded-btn transition-transform active:scale-[0.95] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 {{ $isHome ? '-mt-3.5' : '' }}"
+           style="color: {{ $isActive ? $navFg : $navFgMuted }};">
+            <span @if ($isHome) class="w-11 h-11 rounded-full grid place-items-center shadow-[0_3px_8px_rgba(0,0,0,0.3)] ring-2 ring-black/5" style="background-color: {{ $homeBubbleBg }};" @endif>
+                <i data-lucide="{{ $icon }}" class="{{ $isHome ? 'w-5 h-5' : 'w-4 h-4' }}"></i>
+            </span>
             <span class="text-[10px] {{ $isActive ? 'font-semibold' : 'font-medium' }}">{{ $label }}</span>
         </a>
     @endforeach

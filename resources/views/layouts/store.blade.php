@@ -102,15 +102,13 @@
 @endif
 
 <header class="bg-white border-b border-ink/5 sticky top-0 z-40">
-    <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
         <a href="{{ route('storefront.home') }}" class="flex items-center gap-2 min-w-0">
             @if ($tenant->logo_path)
-                <img src="{{ asset('storage/' . $tenant->logo_path) }}" alt="{{ $tenant->store_name }}" class="h-10 max-w-[160px] object-contain"
-                     onerror="this.style.display='none'; this.nextElementSibling?.classList.remove('hidden');">
-                <span class="hidden font-disp font-bold text-lg truncate" style="color: var(--color-header-fg)">{{ $tenant->store_name }}</span>
-            @else
-                <span class="font-disp font-bold text-lg truncate" style="color: var(--color-header-fg)">{{ $tenant->store_name }}</span>
+                <img src="{{ asset('storage/' . $tenant->logo_path) }}" alt="{{ $tenant->store_name }}" class="h-10 max-w-[120px] object-contain shrink-0"
+                     onerror="this.remove();">
             @endif
+            <span class="font-disp font-bold text-lg truncate" style="color: var(--color-header-fg)">{{ $tenant->store_name }}</span>
         </a>
 
         <nav class="flex items-center gap-4 md:gap-5 text-sm shrink-0">

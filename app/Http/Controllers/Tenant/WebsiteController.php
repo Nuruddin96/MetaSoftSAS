@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\Banner;
 use App\Models\Page;
+use App\Models\Review;
 use App\Models\StoreSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -27,6 +28,7 @@ class WebsiteController extends Controller
             'set' => StoreSetting::pluck('value', 'key'),
             'banners' => Banner::orderBy('sort_order')->get(),
             'pages' => Page::orderBy('sort_order')->get(),
+            'reviews' => Review::tablesReady() ? Review::orderBy('sort_order')->get() : collect(),
         ]);
     }
 
@@ -161,11 +163,16 @@ class WebsiteController extends Controller
     {
         $data = $request->validate([
             'title' => 'required|string|max:150',
+            // Distinct from `title` (the nav-link label) — the on-page <h1>
+            // heading (database/sql/chunk43.sql). Blank falls back to
+            // `title` — see resources/views/storefront/page.blade.php.
+            'page_header' => 'nullable|string|max:200',
             'content' => 'nullable|string|max:50000',
         ]);
 
         Page::create([
             'title' => $data['title'],
+            'page_header' => $data['page_header'] ?? null,
             'content' => $data['content'] ?? null,
             'show_in_footer' => $request->boolean('show_in_footer', true),
             'show_in_header' => $request->boolean('show_in_header'),
@@ -185,11 +192,13 @@ class WebsiteController extends Controller
     {
         $data = $request->validate([
             'title' => 'required|string|max:150',
+            'page_header' => 'nullable|string|max:200',
             'content' => 'nullable|string|max:50000',
         ]);
 
         $page->update([
             'title' => $data['title'],
+            'page_header' => $data['page_header'] ?? null,
             'content' => $data['content'] ?? null,
             'show_in_footer' => $request->boolean('show_in_footer'),
             'show_in_header' => $request->boolean('show_in_header'),
@@ -204,6 +213,64 @@ class WebsiteController extends Controller
         $page->delete();
 
         return back()->with('success', 'পেজ মুছে ফেলা হয়েছে।');
+    }
+
+    /* ---------------- Reviews ---------------- */
+
+    public function storeReview(Request $request)
+    {
+        $data = $request->validate([
+            'customer_name' => 'required|string|max:150',
+            'photo' => 'nullable|image|max:2048',
+            'review_text' => 'nullable|string|max:500',
+        ]);
+
+        $tenant = app('currentTenant');
+
+        Review::create([
+            'customer_name' => $data['customer_name'],
+            'photo_path' => $request->hasFile('photo') ? $request->file('photo')->store('reviews/'.$tenant->id, 'public') : null,
+            'review_text' => $data['review_text'] ?? null,
+            'sort_order' => (int) Review::max('sort_order') + 1,
+            'is_active' => 1,
+        ]);
+
+        return back()->with('success', 'রিভিউ যোগ হয়েছে।');
+    }
+
+    public function updateReview(Request $request, Review $review)
+    {
+        $data = $request->validate([
+            'customer_name' => 'required|string|max:150',
+            'photo' => 'nullable|image|max:2048',
+            'review_text' => 'nullable|string|max:500',
+        ]);
+
+        $update = [
+            'customer_name' => $data['customer_name'],
+            'review_text' => $data['review_text'] ?? null,
+        ];
+
+        if ($request->hasFile('photo')) {
+            if ($review->photo_path) {
+                Storage::disk('public')->delete($review->photo_path);
+            }
+            $update['photo_path'] = $request->file('photo')->store('reviews/'.app('currentTenant')->id, 'public');
+        }
+
+        $review->update($update);
+
+        return back()->with('success', 'রিভিউ আপডেট হয়েছে।');
+    }
+
+    public function destroyReview(Review $review)
+    {
+        if ($review->photo_path) {
+            Storage::disk('public')->delete($review->photo_path);
+        }
+        $review->delete();
+
+        return back()->with('success', 'রিভিউ মুছে ফেলা হয়েছে।');
     }
 
     protected function put(string $key, ?string $value): void

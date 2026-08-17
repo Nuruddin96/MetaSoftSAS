@@ -53,6 +53,7 @@
                 <i data-lucide="paperclip" class="w-[18px] h-[18px] text-mute"></i>
                 <input type="file" name="image" accept="image/*" class="hidden" onchange="document.getElementById('waImgFileName').textContent = this.files[0] ? '📎 ' + this.files[0].name : ''">
             </label>
+            @include('tenant.inbox._voice_recorder', ['id' => 'wa'])
             <input name="message" placeholder="মেসেজ লিখুন..." class="flex-1 rounded-pill border border-ink/15 px-4 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
             <button type="submit" class="shrink-0 w-10 h-10 rounded-full bg-leaf text-white grid place-items-center hover:bg-leafdk transition" title="পাঠান" aria-label="পাঠান">
                 <i data-lucide="send" class="w-[18px] h-[18px]"></i>

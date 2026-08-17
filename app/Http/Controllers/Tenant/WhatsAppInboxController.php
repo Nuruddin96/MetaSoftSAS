@@ -113,12 +113,13 @@ class WhatsAppInboxController extends Controller
         $data = $request->validate([
             'message' => 'nullable|string|max:1000',
             'image' => 'nullable|image|max:8192',
+            'audio' => 'nullable|file|mimetypes:audio/webm,audio/ogg,audio/mpeg,audio/mp3,audio/mp4,audio/wav,audio/x-m4a,audio/aac|max:8192',
         ]);
 
         $message = $data['message'] ?? null;
 
-        if (! $message && ! $request->hasFile('image')) {
-            return back()->with('error', 'মেসেজ অথবা ছবি — অন্তত একটি দিন।');
+        if (! $message && ! $request->hasFile('image') && ! $request->hasFile('audio')) {
+            return back()->with('error', 'মেসেজ, ছবি অথবা ভয়েস — অন্তত একটি দিন।');
         }
 
         $tenant = app('currentTenant');
@@ -157,6 +158,21 @@ class WhatsAppInboxController extends Controller
 
             if (! $result->successful) {
                 return back()->with('error', 'ছবি পাঠানো যায়নি: '.($result->errorMessage ?? 'WhatsApp API error'));
+            }
+        }
+
+        if ($request->hasFile('audio')) {
+            // Recorded (MediaRecorder, browser) and uploaded (existing
+            // file) voice notes both arrive here identically, as a normal
+            // multipart file — see resources/views/tenant/whatsapp/
+            // _conversation.blade.php's composer.
+            $path = $request->file('audio')->store('whatsapp/'.$tenant->id.'/outgoing', 'public');
+            $url = asset('storage/'.$path);
+
+            $result = $service->sendMedia($tenant, $waId, 'audio', $url);
+
+            if (! $result->successful) {
+                return back()->with('error', 'ভয়েস মেসেজ পাঠানো যায়নি: '.($result->errorMessage ?? 'WhatsApp API error'));
             }
         }
 

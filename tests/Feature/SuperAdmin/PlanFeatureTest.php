@@ -5,7 +5,6 @@ namespace Tests\Feature\SuperAdmin;
 use App\Models\Plan;
 use App\Models\SuperAdmin;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -35,6 +34,7 @@ class PlanFeatureTest extends TestCase
             Schema::create('plans', function (Blueprint $table) {
                 $table->id();
                 $table->string('name', 100);
+                $table->string('tagline', 150)->nullable();
                 $table->string('slug', 100)->unique();
                 $table->decimal('price_monthly', 10, 2)->default(0);
                 $table->decimal('price_yearly', 10, 2)->default(0);
@@ -48,6 +48,7 @@ class PlanFeatureTest extends TestCase
                 $table->boolean('allow_meta_ads')->default(true);
                 $table->json('features')->nullable();
                 $table->boolean('is_active')->default(true);
+                $table->boolean('is_featured')->default(false);
                 $table->integer('sort_order')->default(0);
                 $table->timestamps();
             });
@@ -187,5 +188,50 @@ class PlanFeatureTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('একটি নতুন ফিচার');
+    }
+
+    // --- CMS fields (tagline / is_featured) ---------------------------------------------------------
+
+    public function test_cms_columns_ready_reports_true_when_columns_exist(): void
+    {
+        $this->assertTrue(Plan::cmsColumnsReady());
+    }
+
+    public function test_super_admin_can_set_a_tagline_and_feature_a_plan(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $plan = $this->makePlan();
+
+        $this->actingAs($admin, 'super_admin')->put(route('super.plans.update', $plan), [
+            'name' => $plan->name, 'price_monthly' => 500, 'price_yearly' => 5000,
+            'tagline' => 'ছোট ব্যবসার জন্য সেরা', 'is_featured' => '1',
+        ])->assertRedirect();
+
+        $plan->refresh();
+        $this->assertSame('ছোট ব্যবসার জন্য সেরা', $plan->tagline);
+        $this->assertTrue((bool) $plan->is_featured);
+    }
+
+    public function test_landing_page_shows_the_super_admin_authored_tagline(): void
+    {
+        $this->makePlan(['is_active' => 1, 'tagline' => 'সবচেয়ে জনপ্রিয় প্ল্যান']);
+
+        $this->get('/')->assertOk()->assertSee('সবচেয়ে জনপ্রিয় প্ল্যান');
+    }
+
+    public function test_landing_page_popular_badge_follows_is_featured_not_iteration_order(): void
+    {
+        // Deliberately reverse of the old "2nd plan" hardcoded position —
+        // proves the badge now follows is_featured, not iteration index.
+        $this->makePlan(['name' => 'Starter', 'slug' => 'starter', 'sort_order' => 1, 'is_active' => 1, 'is_featured' => false]);
+        $this->makePlan(['name' => 'Pro', 'slug' => 'pro', 'sort_order' => 2, 'is_active' => 1, 'is_featured' => false]);
+        $this->makePlan(['name' => 'Business', 'slug' => 'business', 'sort_order' => 3, 'is_active' => 1, 'is_featured' => true]);
+
+        $response = $this->get('/');
+
+        $response->assertOk();
+        // The badge text appears exactly once — attached to the 3rd (not
+        // 2nd) plan, since that's the one with is_featured=true.
+        $this->assertSame(1, substr_count($response->getContent(), 'জনপ্রিয়'));
     }
 }

@@ -11,7 +11,7 @@
         </a>
         <div class="bg-white rounded-2xl shadow-sm border border-ink/5 p-8">
             <h1 class="font-disp font-bold text-2xl text-center">লগইন করুন</h1>
-            <p class="text-mute text-sm text-center mt-2">আপনার দোকানের ইমেইল ও পাসওয়ার্ড দিন</p>
+            <p class="text-mute text-sm text-center mt-2">আপনার শপের ইমেইল ও পাসওয়ার্ড দিন</p>
 
             @error('email')<p class="mt-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{{ $message }}</p>@enderror
 
@@ -41,7 +41,7 @@
             </form>
         </div>
         <p class="text-center text-sm text-mute mt-5">
-            দোকান নেই? <a href="{{ route('register') }}" class="text-leaf font-semibold hover:underline">ফ্রিতে খুলুন</a>
+            শপ নেই? <a href="{{ route('register') }}" class="text-leaf font-semibold hover:underline">ফ্রিতে খুলুন</a>
         </p>
     </div>
 </div>

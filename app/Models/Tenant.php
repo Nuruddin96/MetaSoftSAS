@@ -131,6 +131,65 @@ class Tenant extends Model
         };
     }
 
+    /** True once database/sql/chunk47.sql's Cloudflare connection-tracking columns exist. */
+    public static function cloudflareDomainColumnsReady(): bool
+    {
+        return Schema::hasColumn('tenants', 'custom_domain_connect_status');
+    }
+
+    /**
+     * Granular Cloudflare-aware status — the exact vocabulary the task
+     * asks the Super Admin Custom Domain UI to show: Pending / Approved /
+     * DNS Required / Connecting / Connected / Active / Rejected / Failed.
+     * A strict superset of customDomainDisplayStatus() above (which stays
+     * as the simple 5-state version the tenant-facing card + existing
+     * tests already use) — this one additionally surfaces the
+     * cloudflare-connection sub-state once a request has been approved.
+     */
+    public function customDomainConnectionStatus(): string
+    {
+        if ($this->custom_domain_verified && $this->custom_domain) {
+            return 'active';
+        }
+
+        if (self::cloudflareDomainColumnsReady()
+            && $this->custom_domain_connect_status
+            && $this->custom_domain_connect_status !== 'not_connected') {
+            return $this->custom_domain_connect_status; // dns_required|connecting|connected|failed
+        }
+
+        return match ($this->custom_domain_request_status) {
+            'pending', 'dns_verified' => 'pending',
+            'approved' => 'approved',
+            'rejected' => 'rejected',
+            default => 'none',
+        };
+    }
+
+    /**
+     * Auto-contrast text color for a background of primary_color — used
+     * anywhere a tenant's own brand color becomes a UI background (e.g.
+     * the mobile panel bottom nav) so icon/label legibility never depends
+     * on which hex a tenant happened to pick. Perceived-brightness (YIQ)
+     * formula, not full WCAG relative luminance — simpler, and more than
+     * accurate enough for a binary light/dark text choice.
+     */
+    public function primaryColorContrastText(): string
+    {
+        $hex = ltrim($this->primary_color ?: '#128155', '#');
+
+        if (! preg_match('/^[0-9A-Fa-f]{6}$/', $hex)) {
+            return '#ffffff';
+        }
+
+        $r = hexdec(substr($hex, 0, 2));
+        $g = hexdec(substr($hex, 2, 2));
+        $b = hexdec(substr($hex, 4, 2));
+        $yiq = (($r * 299) + ($g * 587) + ($b * 114)) / 1000;
+
+        return $yiq >= 150 ? '#111111' : '#ffffff';
+    }
+
     public function url(): string
     {
         if (config('app.tenancy_mode', 'subdomain') === 'path') {

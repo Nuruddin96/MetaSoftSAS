@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\AiAgentMessageJob;
+use App\Models\AiTenantMemory;
 use App\Models\FacebookPage;
 use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
@@ -234,6 +235,20 @@ class ProcessAiAgentMessage implements ShouldQueue
         }
 
         $history = $this->recentHistory($this->tenantId, $psid, $message->id);
+
+        // "AI মেমোরী" voice answers — a confident match is sent directly
+        // via the existing Messenger attachment-send path, entirely
+        // bypassing OpenAI (zero extra AI cost) — see
+        // AiTenantMemoryService::bestAudioMatch()'s docblock.
+        $audioMemory = $memories->bestAudioMatch(
+            $this->tenantId,
+            [...array_column($history, 'content'), (string) $message->message_text]
+        );
+
+        if ($audioMemory) {
+            return $this->sendAudioMemoryReply($audioMemory, $psid, $api);
+        }
+
         $styleExamples = $style->messengerStyleExamples($this->tenantId);
         // Same "not just this row" resolution MessengerInboxController
         // already relies on — a name resolved on an earlier message in
@@ -544,6 +559,64 @@ class ProcessAiAgentMessage implements ShouldQueue
         MessengerMessage::withoutGlobalScopes()->where('id', $message->id)->update(['message_text' => $result['text']]);
 
         return $result['text'];
+    }
+
+    /**
+     * "AI মেমোরী" voice answers — sends the tenant's own recorded/
+     * uploaded clip verbatim via the same attachment-send path a human
+     * staff reply already uses (MessengerInboxController::reply()'s
+     * image-send branch), never through OpenAI. Records the outbound
+     * MessengerMessage row the same way a normal AI text reply does, so
+     * it appears in the inbox and the mid-based webhook dedup already
+     * finds it — see the bottom of process() for the text-reply
+     * counterpart this mirrors.
+     */
+    protected function sendAudioMemoryReply(AiTenantMemory $audioMemory, string $psid, MessengerApi $api): bool
+    {
+        $token = $this->resolveOutboundToken($this->tenantId, $psid);
+
+        if (! $token) {
+            return false;
+        }
+
+        try {
+            $api->sendTypingOn($psid, $token);
+        } catch (\Throwable $e) {
+            // Purely cosmetic — never let a failure here block the actual send.
+        }
+
+        $this->humanDelay();
+
+        $url = asset('storage/'.$audioMemory->answer_audio_path);
+        $sendResult = $api->sendAttachment($psid, $url, 'audio', $token);
+
+        if (isset($sendResult['error'])) {
+            Log::warning('AI agent job: saved voice-memory Messenger send failed.', [
+                'tenant_id' => $this->tenantId,
+                'error_type' => $sendResult['error']['type'] ?? null,
+            ]);
+
+            return false;
+        }
+
+        $attributes = [
+            'tenant_id' => $this->tenantId,
+            'sender_psid' => $psid,
+            'mid' => $sendResult['message_id'] ?? null,
+            'message_text' => null,
+            'attachment_url' => $url,
+            'attachment_type' => 'audio',
+            'direction' => 'out',
+            'status' => 'contacted',
+        ];
+
+        if (MessengerMessage::sentByColumnReady()) {
+            $attributes['sent_by'] = 'ai';
+        }
+
+        MessengerMessage::withoutGlobalScopes()->create($attributes);
+
+        return true;
     }
 
     /**

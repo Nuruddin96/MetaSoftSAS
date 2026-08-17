@@ -284,12 +284,24 @@
             </div>
         @elseif ($domainStatus === 'approved')
             <div class="flex items-center justify-between gap-3">
-                <p class="text-sm">✅ <b>{{ $tenant->custom_domain_requested }}</b> — অনুমোদিত (Approved), আমাদের টিম ম্যানুয়ালি সেটআপ শেষ করলেই চালু হয়ে যাবে</p>
+                <p class="text-sm">✅ <b>{{ $tenant->custom_domain_requested }}</b> — অনুমোদিত (Approved), আমাদের টিম সেটআপ শেষ করলেই চালু হয়ে যাবে</p>
                 <form method="POST" action="{{ route('tenant.settings.domain.cancel') }}" onsubmit="return confirm('রিকোয়েস্টটি বাতিল করবেন? ভুল ডোমেইন দিলে বাতিল করে আবার সঠিকটি দিতে পারবেন।')">
                     @csrf @method('DELETE')
                     <button class="text-red-600 text-xs hover:underline rounded shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">বাতিল / পরিবর্তন করুন</button>
                 </form>
             </div>
+            {{-- Only shown when this domain is outside our automatic control
+                 and needs a real DNS record — kept to the 3 fields a
+                 registrar's DNS panel actually asks for, no internal
+                 Cloudflare/technical details. --}}
+            @if (\App\Models\Tenant::cloudflareDomainColumnsReady() && $tenant->custom_domain_connect_status === 'dns_required')
+                <div class="mt-3 bg-paper rounded-btn p-3 text-xs space-y-1">
+                    <p class="font-semibold">এই ডোমেইনের জন্য একটি DNS রেকর্ড যোগ করা প্রয়োজন:</p>
+                    <p>Record type: <b>CNAME</b></p>
+                    <p>Host/Name: <b>@ (অথবা www)</b></p>
+                    <p>Value/Target: <b>{{ app(\App\Services\Domain\CloudflareDomainService::class)->fallbackOriginTarget() }}</b></p>
+                </div>
+            @endif
         @else
             @if ($domainStatus === 'rejected')
                 <p class="text-xs text-red-600 mb-3">আপনার আগের রিকোয়েস্টটি প্রত্যাখ্যাত হয়েছে — আবার চেষ্টা করুন বা অ্যাডমিনের সাথে যোগাযোগ করুন।</p>
@@ -325,7 +337,7 @@
         </form>
     </x-ui.collapsible-card>
 
-    <x-ui.collapsible-card title="🤖 AI কাস্টমার এজেন্ট" :open="true">
+    <x-ui.collapsible-card title="🤖 Personal Assistant" :open="true">
         <x-slot:status>
             @if (($store['ai_agent_enabled'] ?? '0') === '1')<x-ui.badge tone="leaf">চালু</x-ui.badge>@endif
         </x-slot:status>
@@ -345,11 +357,11 @@
             <p class="text-xs text-red-600 -mt-1 mb-3">ক্রেডিট শেষ হয়ে গেলে (অথবা কখনো বরাদ্দ না হলে) AI চালু থাকলেও কোনো রিপ্লাই পাঠাবে না, যতক্ষণ না সুপার অ্যাডমিন নতুন ক্রেডিট যোগ করেন। আপনার সেটিংস/কনফিগারেশন অপরিবর্তিত থাকে।</p>
         @endif
 
-        <p class="text-xs text-mute mb-1">"AI এজেন্ট" মাস্টার সুইচ — বন্ধ থাকলে কোনো চ্যানেলেই AI কোনো OpenAI কল করবে না। "Messenger অটো রিপ্লাই" এবং "WhatsApp অটো রিপ্লাই" প্রতিটি চ্যানেলের জন্য আলাদা সুইচ — মাস্টার সুইচ এবং সংশ্লিষ্ট চ্যানেলের সুইচ দুটোই চালু থাকলে তবেই সেই চ্যানেলে স্বয়ংক্রিয় রিপ্লাই যাবে।</p>
+        <p class="text-xs text-mute mb-1">"Personal Assistant" মাস্টার সুইচ — বন্ধ থাকলে কোনো চ্যানেলেই AI কোনো OpenAI কল করবে না। "Messenger অটো রিপ্লাই" এবং "WhatsApp অটো রিপ্লাই" প্রতিটি চ্যানেলের জন্য আলাদা সুইচ — মাস্টার সুইচ এবং সংশ্লিষ্ট চ্যানেলের সুইচ দুটোই চালু থাকলে তবেই সেই চ্যানেলে স্বয়ংক্রিয় রিপ্লাই যাবে।</p>
         <form method="POST" action="{{ route('tenant.settings.ai-agent') }}">
             @csrf
             <label class="flex items-center gap-2 text-sm mb-2">
-                <input type="checkbox" name="ai_agent_enabled" value="1" @checked(($store['ai_agent_enabled'] ?? '0') === '1')> AI এজেন্ট চালু <span class="text-mute">(মাস্টার সুইচ)</span>
+                <input type="checkbox" name="ai_agent_enabled" value="1" @checked(($store['ai_agent_enabled'] ?? '0') === '1')> Personal Assistant চালু <span class="text-mute">(মাস্টার সুইচ)</span>
             </label>
             <label class="flex items-center gap-2 text-sm mb-2">
                 <input type="checkbox" name="messenger_ai_auto_reply_enabled" value="1" @checked(($store['messenger_ai_auto_reply_enabled'] ?? '0') === '1')> Messenger অটো রিপ্লাই চালু
@@ -371,46 +383,58 @@
         </form>
 
         <div class="border-t border-ink/10 pt-4 mt-4">
-            <label class="text-sm font-semibold block mb-1">🧠 AI-কে শেখান (Teach Your AI Agent)</label>
-            <p class="text-xs text-mute mb-3">প্রশ্ন আর উত্তর জোড়ায় জোড়ায় সেভ করুন — কাস্টমার কাছাকাছি প্রশ্ন করলে AI এখান থেকে সরাসরি উত্তর দেবে। যেমন — প্রশ্ন: "ঢাকার ভিতরে ডেলিভারি চার্জ কত?" উত্তর: "ঢাকার ভিতরে ডেলিভারি চার্জ ৬০ টাকা।"</p>
-            <form method="POST" action="{{ route('tenant.ai-memory.store') }}" class="space-y-2 mb-4">
+            <label class="text-sm font-semibold block mb-1">🧠 AI মেমোরী</label>
+            <p class="text-xs text-mute mb-3">প্রশ্ন আর উত্তর জোড়ায় জোড়ায় সেভ করুন — কাস্টমার কাছাকাছি প্রশ্ন করলে AI এখান থেকে সরাসরি উত্তর দেবে (টেক্সট অথবা আপনার রেকর্ড করা ভয়েস)। যেমন — প্রশ্ন: "ঢাকার ভিতরে ডেলিভারি চার্জ কত?" উত্তর: "ঢাকার ভিতরে ডেলিভারি চার্জ ৬০ টাকা।"</p>
+            <form method="POST" action="{{ route('tenant.ai-memory.store') }}" enctype="multipart/form-data" class="space-y-2 mb-4">
                 @csrf
                 <input name="question" required maxlength="500" placeholder="প্রশ্ন — যেমন: ঢাকার ভিতরে ডেলিভারি চার্জ কত?"
                        class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
-                <textarea name="answer" required maxlength="2000" rows="2" placeholder="উত্তর — যেমন: ঢাকার ভিতরে ডেলিভারি চার্জ ৬০ টাকা।"
-                          class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none"></textarea>
+                @include('tenant.settings._ai_memory_answer', ['prefix' => 'new'])
                 <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
             </form>
 
             @if ($aiMemories->isNotEmpty())
-                <p class="text-xs font-semibold text-mute mb-2">সেভ করা প্রশ্ন-উত্তর ({{ $aiMemories->count() }})</p>
-                <div class="space-y-2">
-                    @foreach ($aiMemories as $memory)
-                        <div class="rounded-lg border border-ink/10 p-3">
-                            <p class="text-sm font-semibold">{{ $memory->question }}</p>
-                            <p class="text-sm text-mute mt-0.5">{{ $memory->answer }}</p>
-                            <div class="flex items-center gap-3 mt-2">
-                                <details class="inline-block">
-                                    <summary class="text-xs text-leaf hover:underline cursor-pointer">এডিট</summary>
-                                    <form method="POST" action="{{ route('tenant.ai-memory.update', $memory) }}" class="space-y-2 mt-2">
-                                        @csrf @method('PUT')
-                                        <input name="question" required maxlength="500" value="{{ $memory->question }}"
-                                               class="w-full rounded-btn border border-ink/15 px-3 py-2 text-sm">
-                                        <textarea name="answer" required maxlength="2000" rows="2"
-                                                  class="w-full rounded-btn border border-ink/15 px-3 py-2 text-sm">{{ $memory->answer }}</textarea>
-                                        <x-ui.button type="submit" variant="accent" size="sm">আপডেট করুন</x-ui.button>
-                                    </form>
-                                </details>
-                                <form method="POST" action="{{ route('tenant.ai-memory.destroy', $memory) }}" onsubmit="return confirm('এই প্রশ্ন-উত্তরটি মুছে ফেলবেন?')">
-                                    @csrf @method('DELETE')
-                                    <button class="text-xs text-red-600 hover:underline">ডিলিট</button>
-                                </form>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
+                {{-- Collapsed by default — a long saved-memory list must not make this settings page unnecessarily long. --}}
+                <details class="rounded-lg border border-ink/10">
+                    <summary class="px-3 py-2.5 text-xs font-semibold text-mute cursor-pointer select-none">সেভ করা মেমোরী ({{ $aiMemories->count() }})</summary>
+                    <div class="border-t border-ink/10 p-2 space-y-2">
+                        @foreach ($aiMemories as $memory)
+                            <details class="rounded-lg border border-ink/10 bg-white">
+                                <summary class="px-3 py-2.5 text-sm font-semibold cursor-pointer select-none">{{ $memory->question }}</summary>
+                                <div class="px-3 pb-3">
+                                    @if ($memory->isAudioAnswer())
+                                        <audio controls src="{{ asset('storage/'.$memory->answer_audio_path) }}" class="w-full h-9 mt-1"></audio>
+                                    @else
+                                        <p class="text-sm text-mute mt-1">{{ $memory->answer }}</p>
+                                    @endif
+                                    <div class="flex items-center gap-3 mt-2">
+                                        <details class="inline-block">
+                                            <summary class="text-xs text-leaf hover:underline cursor-pointer">এডিট</summary>
+                                            <form method="POST" action="{{ route('tenant.ai-memory.update', $memory) }}" enctype="multipart/form-data" class="space-y-2 mt-2">
+                                                @csrf @method('PUT')
+                                                <input name="question" required maxlength="500" value="{{ $memory->question }}"
+                                                       class="w-full rounded-btn border border-ink/15 px-3 py-2 text-sm">
+                                                @include('tenant.settings._ai_memory_answer', [
+                                                    'prefix' => 'edit-'.$memory->id,
+                                                    'currentType' => $memory->answer_type ?? 'text',
+                                                    'currentAnswer' => $memory->answer,
+                                                    'currentAudioUrl' => $memory->isAudioAnswer() ? asset('storage/'.$memory->answer_audio_path) : null,
+                                                ])
+                                                <x-ui.button type="submit" variant="accent" size="sm">আপডেট করুন</x-ui.button>
+                                            </form>
+                                        </details>
+                                        <form method="POST" action="{{ route('tenant.ai-memory.destroy', $memory) }}" onsubmit="return confirm('এই প্রশ্ন-উত্তরটি মুছে ফেলবেন?')">
+                                            @csrf @method('DELETE')
+                                            <button class="text-xs text-red-600 hover:underline">ডিলিট</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </details>
+                        @endforeach
+                    </div>
+                </details>
             @else
-                <p class="text-xs text-mute">এখনো কোনো প্রশ্ন-উত্তর সেভ করা হয়নি।</p>
+                <p class="text-xs text-mute">এখনো কোনো মেমোরী সেভ করা হয়নি।</p>
             @endif
         </div>
     </x-ui.collapsible-card>
@@ -554,6 +578,97 @@
             extras: { setup: {}, featureType: 'whatsapp_business_app_onboarding', sessionInfoVersion: '3' },
         });
     }));
+})();
+</script>
+
+<script>
+// AI মেমোরী — text/voice answer widget (resources/views/tenant/settings/_ai_memory_answer.blade.php).
+// One MediaRecorder instance per active recording, keyed by widget prefix
+// — a tenant only ever records one answer at a time in practice, but this
+// still supports multiple independent widgets on the page (the "new"
+// form plus every saved memory's edit form) without them interfering.
+(function () {
+    const recorders = {};
+
+    function widget(prefix) {
+        return document.querySelector('[data-answer-widget="' + prefix + '"]');
+    }
+
+    window.aiMemoryToggleType = function (prefix, type) {
+        const el = widget(prefix);
+        if (!el) return;
+        el.querySelector('.answerText').classList.toggle('hidden', type !== 'text');
+        el.querySelector('.answerAudioBox').classList.toggle('hidden', type !== 'audio');
+    };
+
+    window.aiMemoryStartRecording = async function (prefix) {
+        const el = widget(prefix);
+        if (!el) return;
+
+        if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+            el.querySelector('.voiceUnsupported').classList.remove('hidden');
+            el.querySelector('.voiceRecordBtn').classList.add('hidden');
+            return;
+        }
+
+        let stream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (e) {
+            window.showToast?.('মাইক্রোফোন পারমিশন পাওয়া যায়নি।', 'error');
+            return;
+        }
+
+        const mimeType = ['audio/webm', 'audio/mp4', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported?.(t)) || '';
+        const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = () => {
+            stream.getTracks().forEach(t => t.stop());
+            const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+            const ext = (recorder.mimeType || 'audio/webm').includes('mp4') ? 'm4a' : 'webm';
+            const file = new File([blob], 'voice-answer.' + ext, { type: blob.type });
+
+            const input = el.querySelector('.voiceFileInput');
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+
+            aiMemoryHandleFileChange(prefix, input);
+        };
+
+        recorders[prefix] = { recorder, startedAt: Date.now(), timerInterval: null };
+        recorder.start();
+
+        el.querySelector('.voiceRecordBtn').classList.add('hidden');
+        const stopBtn = el.querySelector('.voiceStopBtn');
+        stopBtn.classList.remove('hidden');
+        const timerEl = stopBtn.querySelector('.voiceTimer');
+        recorders[prefix].timerInterval = setInterval(() => {
+            const secs = Math.floor((Date.now() - recorders[prefix].startedAt) / 1000);
+            timerEl.textContent = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+        }, 1000);
+    };
+
+    window.aiMemoryStopRecording = function (prefix) {
+        const state = recorders[prefix];
+        if (!state) return;
+        clearInterval(state.timerInterval);
+        state.recorder.stop();
+        delete recorders[prefix];
+
+        const el = widget(prefix);
+        el.querySelector('.voiceStopBtn').classList.add('hidden');
+        el.querySelector('.voiceRecordBtn').classList.remove('hidden');
+    };
+
+    window.aiMemoryHandleFileChange = function (prefix, inputEl) {
+        const el = widget(prefix);
+        if (!el || !inputEl.files?.[0]) return;
+        const preview = el.querySelector('.voicePreview');
+        preview.src = URL.createObjectURL(inputEl.files[0]);
+        preview.classList.remove('hidden');
+    };
 })();
 </script>
 @endpush

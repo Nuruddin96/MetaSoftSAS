@@ -32,4 +32,19 @@ class AiTenantMemory extends Model
     {
         return Schema::hasTable('tenant_ai_memories');
     }
+
+    /**
+     * True once chunk42.sql's answer_type/answer_audio_path columns exist
+     * — guards the voice-answer feature independently of the base table,
+     * same layered-additive-migration pattern as Tenant::aiPauseColumnsReady().
+     */
+    public static function voiceColumnsReady(): bool
+    {
+        return Schema::hasColumn('tenant_ai_memories', 'answer_type');
+    }
+
+    public function isAudioAnswer(): bool
+    {
+        return ($this->answer_type ?? 'text') === 'audio' && $this->answer_audio_path;
+    }
 }

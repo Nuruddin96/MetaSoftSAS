@@ -10,8 +10,8 @@
             <span class="font-disp font-bold text-xl">MetaSoft BD</span>
         </a>
         <div class="bg-white rounded-2xl shadow-sm border border-ink/5 p-8">
-            <h1 class="font-disp font-bold text-2xl text-center">আপনার দোকানে লগইন</h1>
-            <p class="text-mute text-sm text-center mt-2">দোকানের ওয়েবসাইট ঠিকানা লিখুন</p>
+            <h1 class="font-disp font-bold text-2xl text-center">আপনার শপে লগইন</h1>
+            <p class="text-mute text-sm text-center mt-2">শপের ওয়েবসাইট ঠিকানা লিখুন</p>
 
             @error('subdomain')
                 <p class="mt-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{{ $message }}</p>
@@ -27,7 +27,7 @@
             </form>
         </div>
         <p class="text-center text-sm text-mute mt-5">
-            দোকান নেই? <a href="{{ route('register') }}" class="text-leaf font-semibold hover:underline">ফ্রিতে খুলুন</a>
+            শপ নেই? <a href="{{ route('register') }}" class="text-leaf font-semibold hover:underline">ফ্রিতে খুলুন</a>
         </p>
     </div>
 </div>

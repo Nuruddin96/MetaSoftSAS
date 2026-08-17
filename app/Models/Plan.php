@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class Plan extends Model
 {
@@ -15,7 +16,13 @@ class Plan extends Model
     /** True once database/sql/chunk27.sql is imported — mirrors the tablesReady() pattern used by every other additive column/table in this codebase (e.g. FacebookPage::tablesReady()). */
     public static function featuresColumnReady(): bool
     {
-        return \Illuminate\Support\Facades\Schema::hasColumn('plans', 'features');
+        return Schema::hasColumn('plans', 'features');
+    }
+
+    /** True once database/sql/chunk45.sql (tagline/is_featured) is imported. */
+    public static function cmsColumnsReady(): bool
+    {
+        return Schema::hasColumn('plans', 'tagline');
     }
 
     /**

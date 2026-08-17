@@ -1,7 +1,7 @@
 @extends('layouts.central')
 
 @section('title', 'MetaSoft BD — আপনার অনলাইন ব্যবসা, এক প্যানেলে')
-@section('meta_description', 'ওয়েবসাইট, POS, ইনভেন্টরি, কুরিয়ার আর অর্ডার ম্যানেজমেন্ট — সব এক প্ল্যাটফর্মে। ৭ দিন ফ্রি ট্রায়াল, কোনো কার্ড লাগবে না। আজই আপনার অনলাইন দোকান খুলুন।')
+@section('meta_description', 'ওয়েবসাইট, POS, ইনভেন্টরি, কুরিয়ার আর অর্ডার ম্যানেজমেন্ট — সব এক প্ল্যাটফর্মে। ৭ দিন ফ্রি ট্রায়াল, কোনো কার্ড লাগবে না। আজই আপনার অনলাইন শপ খুলুন।')
 
 @section('content')
 
@@ -99,7 +99,7 @@
 
                 <div class="mt-9 flex flex-wrap gap-4">
                     <x-ui.button href="{{ route('register') }}" variant="primary" size="lg">
-                        আপনার দোকান খুলুন →
+                        আপনার শপ খুলুন →
                     </x-ui.button>
                     <x-ui.button href="#features" variant="outline" size="lg">
                         কী কী পাবেন
@@ -107,7 +107,7 @@
                 </div>
 
                 <p class="mt-6 text-sm text-mute">
-                    আপনার সাইট হবে: <span class="font-semibold text-ink">আপনারদোকান.metasoftbd.com</span>
+                    আপনার সাইট হবে: <span class="font-semibold text-ink">আপনারশপ.metasoftbd.com</span>
                 </p>
             </div>
 
@@ -206,9 +206,9 @@
                 <div class="w-14 h-14 rounded-xl bg-leaf/10 grid place-items-center text-leafdk">
                     <x-ui.icon name="storefront" class="w-7 h-7" />
                 </div>
-                <h3 class="font-bold text-xl mt-5">অনলাইনে ও দোকানে, একসাথে বিক্রি করুন</h3>
+                <h3 class="font-bold text-xl mt-5">অনলাইনে ও শপে, একসাথে বিক্রি করুন</h3>
                 <p class="text-mute text-sm mt-2.5 leading-relaxed">
-                    সাইনআপের সাথে সাথেই নিজের সাবডোমেইনে মোবাইল-ফ্রেন্ডলি ওয়েবসাইট রেডি। দোকানে বিক্রির জন্য POS + অটো বারকোড — দুই জায়গার স্টক একই ইনভেন্টরি থেকে হিসাব হয়, আলাদা করে মেলাতে হয় না।
+                    সাইনআপের সাথে সাথেই নিজের সাবডোমেইনে মোবাইল-ফ্রেন্ডলি ওয়েবসাইট রেডি। শপে বিক্রির জন্য POS + অটো বারকোড — দুই জায়গার স্টক একই ইনভেন্টরি থেকে হিসাব হয়, আলাদা করে মেলাতে হয় না।
                 </p>
                 <p class="text-xs text-leafdk font-semibold mt-4">অনলাইন স্টোর + POS, একই ইনভেন্টরি</p>
             </x-ui.card>
@@ -271,8 +271,8 @@
         <div class="grid md:grid-cols-3 gap-8 mt-12">
             @php
                 $steps = [
-                    ['১', 'রেজিস্ট্রেশন করুন', 'দোকানের নাম আর আপনার তথ্য দিন — ব্যাস।'],
-                    ['২', 'দোকান রেডি', 'সাথে সাথেই আপনার-নাম.metasoftbd.com লাইভ, সাথে অ্যাডমিন প্যানেল।'],
+                    ['১', 'রেজিস্ট্রেশন করুন', 'শপের নাম আর আপনার তথ্য দিন — ব্যাস।'],
+                    ['২', 'শপ রেডি', 'সাথে সাথেই আপনার-নাম.metasoftbd.com লাইভ, সাথে অ্যাডমিন প্যানেল।'],
                     ['৩', 'প্রোডাক্ট তুলে বিক্রি শুরু', 'ছবি-দাম দিয়ে প্রোডাক্ট আপলোড করুন, লিংক শেয়ার করুন, অর্ডার নিন।'],
                 ];
             @endphp
@@ -396,7 +396,7 @@
                 $benefits = [
                     ['upload', 'বারবার একই কাজ নয়', 'বারকোড, অর্ডার নাম্বার, স্টক আপডেট — নিজে থেকেই হয়ে যায়।'],
                     ['chart-trending', 'ছোট থেকে শুরু, বড় হওয়ার সুযোগ', 'প্ল্যান বদলে যান, একই প্যানেল — নতুন করে সেটআপ লাগে না।'],
-                    ['shield-check', 'আপনার ডেটা সুরক্ষিত', 'কুরিয়ার ও মার্কেটিং API-কি এনক্রিপ্টেড থাকে, প্রতিটা দোকানের ডেটা আলাদা।'],
+                    ['shield-check', 'আপনার ডেটা সুরক্ষিত', 'কুরিয়ার ও মার্কেটিং API-কি এনক্রিপ্টেড থাকে, প্রতিটা শপের ডেটা আলাদা।'],
                     ['globe', 'বাংলাদেশের ব্যবসার জন্যই', 'বাংলা ইন্টারফেস, বাকির খাতা, দেশীয় কুরিয়ার — সবকিছু স্থানীয় বাস্তবতা মাথায় রেখে।'],
                     ['cart', 'মোবাইল থেকেও চালান', 'ফোন, ট্যাব বা ল্যাপটপ — যেকোনো ডিভাইস থেকে প্যানেল ব্যবহার করা যায়।'],
                 ];
@@ -499,9 +499,9 @@
                 <div class="w-12 h-12 rounded-xl bg-leaf/10 grid place-items-center text-leafdk">
                     <x-ui.icon name="storefront" class="w-6 h-6" />
                 </div>
-                <h3 class="font-bold text-lg mt-4">SaaS দোকান রেফার করুন</h3>
+                <h3 class="font-bold text-lg mt-4">SaaS শপ রেফার করুন</h3>
                 <p class="text-mute text-sm mt-2 leading-relaxed">
-                    কেউ আপনার লিংকে দোকান খুলে প্রথম পেমেন্ট করলেই পান প্রথম পেমেন্টের <b class="text-ink">২০%</b> — ওয়ান-টাইম বোনাস।
+                    কেউ আপনার লিংকে শপ খুলে প্রথম পেমেন্ট করলেই পান প্রথম পেমেন্টের <b class="text-ink">২০%</b> — ওয়ান-টাইম বোনাস।
                 </p>
             </x-ui.card>
             <x-ui.card padding="lg" hoverable>
@@ -548,7 +548,11 @@
         <div class="grid md:grid-cols-3 gap-6 mt-10">
             @foreach ($plans as $plan)
                 @php
-                    $isPopular = $loop->iteration === 2;
+                    // Super Admin's explicit choice (plans.is_featured,
+                    // database/sql/chunk45.sql) — falls back to the old
+                    // "2nd plan" position only on a deploy where that
+                    // column hasn't been imported yet.
+                    $isPopular = \App\Models\Plan::cmsColumnsReady() ? (bool) $plan->is_featured : $loop->iteration === 2;
                     $yearlySavingsPct = $plan->price_monthly > 0
                         ? (int) round((1 - ($plan->price_yearly / ($plan->price_monthly * 12))) * 100)
                         : 0;
@@ -567,6 +571,9 @@
                     @endif
 
                     <h3 class="font-bold text-lg">{{ $plan->name }}</h3>
+                    @if ($plan->tagline)
+                        <p class="text-mute text-sm mt-1">{{ $plan->tagline }}</p>
+                    @endif
 
                     <div class="mt-3">
                         <p data-cycle-price="monthly">
@@ -724,7 +731,7 @@
     </div>
     <x-ui.container size="narrow">
         <div class="py-20 md:py-28 text-center">
-            <h2 class="font-disp font-bold text-3xl md:text-5xl leading-tight">আজই আপনার দোকান খুলুন</h2>
+            <h2 class="font-disp font-bold text-3xl md:text-5xl leading-tight">আজই আপনার শপ খুলুন</h2>
             <p class="mt-4 text-lg text-mute">৭ দিন সম্পূর্ণ ফ্রি, কোনো কার্ড লাগবে না। পছন্দ না হলে কিছুই দিতে হবে না।</p>
             <div class="mt-8">
                 <x-ui.button href="{{ route('register') }}" variant="accent" size="lg">
