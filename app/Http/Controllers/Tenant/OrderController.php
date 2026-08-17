@@ -44,6 +44,10 @@ class OrderController extends Controller
                     'id' => $v->id,
                     'name' => $v->variant_name,
                     'price' => (float) $v->selling_price,
+                    // Searchable in the picker alongside product name —
+                    // see renderProductOptions() in create.blade.php/
+                    // show.blade.php.
+                    'sku' => $v->sku,
                 ])->values(),
             ])->values();
     }

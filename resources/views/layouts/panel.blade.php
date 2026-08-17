@@ -325,7 +325,12 @@
     $navFgMuted = $navFg === '#ffffff' ? 'rgba(255,255,255,0.68)' : 'rgba(17,17,17,0.6)';
     $homeBubbleBg = $navFg === '#ffffff' ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.07)';
 @endphp
-<nav class="lg:hidden fixed bottom-0 left-0 right-0 flex items-end justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] z-30 shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
+{{-- id targeted by app.js's navToggle handler — hidden while the hamburger
+     drawer (#navMenu) is open, since that drawer already repeats this same
+     "Dashboard/হোম" destination as its first item; without this, a mobile
+     tenant who opens the hamburger sees this fixed bar's Home tab still
+     showing through underneath, reading as a duplicated Dashboard entry. --}}
+<nav id="mobileBottomNav" class="lg:hidden fixed bottom-0 left-0 right-0 flex items-end justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] z-30 shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
      style="background-color: {{ $navBg }};">
     @php
         // POS stays fully available (desktop sidebar + mobile hamburger menu,

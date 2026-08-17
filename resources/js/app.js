@@ -5,6 +5,11 @@ document.getElementById('navToggle')?.addEventListener('click', () => {
     document.getElementById('navMenu')?.classList.toggle('hidden');
     document.getElementById('navToggleOpenIcon')?.classList.toggle('hidden');
     document.getElementById('navToggleCloseIcon')?.classList.toggle('hidden');
+    // #mobileBottomNav only exists on layouts/panel.blade.php (super.blade.php
+    // has no bottom tab bar) — hidden while the hamburger drawer is open so
+    // its own "Home" tab doesn't show through underneath as a duplicated
+    // Dashboard entry.
+    document.getElementById('mobileBottomNav')?.classList.toggle('hidden');
 });
 
 // ---- notification bell (layouts/panel.blade.php) ----

@@ -147,7 +147,7 @@
         rowIdx++;
     }
 
-    /** Rebuilds a row's <select> options from `products`, filtered by a case-insensitive substring match against the search box — option `value` stays the original index into `products` (never re-indexed), so updateVariants()/calcTotal() need no changes. */
+    /** Rebuilds a row's <select> options from `products`, filtered by a case-insensitive substring match on name OR any variant's SKU against the search box — option `value` stays the original index into `products` (never re-indexed), so updateVariants()/calcTotal() need no changes. */
     function renderProductOptions(idx, query) {
         const row = document.getElementById('row' + idx);
         const select = row.querySelector('.prodSelect');
@@ -156,7 +156,9 @@
 
         const matches = products
             .map((p, pi) => [p, pi])
-            .filter(([p]) => q === '' || p.name.toLowerCase().includes(q));
+            .filter(([p]) => q === ''
+                || p.name.toLowerCase().includes(q)
+                || (p.variants || []).some(v => (v.sku || '').toLowerCase().includes(q)));
 
         select.innerHTML = '<option value="">প্রোডাক্ট বাছাই করুন</option>'
             + matches.map(([p, pi]) => `<option value="${pi}">${p.name}</option>`).join('');
