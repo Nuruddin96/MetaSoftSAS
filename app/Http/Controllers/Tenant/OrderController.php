@@ -13,6 +13,7 @@ use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Services\Courier\CourierManager;
 use App\Services\DeliveryChargeService;
+use App\Services\Marketing\MetaCapiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -124,6 +125,10 @@ class OrderController extends Controller
             return $order;
         });
 
+        // Created directly as 'confirmed' (this form has no separate
+        // pending stage), so this is always a genuine first confirmation.
+        MetaCapiService::sendPurchaseForOrder($order, $request->ip(), $request->userAgent());
+
         return redirect()->route('tenant.orders.show', $order)->with('success', 'অর্ডার তৈরি হয়েছে — '.$order->order_number);
     }
 
@@ -219,6 +224,10 @@ class OrderController extends Controller
             $customer?->increment('total_orders');
             $customer?->increment('total_spent', $order->total);
         });
+
+        // Guarded by abort_if(status !== 'pending') above — every call that
+        // reaches here is a genuine first pending -> confirmed transition.
+        MetaCapiService::sendPurchaseForOrder($order, $request->ip(), $request->userAgent());
 
         return redirect()->route('tenant.orders.show', $order)->with('success', 'অর্ডার কনফার্ম হয়েছে — '.$order->order_number);
     }
@@ -319,11 +328,19 @@ class OrderController extends Controller
             'status' => 'required|in:pending,confirmed,processing,shipped,delivered,cancelled,returned',
         ]);
 
+        // Captured before update() so a save that leaves status unchanged
+        // (or already-confirmed) never re-fires Purchase CAPI.
+        $wasConfirmed = $order->status === 'confirmed';
+
         $order->update([
             'status' => $data['status'],
             'confirmed_at' => $data['status'] === 'confirmed' ? now() : $order->confirmed_at,
             'delivered_at' => $data['status'] === 'delivered' ? now() : $order->delivered_at,
         ]);
+
+        if ($data['status'] === 'confirmed' && ! $wasConfirmed) {
+            MetaCapiService::sendPurchaseForOrder($order, $request->ip(), $request->userAgent());
+        }
 
         return back()->with('success', 'অর্ডার স্ট্যাটাস আপডেট হয়েছে।');
     }

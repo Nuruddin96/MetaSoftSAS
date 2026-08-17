@@ -251,6 +251,12 @@ trait InteractsWithCommerceSchema
                 $table->string('fb_pixel_id', 50)->nullable();
                 $table->text('fb_capi_token')->nullable();
                 $table->string('fb_test_event_code', 50)->nullable();
+                // Phase 1 CAPI hardening columns — database/sql/chunk48.sql.
+                $table->boolean('capi_test_mode')->default(false);
+                $table->string('capi_last_status', 20)->nullable();
+                $table->smallInteger('capi_last_http_status')->nullable();
+                $table->string('capi_last_error', 255)->nullable();
+                $table->timestamp('capi_last_event_at')->nullable();
                 $table->string('gtm_container_id', 20)->nullable();
                 $table->string('meta_app_id', 50)->nullable();
                 $table->text('meta_app_secret')->nullable();

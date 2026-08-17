@@ -2,10 +2,12 @@
 
 namespace App\Services\Marketing;
 
+use App\Models\MarketingSetting;
 use App\Models\Order;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * FEATURE: Facebook Conversion API (server-side events).
@@ -127,6 +129,59 @@ class MetaCapiService
         }
 
         return $result;
+    }
+
+    /**
+     * Shared entry point for order-confirmation call sites outside the
+     * storefront checkout (admin-panel manual order creation, Messenger
+     * pending-order confirmation, and the order status dropdown) — those
+     * flows don't already have a MetaCapiService instance the way
+     * CheckoutController::sendCapiPurchase() does, so this resolves the
+     * order's own tenant's MarketingSetting, applies the same Test Mode
+     * gating, sends, and persists capi_last_* — one implementation shared
+     * by every non-storefront caller instead of copies of the same logic.
+     *
+     * Never throws — a CAPI failure must never block order confirmation.
+     *
+     * @return array{success: bool, http_status: ?int, error_code: ?int, error_type: ?string, error_message: ?string}
+     */
+    public static function sendPurchaseForOrder(Order $order, ?string $clientIp = null, ?string $userAgent = null, ?string $fbp = null, ?string $fbc = null): array
+    {
+        $failed = ['success' => false, 'http_status' => null, 'error_code' => null, 'error_type' => null, 'error_message' => null];
+
+        try {
+            $mk = MarketingSetting::where('tenant_id', $order->tenant_id)->first();
+
+            if (! $mk || ! $mk->fb_pixel_id || ! $mk->fb_capi_token) {
+                return $failed;
+            }
+
+            // Every known creation path already sets this, but never skip
+            // sending Purchase for lack of it — generate on the spot instead.
+            if (! $order->fb_event_id) {
+                $order->forceFill(['fb_event_id' => (string) Str::uuid()])->save();
+            }
+
+            $order->loadMissing('items');
+
+            $testEventCode = $mk->capi_test_mode ? $mk->fb_test_event_code : null;
+
+            $result = (new self($mk->fb_pixel_id, $mk->fb_capi_token, $testEventCode))
+                ->sendPurchase($order, $clientIp, $userAgent, $fbp, $fbc);
+
+            $mk->forceFill([
+                'capi_last_status' => $result['success'] ? 'success' : 'failed',
+                'capi_last_http_status' => $result['http_status'],
+                'capi_last_error' => $result['success'] ? null : $result['error_message'],
+                'capi_last_event_at' => now(),
+            ])->save();
+
+            return $result;
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $failed;
+        }
     }
 
     /**
