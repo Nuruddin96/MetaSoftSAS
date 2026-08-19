@@ -1393,4 +1393,63 @@ class ProcessWhatsAppAiAgentMessageJobTest extends TestCase
         $this->assertNull($sent->attachment_url, 'an ambiguous request must never send a (possibly wrong) image');
         $this->assertStringContainsString('কোন পণ্যটির ছবি চান', $sent->message_text);
     }
+
+    // --- Part 7-9: post-purchase concern / complaint context -------------------------------
+
+    public function test_a_verified_post_purchase_concern_reaches_the_provider_as_a_confirmed_fact(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->connectPhoneNumber($tenant->id);
+        $this->enableAiAgentAndWhatsAppAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $order = \App\Models\Order::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'order_number' => 'ORD-000088', 'customer_phone' => '01700000004',
+            'customer_name' => 'Test Customer', 'status' => 'delivered',
+        ]);
+        \App\Models\OrderItem::withoutGlobalScopes()->create(['tenant_id' => $tenant->id, 'order_id' => $order->id, 'product_name' => 'Bluetooth Speaker']);
+
+        $messageId = $this->seedPendingInboundMessage($tenant->id, '8801700000004', 'wamid.pp-1', 'Bluetooth Speaker টা কাজ করছে না');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'দুঃখিত শুনে।']]]]),
+            '*/messages' => Http::response(['messages' => [['id' => 'wamid.pp-reply-1']]]),
+        ]);
+
+        ProcessWhatsAppAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(function ($request) {
+            $content = $request->data()['messages'][0]['content'] ?? '';
+
+            return str_contains($content, 'Verified')
+                && str_contains($content, 'ORD-000088')
+                && str_contains($content, 'Bluetooth Speaker');
+        });
+    }
+
+    public function test_an_unverified_post_purchase_concern_never_claims_the_customer_purchased_anything(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->connectPhoneNumber($tenant->id);
+        $this->enableAiAgentAndWhatsAppAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $messageId = $this->seedPendingInboundMessage($tenant->id, '8801700000005', 'wamid.pp-2', 'এইটা ব্যবহার করার পর সমস্যা হচ্ছে');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'দুঃখিত, কোন পণ্যের কথা বলছেন?']]]]),
+            '*/messages' => Http::response(['messages' => [['id' => 'wamid.pp-reply-2']]]),
+        ]);
+
+        ProcessWhatsAppAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(function ($request) {
+            $content = $request->data()['messages'][0]['content'] ?? '';
+
+            return str_contains($content, 'No verified purchase record was found')
+                && ! str_contains($content, 'Verified: this customer\'s order');
+        });
+    }
 }

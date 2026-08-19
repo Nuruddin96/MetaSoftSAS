@@ -341,13 +341,29 @@ class WhatsAppWebhookController extends Controller
             return;
         }
 
-        AiWhatsAppMessageJob::withoutGlobalScopes()->create([
+        // Part 12/13 — mirrors MessengerWebhookController::
+        // maybeDispatchAiAgent()'s coalescing setup one-for-one, using
+        // this channel's own verified wa_id as the conversation key.
+        $coalescingReady = AiWhatsAppMessageJob::conversationKeyColumnReady();
+
+        $jobRow = [
             'tenant_id' => $tenantId,
             'whatsapp_message_id' => $message->id,
             'status' => 'pending',
-        ]);
+        ];
 
-        ProcessWhatsAppAiAgentMessage::dispatch($tenantId, $message->id);
+        if ($coalescingReady) {
+            $jobRow['conversation_key'] = $message->wa_id;
+        }
+
+        AiWhatsAppMessageJob::withoutGlobalScopes()->create($jobRow);
+
+        if ($coalescingReady) {
+            ProcessWhatsAppAiAgentMessage::dispatch($tenantId, $message->id)
+                ->delay(now()->addSeconds((int) config('ai.message_coalesce_debounce_seconds', 6)));
+        } else {
+            ProcessWhatsAppAiAgentMessage::dispatch($tenantId, $message->id);
+        }
     }
 
     /**

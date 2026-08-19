@@ -109,6 +109,9 @@ trait InteractsWithAiAgentSchema
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
                 $table->unsignedBigInteger('messenger_message_id')->unique();
+                // Part 12/13 — message coalescing, see database/sql/
+                // chunk51.sql for the real (MySQL) definition.
+                $table->string('conversation_key', 191)->nullable();
                 $table->string('status', 20)->default('pending');
                 $table->timestamps();
             });
@@ -127,6 +130,20 @@ trait InteractsWithAiAgentSchema
                 $table->string('customer_phone', 20)->default('');
                 $table->text('customer_address')->nullable();
                 $table->string('status', 20)->default('pending');
+                $table->timestamps();
+            });
+        }
+
+        // AiPostPurchaseContextService::verifiedPurchase() reads
+        // order->items — a point-of-sale snapshot of what was actually
+        // bought (product_name), never a live join back to the product
+        // catalog. Minimal stub: only the columns that service touches.
+        if (! Schema::hasTable('order_items')) {
+            Schema::create('order_items', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('order_id');
+                $table->string('product_name', 255)->nullable();
                 $table->timestamps();
             });
         }

@@ -105,6 +105,15 @@ class AiAgentService
      *                                      present, this is the ONE case config('ai.system_prompt')'s "never
      *                                      claim a human was notified" rule explicitly allows an exception
      *                                      for — see that config value's own wording.
+     * @param  string|null  $postPurchaseConcernContext  Set only when App\Services\AI\
+     *                                                    AiPostPurchaseContextService::isPostPurchaseConcern() flagged this turn as a
+     *                                                    possible complaint/concern about something previously purchased — either a
+     *                                                    verified "this customer's order X included product Y" fact (real order_items
+     *                                                    data, never inferred from the complaint text itself) or an explicit "no
+     *                                                    verified purchase record was found" instruction when nothing matched. Null on
+     *                                                    every turn that isn't flagged as a potential post-purchase concern at all —
+     *                                                    the general "Post-purchase concerns" rules in config('ai.system_prompt') apply
+     *                                                    to every reply regardless, this just adds the per-turn verified/unverified fact.
      * @param  string|null  $tenantMemories  Best-matching saved "Teach Your AI Agent"
      *                                       Q&A pairs (tenant_ai_memories) for THIS customer message — see
      *                                       App\Services\AI\AiTenantMemoryService, resolved via cheap keyword
@@ -120,10 +129,10 @@ class AiAgentService
      *                                                                                         or null if a reply could not be safely generated for
      *                                                                                         any reason.
      */
-    public function generateReply(string $businessName, array $conversationHistory, string $customerMessage, ?string $styleExamples = null, ?string $customerName = null, ?string $tenantInstructions = null, ?string $businessKnowledge = null, ?string $productData = null, ?string $customerMemory = null, ?string $customerEmotion = null, ?string $imageUrl = null, ?string $handoffNotice = null, ?string $tenantMemories = null): ?array
+    public function generateReply(string $businessName, array $conversationHistory, string $customerMessage, ?string $styleExamples = null, ?string $customerName = null, ?string $tenantInstructions = null, ?string $businessKnowledge = null, ?string $productData = null, ?string $customerMemory = null, ?string $customerEmotion = null, ?string $imageUrl = null, ?string $handoffNotice = null, ?string $tenantMemories = null, ?string $postPurchaseConcernContext = null): ?array
     {
         $messages = array_merge(
-            [['role' => 'system', 'content' => $this->systemPrompt($businessName, $styleExamples, $customerName, $tenantInstructions, $businessKnowledge, $productData, $customerMemory, $customerEmotion, $handoffNotice, $tenantMemories)]],
+            [['role' => 'system', 'content' => $this->systemPrompt($businessName, $styleExamples, $customerName, $tenantInstructions, $businessKnowledge, $productData, $customerMemory, $customerEmotion, $handoffNotice, $tenantMemories, $postPurchaseConcernContext)]],
             $conversationHistory,
             [['role' => 'user', 'content' => $this->userContent($customerMessage, $imageUrl)]]
         );
@@ -167,7 +176,7 @@ class AiAgentService
         ]));
     }
 
-    protected function systemPrompt(string $businessName, ?string $styleExamples, ?string $customerName = null, ?string $tenantInstructions = null, ?string $businessKnowledge = null, ?string $productData = null, ?string $customerMemory = null, ?string $customerEmotion = null, ?string $handoffNotice = null, ?string $tenantMemories = null): string
+    protected function systemPrompt(string $businessName, ?string $styleExamples, ?string $customerName = null, ?string $tenantInstructions = null, ?string $businessKnowledge = null, ?string $productData = null, ?string $customerMemory = null, ?string $customerEmotion = null, ?string $handoffNotice = null, ?string $tenantMemories = null, ?string $postPurchaseConcernContext = null): string
     {
         $base = (string) config('ai.system_prompt');
 
@@ -193,6 +202,19 @@ class AiAgentService
             // e.g. to answer "my order কোথায়?" without asking them to
             // repeat their order number.
             $prompt .= "\n\nWhat you already know about this specific customer, from their own order history (state this directly, it is verified, not a guess):\n\n{$customerMemory}";
+        }
+
+        if ($postPurchaseConcernContext) {
+            // AiPostPurchaseContextService flagged this turn as a possible
+            // complaint/concern about something previously purchased —
+            // see that service's docblock. Either a verified real-order
+            // fact (state it directly) or an explicit "not verified"
+            // instruction (never assume a purchase happened). The
+            // "Post-purchase concerns" rules in the base prompt above
+            // already cover care-over-selling/no-diagnosis/no-false-
+            // "normal"-claims on every turn; this just supplies the
+            // specific fact (or its absence) for this one.
+            $prompt .= "\n\nThis message may be a complaint or a concern about something the customer previously purchased. {$postPurchaseConcernContext}";
         }
 
         if ($customerEmotion) {

@@ -17,6 +17,7 @@ use App\Services\AI\AiCreditService;
 use App\Services\AI\AiCustomerEmotionService;
 use App\Services\AI\AiCustomerMemoryService;
 use App\Services\AI\AiHandoffService;
+use App\Services\AI\AiPostPurchaseContextService;
 use App\Services\AI\AiProductImageMemoryService;
 use App\Services\AI\AiProductKnowledgeService;
 use App\Services\AI\AiTenantKnowledgeService;
@@ -90,13 +91,54 @@ class ProcessAiAgentMessage implements ShouldQueue
         public readonly int $messengerMessageId,
     ) {}
 
-    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories, AiProductImageMemoryService $productImages): void
+    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories, AiProductImageMemoryService $productImages, AiPostPurchaseContextService $postPurchase): void
     {
         if (! AiAgentMessageJob::tablesReady()) {
             return;
         }
 
-        if (! AiAgentMessageJob::claim($this->tenantId, $this->messengerMessageId)) {
+        // Part 12/13 — message coalescing. Only possible once
+        // database/sql/chunk51.sql's conversation_key column exists; on
+        // an older schema $batchIds stays [$this->messengerMessageId]
+        // and everything below behaves exactly as before coalescing
+        // existed.
+        $batchIds = [$this->messengerMessageId];
+
+        if (AiAgentMessageJob::conversationKeyColumnReady()) {
+            $conversationKey = AiAgentMessageJob::conversationKeyFor($this->tenantId, $this->messengerMessageId);
+
+            if ($conversationKey) {
+                if (AiAgentMessageJob::hasNewerPending($this->tenantId, $conversationKey, $this->messengerMessageId)) {
+                    // A message that arrived after this one is still
+                    // pending for the same conversation — its own
+                    // (later-firing) delayed job will pick up this
+                    // message as part of one coalesced turn. Returning
+                    // here without claiming or marking anything leaves
+                    // this row untouched ('pending') so that later job's
+                    // batch query still finds it — see
+                    // AiAgentMessageJob::coalescedBatchIds().
+                    return;
+                }
+
+                $batchIds = AiAgentMessageJob::coalescedBatchIds(
+                    $this->tenantId,
+                    $conversationKey,
+                    $this->messengerMessageId,
+                    (int) config('ai.message_coalesce_max_batch', 8)
+                );
+
+                if (! in_array($this->messengerMessageId, $batchIds, true)) {
+                    // Defensive — should not happen (this row was just
+                    // confirmed 'pending'/claimable moments ago), but
+                    // never silently drop the very message this job was
+                    // dispatched for.
+                    $batchIds[] = $this->messengerMessageId;
+                    sort($batchIds);
+                }
+            }
+        }
+
+        if (! AiAgentMessageJob::claimBatch($this->tenantId, $batchIds)) {
             // Already claimed by a prior attempt (retry), already
             // completed/failed, or somehow never recorded — in every
             // case, generating or sending anything here would risk a
@@ -105,10 +147,10 @@ class ProcessAiAgentMessage implements ShouldQueue
         }
 
         try {
-            $sent = $this->process($ai, $credit, $api, $style, $knowledge, $products, $memory, $emotion, $transcription, $handoff, $memories, $productImages);
+            $sent = $this->process($ai, $credit, $api, $style, $knowledge, $products, $memory, $emotion, $transcription, $handoff, $memories, $productImages, $postPurchase, $batchIds);
 
             if ($sent) {
-                AiAgentMessageJob::markCompleted($this->tenantId, $this->messengerMessageId);
+                AiAgentMessageJob::markCompletedBatch($this->tenantId, $batchIds);
             } else {
                 // process() returned early without throwing — tenant/
                 // message no longer eligible, AI got turned back off,
@@ -116,10 +158,10 @@ class ProcessAiAgentMessage implements ShouldQueue
                 // these are exceptions (each is an expected, already-
                 // logged-if-relevant outcome), but none of them sent a
                 // reply either, so this is not 'completed'.
-                AiAgentMessageJob::markFailed($this->tenantId, $this->messengerMessageId);
+                AiAgentMessageJob::markFailedBatch($this->tenantId, $batchIds);
             }
         } catch (\Throwable $e) {
-            AiAgentMessageJob::markFailed($this->tenantId, $this->messengerMessageId);
+            AiAgentMessageJob::markFailedBatch($this->tenantId, $batchIds);
 
             Log::warning('AI agent job: processing failed.', [
                 'tenant_id' => $this->tenantId,
@@ -127,10 +169,10 @@ class ProcessAiAgentMessage implements ShouldQueue
                 'exception' => get_class($e),
             ]);
 
-            // Deliberately not rethrown: markFailed() above already makes
-            // any further Laravel-level retry of this job a safe no-op
-            // via the claim() guard (status is no longer 'pending'), so
-            // there is nothing left for the framework's own retry/
+            // Deliberately not rethrown: markFailedBatch() above already
+            // makes any further Laravel-level retry of this job a safe
+            // no-op via the claim guard (status is no longer 'pending'),
+            // so there is nothing left for the framework's own retry/
             // failed_jobs machinery to protect against here — only noise
             // to avoid.
         }
@@ -145,7 +187,7 @@ class ProcessAiAgentMessage implements ShouldQueue
      *              them. None of these send a fallback/error message to the
      *              customer, per this phase's spec.
      */
-    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories, AiProductImageMemoryService $productImages): bool
+    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories, AiProductImageMemoryService $productImages, AiPostPurchaseContextService $postPurchase, array $batchIds = []): bool
     {
         $tenant = Tenant::withoutGlobalScopes()->find($this->tenantId);
 
@@ -262,18 +304,34 @@ class ProcessAiAgentMessage implements ShouldQueue
             return false;
         }
 
+        // Part 12 — message coalescing. When $batchIds has more than
+        // just this message (a rapid burst of fragments arrived within
+        // the debounce window), combine them into one logical customer
+        // turn — see combinedCustomerText()'s docblock. For the common,
+        // non-bursty case (batch of exactly this one message) this is
+        // byte-identical to (string) $message->message_text, so nothing
+        // about single-message turns changes.
+        $combinedText = $this->combinedCustomerText($batchIds, $message);
+
         // Phase 13 — deterministic, high-precision phrase match on
-        // whatever text this turn ends up with (post-transcription) —
-        // never AI-decided, see AiHandoffService's docblock. isActive()
-        // above already confirmed no handoff exists yet for this
-        // conversation, so trigger() here always creates a fresh row.
-        $justTriggeredHandoff = $handoff->customerRequestedHuman($message->message_text);
+        // whatever text this turn ends up with (post-transcription,
+        // post-coalescing) — never AI-decided, see AiHandoffService's
+        // docblock. isActive() above already confirmed no handoff exists
+        // yet for this conversation, so trigger() here always creates a
+        // fresh row.
+        $justTriggeredHandoff = $handoff->customerRequestedHuman($combinedText);
 
         if ($justTriggeredHandoff) {
             $handoff->trigger($this->tenantId, 'messenger', $psid, AiHandoffService::REASON_CUSTOMER_REQUESTED, $message->id);
         }
 
-        $history = $this->recentHistory($this->tenantId, $psid, $message->id);
+        // The history boundary must exclude EVERY message in this
+        // coalesced batch, not just the triggering one — otherwise an
+        // earlier fragment of the same turn would appear twice: once
+        // folded into $combinedText and once again as if it were a prior
+        // turn in $history.
+        $historyBoundaryId = $batchIds === [] ? $message->id : min($batchIds);
+        $history = $this->recentHistory($this->tenantId, $psid, $historyBoundaryId);
 
         // "AI মেমোরী" voice answers — a confident match is sent directly
         // via the existing Messenger attachment-send path, entirely
@@ -281,7 +339,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         // AiTenantMemoryService::bestAudioMatch()'s docblock.
         $audioMemory = $memories->bestAudioMatch(
             $this->tenantId,
-            [...array_column($history, 'content'), (string) $message->message_text]
+            [...array_column($history, 'content'), $combinedText]
         );
 
         if ($audioMemory) {
@@ -294,7 +352,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         // AiImageRequestResolution's docblock for what each outcome means.
         $imageResolution = $productImages->resolve(
             $this->tenantId,
-            (string) $message->message_text,
+            $combinedText,
             array_column($history, 'content')
         );
 
@@ -330,18 +388,31 @@ class ProcessAiAgentMessage implements ShouldQueue
         // deterministic string match, never a second AI call.
         $productData = $products->relevantProducts(
             $this->tenantId,
-            [...array_column($history, 'content'), $message->message_text]
+            [...array_column($history, 'content'), $combinedText]
         );
         // "Teach Your AI Agent" — best-matching saved Q&A for this exact
         // message (see AiTenantMemoryService's docblock for the cheap
         // keyword-overlap matching, never every saved memory).
         $tenantMemories = $memories->relevantMemories(
             $this->tenantId,
-            [...array_column($history, 'content'), $message->message_text]
+            [...array_column($history, 'content'), $combinedText]
         );
         // Phase 6 — keyed only by this exact psid (channel-verified, never
         // customer-typed) — see AiCustomerMemoryService's docblock.
         $customerMemory = $memory->forMessengerCustomer($this->tenantId, $psid);
+        // Generic, category-agnostic complaint/post-purchase-concern
+        // detection — see AiPostPurchaseContextService's docblock. Only
+        // ever looks this customer's own real order_items, never assumes
+        // a purchase happened when nothing verifies it.
+        $postPurchaseConcernContext = null;
+
+        if ($postPurchase->isPostPurchaseConcern($combinedText)) {
+            $postPurchaseConcernContext = $postPurchase->forMessengerCustomer(
+                $this->tenantId,
+                $psid,
+                [...array_column($history, 'content'), $combinedText]
+            ) ?? 'No verified purchase record was found for the specific product this customer seems to be referring to — do not assume or claim they purchased it; ask a brief clarifying question instead if genuinely needed.';
+        }
         // Phase 8 — a verified elapsed-wait fact, never a guessed mood —
         // see AiCustomerEmotionService's docblock.
         $customerEmotion = $emotion->forMessengerCustomer($this->tenantId, $psid, $message->id);
@@ -352,7 +423,7 @@ class ProcessAiAgentMessage implements ShouldQueue
             ? 'The customer just asked to speak with a real person, so this conversation has been flagged for your team to take over from here.'
             : null;
 
-        $result = $ai->generateReply($tenant->store_name, $history, (string) $message->message_text, $styleExamples, $customerName, $tenantInstructions, $businessKnowledge, $productData, $customerMemory, $customerEmotion, $imageUrl, $handoffNotice, $tenantMemories);
+        $result = $ai->generateReply($tenant->store_name, $history, $combinedText, $styleExamples, $customerName, $tenantInstructions, $businessKnowledge, $productData, $customerMemory, $customerEmotion, $imageUrl, $handoffNotice, $tenantMemories, $postPurchaseConcernContext);
 
         if (! $result) {
             // AiAgentService already logged why.
@@ -543,6 +614,70 @@ class ProcessAiAgentMessage implements ShouldQueue
             'video' => '[customer sent a video]',
             default => '[customer sent an attachment]',
         };
+    }
+
+    /**
+     * Part 12 — message coalescing. Joins every message in this batch
+     * into one logical customer turn, oldest-first, exactly the way a
+     * human reading the fragments in order would piece the sentence back
+     * together ("আমার" + "স্কিনে এখন" + "লালচে" + "দাগ" -> "আমার স্কিনে
+     * এখন লালচে দাগ"). $triggeringMessage's OWN text is read from the
+     * in-memory object (never re-queried) so a transcript written by
+     * transcribeAndPersist() moments earlier is always reflected.
+     *
+     * A batch of exactly one message (the overwhelming common case —
+     * most turns aren't part of a rapid burst) returns
+     * (string) $triggeringMessage->message_text completely unchanged
+     * from how this job behaved before coalescing existed — no trimming,
+     * no placeholder substitution — so nothing about a normal single-
+     * message turn is altered by this method existing.
+     *
+     * For an earlier batch member that has NO text (an image/audio
+     * attachment with no caption, arriving moments before a text
+     * fragment), this folds in the same honest attachmentPlaceholder()
+     * already used for history turns, rather than silently dropping it —
+     * but only resolveImageUrl()/transcribeAndPersist() acting on
+     * $triggeringMessage actually analyze an attachment's contents; an
+     * attachment on a NON-triggering batch member is acknowledged in
+     * text, never visually/audibly understood. Combining rapid bursts of
+     * pure text is this feature's actual target (see the spec example
+     * above); a burst that also mixes in media is a rarer edge case.
+     *
+     * @param  array<int, int>  $batchIds  Ascending, from
+     *                                     AiAgentMessageJob::coalescedBatchIds() — always includes
+     *                                     $triggeringMessage->id.
+     */
+    protected function combinedCustomerText(array $batchIds, MessengerMessage $triggeringMessage): string
+    {
+        if (count($batchIds) <= 1) {
+            return (string) $triggeringMessage->message_text;
+        }
+
+        $others = MessengerMessage::withoutGlobalScopes()
+            ->whereIn('id', array_diff($batchIds, [$triggeringMessage->id]))
+            ->orderBy('id')
+            ->get()
+            ->keyBy('id');
+
+        $parts = [];
+
+        foreach ($batchIds as $id) {
+            $m = $id === $triggeringMessage->id ? $triggeringMessage : $others->get($id);
+
+            if (! $m) {
+                continue; // e.g. deleted between claim and this read — skip rather than fail the whole turn
+            }
+
+            $text = $m->message_text;
+
+            if ($text !== null && trim($text) !== '') {
+                $parts[] = trim($text);
+            } elseif ($m->attachment_type) {
+                $parts[] = $this->attachmentPlaceholder($m->attachment_type);
+            }
+        }
+
+        return trim(implode(' ', $parts));
     }
 
     /**

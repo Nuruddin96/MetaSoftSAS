@@ -427,13 +427,36 @@ class MessengerWebhookController extends Controller
             return;
         }
 
-        AiAgentMessageJob::withoutGlobalScopes()->create([
+        // Part 12/13 — conversation_key (this channel's own verified
+        // sender_psid) is what lets the queued job later detect "a newer
+        // message for this same conversation is still pending" and
+        // coalesce a rapid burst of fragments into one reply — see
+        // AiAgentMessageJob::hasNewerPending()'s docblock. Omitted
+        // entirely (not just null) on a not-yet-migrated environment so
+        // the insert never references a column that might not exist.
+        $coalescingReady = AiAgentMessageJob::conversationKeyColumnReady();
+
+        $jobRow = [
             'tenant_id' => $tenantId,
             'messenger_message_id' => $message->id,
             'status' => 'pending',
-        ]);
+        ];
 
-        ProcessAiAgentMessage::dispatch($tenantId, $message->id);
+        if ($coalescingReady) {
+            $jobRow['conversation_key'] = $message->sender_psid;
+        }
+
+        AiAgentMessageJob::withoutGlobalScopes()->create($jobRow);
+
+        if ($coalescingReady) {
+            // Debounced, not immediate — gives a rapid burst of follow-up
+            // fragments time to arrive before the job that will actually
+            // reply runs. See config('ai.message_coalesce_debounce_seconds').
+            ProcessAiAgentMessage::dispatch($tenantId, $message->id)
+                ->delay(now()->addSeconds((int) config('ai.message_coalesce_debounce_seconds', 6)));
+        } else {
+            ProcessAiAgentMessage::dispatch($tenantId, $message->id);
+        }
     }
 
     /**

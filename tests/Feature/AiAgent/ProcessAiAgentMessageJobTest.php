@@ -4,6 +4,8 @@ namespace Tests\Feature\AiAgent;
 
 use App\Jobs\ProcessAiAgentMessage;
 use App\Models\MessengerMessage;
+use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Tenant;
@@ -1599,5 +1601,88 @@ class ProcessAiAgentMessageJobTest extends TestCase
         $reply = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-img-reply-4')->first();
         $this->assertNotNull($reply);
         $this->assertNull($reply->attachment_url, 'tenant B must never receive tenant A\'s saved product image');
+    }
+
+    // --- Part 7-9: post-purchase concern / complaint context -------------------------------
+
+    public function test_a_verified_post_purchase_concern_reaches_the_provider_as_a_confirmed_fact(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-pp-1', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $order = Order::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'order_number' => 'ORD-000077', 'messenger_psid' => 'cust-pp-1',
+            'customer_name' => 'Test Customer', 'customer_phone' => '01700000000', 'status' => 'delivered',
+        ]);
+        OrderItem::withoutGlobalScopes()->create(['tenant_id' => $tenant->id, 'order_id' => $order->id, 'product_name' => 'Winter Jacket']);
+
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-pp-1', 'mid-pp-1', 'আপু Winter Jacket টা ধোয়ার পর রং উঠে গেছে');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'দুঃখিত শুনে, একটু বিস্তারিত জানাবেন।']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-pp-reply-1']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(function ($request) {
+            $content = $request->data()['messages'][0]['content'] ?? '';
+
+            return str_contains($content, 'Verified')
+                && str_contains($content, 'ORD-000077')
+                && str_contains($content, 'Winter Jacket');
+        });
+    }
+
+    public function test_an_unverified_post_purchase_concern_never_claims_the_customer_purchased_anything(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-pp-2', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        // No order at all for this customer.
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-pp-2', 'mid-pp-2', 'এইটা ব্যবহার করার পর সমস্যা হচ্ছে');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'দুঃখিত, কোন পণ্যের কথা বলছেন?']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-pp-reply-2']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(function ($request) {
+            $content = $request->data()['messages'][0]['content'] ?? '';
+
+            return str_contains($content, 'No verified purchase record was found')
+                && ! str_contains($content, 'Verified: this customer\'s order');
+        });
+    }
+
+    public function test_an_ordinary_message_never_adds_a_post_purchase_concern_section(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-pp-3', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-pp-3', 'mid-pp-3', 'দাম কত?');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => '৫০০ টাকা।']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-pp-reply-3']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(fn ($request) => ! str_contains(
+            $request->data()['messages'][0]['content'] ?? '',
+            'This message may be a complaint'
+        ));
     }
 }
