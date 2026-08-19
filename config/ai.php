@@ -275,4 +275,28 @@ return [
     // entirely and sends a specific pre-recorded voice clip; see that
     // method's docblock for why a higher confidence bar is required.
     'memory_audio_match_min_ratio' => (float) env('AI_MEMORY_AUDIO_MATCH_MIN_RATIO', 0.6),
+
+    // AiProductImageMemoryService ("পণ্যের ছবি") tunables — mirrors the
+    // memory_match_* shape above. product_image_match_scan_limit bounds
+    // how many of a tenant's saved product images are scored per message
+    // (safety cap, not a real-world ceiling). product_image_match_min_ratio
+    // is the minimum fraction of a saved product name's significant words
+    // that must appear in the CURRENT message for an explicit name match
+    // (stage 1). product_image_relevance_min_ratio is the same idea, but
+    // per history LINE, for the no-product-named relevance-ranking
+    // fallback (stage 2) — a lower bar is fine there since many small
+    // per-line contributions are meant to add up, not one single strong
+    // match. product_image_relevance_signal_bonus multiplies a history
+    // line's contribution when it also asks a price/stock/usage/
+    // availability/order-shaped question about the product (see
+    // AiProductImageMemoryService::SIGNAL_WORDS). product_image_confidence_margin
+    // is how close a runner-up candidate's score can get to the leader's
+    // before the match is treated as ambiguous (a clarifying question is
+    // sent instead of guessing) — see AiProductImageMemoryService::
+    // pickWinner()'s docblock.
+    'product_image_match_scan_limit' => (int) env('AI_PRODUCT_IMAGE_MATCH_SCAN_LIMIT', 200),
+    'product_image_match_min_ratio' => (float) env('AI_PRODUCT_IMAGE_MATCH_MIN_RATIO', 0.5),
+    'product_image_relevance_min_ratio' => (float) env('AI_PRODUCT_IMAGE_RELEVANCE_MIN_RATIO', 0.5),
+    'product_image_relevance_signal_bonus' => (float) env('AI_PRODUCT_IMAGE_RELEVANCE_SIGNAL_BONUS', 1.5),
+    'product_image_confidence_margin' => (float) env('AI_PRODUCT_IMAGE_CONFIDENCE_MARGIN', 0.7),
 ];

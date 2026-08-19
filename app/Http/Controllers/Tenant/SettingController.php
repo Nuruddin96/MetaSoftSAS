@@ -10,6 +10,7 @@ use App\Models\FacebookPage;
 use App\Models\MarketingSetting;
 use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
+use App\Models\TenantProductImage;
 use App\Models\WhatsAppBusinessAccount;
 use App\Models\WhatsAppPhoneNumber;
 use App\Services\AI\AiCreditService;
@@ -78,6 +79,9 @@ class SettingController extends Controller
             // above so a deploy that lands before the chunk is imported
             // just shows an empty list instead of a 500.
             'aiMemories' => AiTenantMemory::tablesReady() ? AiTenantMemory::orderByDesc('id')->get() : collect(),
+            // "পণ্যের ছবি" (Product Image Memory) — additive table
+            // (database/sql/chunk50.sql), same tablesReady() guard.
+            'productImageMemories' => TenantProductImage::tablesReady() ? TenantProductImage::orderByDesc('id')->get() : collect(),
         ]);
     }
 
@@ -262,14 +266,16 @@ class SettingController extends Controller
             'ai_agent_enabled' => 'nullable|boolean',
             'messenger_ai_auto_reply_enabled' => 'nullable|boolean',
             'whatsapp_ai_auto_reply_enabled' => 'nullable|boolean',
-            // Free-text tenant instructions (Phase 3) — capped well below
-            // ai_usage_ledger-cost-relevant territory; this text is
-            // injected into every single AI reply's prompt (see
+            // Free-text tenant instructions (Phase 3, raised 2000->5000 for
+            // the Customer Sales + Customer Care Agent upgrade) — capped
+            // well below ai_usage_ledger-cost-relevant territory; this text
+            // is injected into every single AI reply's prompt (see
             // AiAgentService::systemPrompt()), so an unbounded textarea
             // would let one tenant silently inflate their own per-message
-            // token cost with no limit. 2000 chars is generous for
-            // realistic business instructions while staying bounded.
-            'ai_custom_instructions' => 'nullable|string|max:2000',
+            // token cost with no limit. 5000 chars is generous for a full
+            // business profile (policies, tone, product categories, etc.)
+            // while staying bounded.
+            'ai_custom_instructions' => 'nullable|string|max:5000',
         ]);
 
         StoreSetting::updateOrCreate(

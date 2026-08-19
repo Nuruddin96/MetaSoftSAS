@@ -6,6 +6,7 @@ use App\Jobs\ProcessWhatsAppAiAgentMessage;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Tenant;
+use App\Models\TenantProductImage;
 use App\Models\WhatsAppBusinessAccount;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
@@ -507,6 +508,18 @@ class ProcessWhatsAppAiAgentMessageJobTest extends TestCase
         ]);
 
         return $product;
+    }
+
+    /** "পণ্যের ছবি" — mirrors makeProduct() above. */
+    protected function makeProductImage(int $tenantId, string $productName): TenantProductImage
+    {
+        app()->instance('currentTenant', Tenant::find($tenantId));
+
+        return TenantProductImage::create([
+            'tenant_id' => $tenantId,
+            'product_name' => $productName,
+            'image_path' => 'product-image-memory/'.$tenantId.'/test.jpg',
+        ]);
     }
 
     public function test_the_cosrx_snail_cream_scenario_reaches_the_provider_with_real_price_and_stock(): void
@@ -1292,5 +1305,92 @@ class ProcessWhatsAppAiAgentMessageJobTest extends TestCase
         ProcessWhatsAppAiAgentMessage::dispatch($tenant->id, $messageId);
 
         $this->assertDatabaseHas('whatsapp_messages', ['wamid' => 'wamid.pause-reply-2']);
+    }
+
+    // --- "পণ্যের ছবি" (Product Image Memory) ------------------------------------------
+
+    public function test_a_pure_image_request_sends_the_image_with_a_caption_and_never_calls_openai(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->connectPhoneNumber($tenant->id);
+        $this->enableAiAgentAndWhatsAppAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+        $image = $this->makeProductImage($tenant->id, 'COSRX Snail Cream');
+        $messageId = $this->seedPendingInboundMessage($tenant->id, '8801700000001', 'wamid.img-1', 'COSRX Snail Cream এর ছবি দেন');
+
+        Http::fake(['*/messages' => Http::response(['messages' => [['id' => 'wamid.img-out-1']]])]);
+
+        ProcessWhatsAppAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+
+        $sent = WhatsAppMessage::withoutGlobalScopes()->where('wamid', 'wamid.img-out-1')->first();
+        $this->assertNotNull($sent, 'the stored product image must be sent as a single media message');
+        $this->assertSame('image', $sent->attachment_type);
+        $this->assertStringContainsString($image->image_path, $sent->attachment_url);
+        // WhatsApp supports an image caption in the same send (unlike
+        // Messenger's two-call shape) — see ProcessWhatsAppAiAgentMessage::
+        // sendProductImageReply()'s docblock.
+        $this->assertNotNull($sent->message_text);
+
+        $this->assertSame(100.0, (float) DB::table('ai_credit_accounts')->where('tenant_id', $tenant->id)->value('balance'));
+    }
+
+    public function test_an_image_request_combined_with_a_real_question_sends_the_image_and_still_answers_via_openai(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->connectPhoneNumber($tenant->id);
+        $this->enableAiAgentAndWhatsAppAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+        $this->makeProductImage($tenant->id, 'COSRX Snail Cream');
+        $messageId = $this->seedPendingInboundMessage($tenant->id, '8801700000002', 'wamid.img-2', 'COSRX Snail Cream এর দাম কত আর ছবি দেন');
+
+        Http::fake([
+            '*/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'দাম ৮৫০ টাকা।']]],
+                'usage' => ['prompt_tokens' => 40, 'completion_tokens' => 10],
+            ]),
+            '*/messages' => Http::sequence()
+                ->push(['messages' => [['id' => 'wamid.img-out-2a']]])
+                ->push(['messages' => [['id' => 'wamid.img-out-2b']]]),
+        ]);
+
+        ProcessWhatsAppAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+
+        $imageMsg = WhatsAppMessage::withoutGlobalScopes()->where('wamid', 'wamid.img-out-2a')->first();
+        $this->assertNotNull($imageMsg);
+        $this->assertSame('image', $imageMsg->attachment_type);
+        $this->assertNull($imageMsg->message_text, 'no caption on the send_and_continue path — the following text reply covers it');
+
+        $textMsg = WhatsAppMessage::withoutGlobalScopes()->where('wamid', 'wamid.img-out-2b')->first();
+        $this->assertNotNull($textMsg);
+        $this->assertSame('দাম ৮৫০ টাকা।', $textMsg->message_text);
+    }
+
+    public function test_an_ambiguous_image_request_sends_a_clarifying_question_and_never_calls_openai(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->connectPhoneNumber($tenant->id);
+        $this->enableAiAgentAndWhatsAppAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+        $this->makeProductImage($tenant->id, 'Snail Cream');
+        $this->makeProductImage($tenant->id, 'Snail Serum');
+        $messageId = $this->seedPendingInboundMessage($tenant->id, '8801700000003', 'wamid.img-3', 'snail এর ছবি দেন');
+
+        Http::fake(['*/messages' => Http::response(['messages' => [['id' => 'wamid.img-out-3']]])]);
+
+        ProcessWhatsAppAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+
+        $sent = WhatsAppMessage::withoutGlobalScopes()->where('wamid', 'wamid.img-out-3')->first();
+        $this->assertNotNull($sent);
+        $this->assertNull($sent->attachment_url, 'an ambiguous request must never send a (possibly wrong) image');
+        $this->assertStringContainsString('কোন পণ্যটির ছবি চান', $sent->message_text);
     }
 }

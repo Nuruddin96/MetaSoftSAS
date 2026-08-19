@@ -318,6 +318,18 @@ trait InteractsWithAiAgentSchema
                 $table->timestamps();
             });
         }
+
+        // "পণ্যের ছবি" (Product Image Memory) — see database/sql/
+        // chunk50.sql for the real (MySQL) definition.
+        if (! Schema::hasTable('tenant_product_images')) {
+            Schema::create('tenant_product_images', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('product_name', 255);
+                $table->string('image_path', 255);
+                $table->timestamps();
+            });
+        }
     }
 
     protected function makeTenant(array $attrs = []): Tenant

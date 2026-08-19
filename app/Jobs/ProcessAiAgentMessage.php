@@ -9,6 +9,7 @@ use App\Models\MessengerMessage;
 use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
+use App\Models\TenantProductImage;
 use App\Services\AI\AiAgentService;
 use App\Services\AI\AiAudioTranscriptionService;
 use App\Services\AI\AiConversationStyleService;
@@ -16,6 +17,7 @@ use App\Services\AI\AiCreditService;
 use App\Services\AI\AiCustomerEmotionService;
 use App\Services\AI\AiCustomerMemoryService;
 use App\Services\AI\AiHandoffService;
+use App\Services\AI\AiProductImageMemoryService;
 use App\Services\AI\AiProductKnowledgeService;
 use App\Services\AI\AiTenantKnowledgeService;
 use App\Services\AI\AiTenantMemoryService;
@@ -68,12 +70,27 @@ class ProcessAiAgentMessage implements ShouldQueue
     // on regardless of this property.
     public int $timeout = 30;
 
+    /**
+     * A handful of short, natural, non-gendered confirmations sent
+     * alongside a "পণ্যের ছবি" product image — rotated deterministically
+     * (never random, so this stays testable) rather than a single fixed
+     * phrase repeated on every send. Deliberately never calls OpenAI to
+     * word this — see AiProductImageMemoryService's docblock and
+     * AiImageRequestResolution::sendAndStop()'s docblock for why a
+     * confidently-resolved image never needs an AI call at all.
+     */
+    protected const PRODUCT_IMAGE_CAPTIONS = [
+        'এই যে ছবিটা 😊',
+        'অবশ্যই, ছবি পাঠালাম 😊',
+        'নিন, ছবিটা দেখে নিন 😊',
+    ];
+
     public function __construct(
         public readonly int $tenantId,
         public readonly int $messengerMessageId,
     ) {}
 
-    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories): void
+    public function handle(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories, AiProductImageMemoryService $productImages): void
     {
         if (! AiAgentMessageJob::tablesReady()) {
             return;
@@ -88,7 +105,7 @@ class ProcessAiAgentMessage implements ShouldQueue
         }
 
         try {
-            $sent = $this->process($ai, $credit, $api, $style, $knowledge, $products, $memory, $emotion, $transcription, $handoff, $memories);
+            $sent = $this->process($ai, $credit, $api, $style, $knowledge, $products, $memory, $emotion, $transcription, $handoff, $memories, $productImages);
 
             if ($sent) {
                 AiAgentMessageJob::markCompleted($this->tenantId, $this->messengerMessageId);
@@ -128,7 +145,7 @@ class ProcessAiAgentMessage implements ShouldQueue
      *              them. None of these send a fallback/error message to the
      *              customer, per this phase's spec.
      */
-    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories): bool
+    protected function process(AiAgentService $ai, AiCreditService $credit, MessengerApi $api, AiConversationStyleService $style, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiCustomerEmotionService $emotion, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories, AiProductImageMemoryService $productImages): bool
     {
         $tenant = Tenant::withoutGlobalScopes()->find($this->tenantId);
 
@@ -269,6 +286,34 @@ class ProcessAiAgentMessage implements ShouldQueue
 
         if ($audioMemory) {
             return $this->sendAudioMemoryReply($audioMemory, $psid, $api);
+        }
+
+        // "পণ্যের ছবি" — resolved the same way, BEFORE any OpenAI call,
+        // deterministically — see AiProductImageMemoryService::resolve()'s
+        // docblock for the two-stage matching and
+        // AiImageRequestResolution's docblock for what each outcome means.
+        $imageResolution = $productImages->resolve(
+            $this->tenantId,
+            (string) $message->message_text,
+            array_column($history, 'content')
+        );
+
+        if ($imageResolution->isClarify()) {
+            return $this->sendImageClarificationReply($psid, $api);
+        }
+
+        if ($imageResolution->isSendAndStop()) {
+            return $this->sendProductImageReply($imageResolution->image, $psid, $api);
+        }
+
+        if ($imageResolution->isSendAndContinue()) {
+            // The image is sent as a plain attachment (no caption) here;
+            // the customer's other question(s) still get a real text
+            // answer from the normal OpenAI flow below — see
+            // AiImageRequestResolution's sendAndContinue() docblock for
+            // why this is "one text reply plus necessary media," never
+            // two text replies.
+            $this->sendProductImageAttachmentOnly($imageResolution->image, $psid, $api);
         }
 
         $styleExamples = $style->messengerStyleExamples($this->tenantId);
@@ -628,6 +673,159 @@ class ProcessAiAgentMessage implements ShouldQueue
             'message_text' => null,
             'attachment_url' => $url,
             'attachment_type' => 'audio',
+            'direction' => 'out',
+            'status' => 'contacted',
+        ];
+
+        if (MessengerMessage::sentByColumnReady()) {
+            $attributes['sent_by'] = 'ai';
+        }
+
+        MessengerMessage::withoutGlobalScopes()->create($attributes);
+
+        return true;
+    }
+
+    /**
+     * "পণ্যের ছবি" — a confident, unambiguous image match where the
+     * message asked for nothing else. Sends the stored image plus one
+     * short canned caption, via the same attachment-send path a human
+     * staff reply already uses — entirely bypassing OpenAI, zero AI
+     * credit deducted (mirrors sendAudioMemoryReply() above).
+     */
+    protected function sendProductImageReply(TenantProductImage $productImage, string $psid, MessengerApi $api): bool
+    {
+        $token = $this->resolveOutboundToken($this->tenantId, $psid);
+
+        if (! $token) {
+            return false;
+        }
+
+        if (! $this->sendProductImageAttachmentOnly($productImage, $psid, $api, $token)) {
+            return false;
+        }
+
+        $caption = self::PRODUCT_IMAGE_CAPTIONS[$productImage->id % count(self::PRODUCT_IMAGE_CAPTIONS)];
+        $captionResult = $api->sendMessage($psid, $caption, $token);
+
+        if (isset($captionResult['error'])) {
+            Log::warning('AI agent job: product-image caption Messenger send failed.', [
+                'tenant_id' => $this->tenantId,
+                'error_type' => $captionResult['error']['type'] ?? null,
+            ]);
+
+            // The image itself already reached the customer — a failed
+            // one-line caption afterward doesn't undo that, so this turn
+            // still counts as a successful reply.
+            return true;
+        }
+
+        $attributes = [
+            'tenant_id' => $this->tenantId,
+            'sender_psid' => $psid,
+            'mid' => $captionResult['message_id'] ?? null,
+            'message_text' => $caption,
+            'direction' => 'out',
+            'status' => 'contacted',
+        ];
+
+        if (MessengerMessage::sentByColumnReady()) {
+            $attributes['sent_by'] = 'ai';
+        }
+
+        MessengerMessage::withoutGlobalScopes()->create($attributes);
+
+        return true;
+    }
+
+    /**
+     * "পণ্যের ছবি" — sends just the image attachment, no caption text.
+     * Used both by sendProductImageReply() above and directly by
+     * process() for the sendAndContinue case, where the upcoming normal
+     * OpenAI text reply is what addresses the rest of the customer's
+     * message — see AiImageRequestResolution::sendAndContinue()'s
+     * docblock.
+     */
+    protected function sendProductImageAttachmentOnly(TenantProductImage $productImage, string $psid, MessengerApi $api, ?string $token = null): bool
+    {
+        $token ??= $this->resolveOutboundToken($this->tenantId, $psid);
+
+        if (! $token) {
+            return false;
+        }
+
+        try {
+            $api->sendTypingOn($psid, $token);
+        } catch (\Throwable $e) {
+            // Purely cosmetic — never let a failure here block the actual send.
+        }
+
+        $this->humanDelay();
+
+        $url = asset('storage/'.$productImage->image_path);
+        $sendResult = $api->sendAttachment($psid, $url, 'image', $token);
+
+        if (isset($sendResult['error'])) {
+            Log::warning('AI agent job: saved product-image Messenger send failed.', [
+                'tenant_id' => $this->tenantId,
+                'error_type' => $sendResult['error']['type'] ?? null,
+            ]);
+
+            return false;
+        }
+
+        $attributes = [
+            'tenant_id' => $this->tenantId,
+            'sender_psid' => $psid,
+            'mid' => $sendResult['message_id'] ?? null,
+            'message_text' => null,
+            'attachment_url' => $url,
+            'attachment_type' => 'image',
+            'direction' => 'out',
+            'status' => 'contacted',
+        ];
+
+        if (MessengerMessage::sentByColumnReady()) {
+            $attributes['sent_by'] = 'ai';
+        }
+
+        MessengerMessage::withoutGlobalScopes()->create($attributes);
+
+        return true;
+    }
+
+    /**
+     * "পণ্যের ছবি" — two or more saved images are comparably plausible
+     * for this image request (AiImageRequestResolution::clarify()). Sends
+     * one short, deterministic clarifying question — never OpenAI, never
+     * a guessed image — see AiProductImageMemoryService::pickWinner()'s
+     * docblock.
+     */
+    protected function sendImageClarificationReply(string $psid, MessengerApi $api): bool
+    {
+        $token = $this->resolveOutboundToken($this->tenantId, $psid);
+
+        if (! $token) {
+            return false;
+        }
+
+        $reply = 'অবশ্যই 😊 কোন পণ্যটির ছবি চান?';
+        $sendResult = $api->sendMessage($psid, $reply, $token);
+
+        if (isset($sendResult['error'])) {
+            Log::warning('AI agent job: image-clarification Messenger send failed.', [
+                'tenant_id' => $this->tenantId,
+                'error_type' => $sendResult['error']['type'] ?? null,
+            ]);
+
+            return false;
+        }
+
+        $attributes = [
+            'tenant_id' => $this->tenantId,
+            'sender_psid' => $psid,
+            'mid' => $sendResult['message_id'] ?? null,
+            'message_text' => $reply,
             'direction' => 'out',
             'status' => 'contacted',
         ];

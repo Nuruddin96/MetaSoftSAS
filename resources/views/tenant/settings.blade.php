@@ -435,10 +435,10 @@
             <div class="border-t border-ink/10 pt-3 mb-3">
                 <label class="text-sm font-semibold block mb-1">AI-কে আপনার ব্যবসার বিষয়ে কী কী জানা দরকার?</label>
                 <p class="text-xs text-mute mb-2">যেমন — ব্যবহারের ধরন, delivery charge, পেমেন্ট মেথড, discount policy, কাস্টমারের সাথে কথা বলার ধরন, কোন জিনিস কখনো বলা যাবে না — যা লিখবেন AI সবসময় সেটা মাথায় রেখে রিপ্লাই দেবে। তবে এটা AI-এর মূল নিরাপত্তা নিয়ম override করতে পারবে না (যেমন — না জানা দাম বানিয়ে বলা)।</p>
-                <textarea name="ai_custom_instructions" rows="5" maxlength="2000"
+                <textarea name="ai_custom_instructions" rows="8" maxlength="5000"
                     placeholder="উদাহরণ:&#10;আমাদের কাস্টমারদের সাথে বন্ধুসুলভভাবে কথা বলবে।&#10;ঢাকার ভিতরে delivery charge ৮০ টাকা, বাইরে ১৫০ টাকা।&#10;ক্যাশ অন ডেলিভারি আছে।&#10;কোনো discount নিজে থেকে দিবে না।&#10;কাস্টমার রাগ করলে argument করবে না।"
                     class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">{{ $store['ai_custom_instructions'] ?? '' }}</textarea>
-                <p class="text-xs text-mute mt-1 text-right">সর্বোচ্চ ২০০০ অক্ষর</p>
+                <p class="text-xs text-mute mt-1 text-right">সর্বোচ্চ ৫০০০ অক্ষর</p>
             </div>
 
             <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
@@ -497,6 +497,56 @@
                 </details>
             @else
                 <p class="text-xs text-mute">এখনো কোনো মেমোরী সেভ করা হয়নি।</p>
+            @endif
+        </div>
+
+        <div class="border-t border-ink/10 pt-4 mt-4">
+            <label class="text-sm font-semibold block mb-1">🖼️ পণ্যের ছবি</label>
+            <p class="text-xs text-mute mb-3">পণ্যের নাম আর ছবি সেভ করুন — কাস্টমার "ছবি দেন" / "pic den" লিখলে AI সঠিক পণ্যের আসল ছবিটাই পাঠাবে (আলাদা করে কিছু লিখতে হবে না)। একাধিক পণ্যের নাম কাছাকাছি হলে, বা কথোপকথনে কোন পণ্যের কথা হচ্ছে স্পষ্ট না হলে, AI ভুল ছবি না পাঠিয়ে জিজ্ঞেস করবে কোনটা চান।</p>
+            <form method="POST" action="{{ route('tenant.product-image-memory.store') }}" enctype="multipart/form-data" class="space-y-2 mb-4">
+                @csrf
+                <input name="product_name" required maxlength="255" placeholder="পণ্যের নাম — যেমন: Brilliant Skin Rejuvenating Set"
+                       class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                <input type="file" name="image" required accept="image/jpeg,image/png,image/webp"
+                       class="w-full text-sm">
+                <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
+            </form>
+
+            @if ($productImageMemories->isNotEmpty())
+                <details class="rounded-lg border border-ink/10">
+                    <summary class="px-3 py-2.5 text-xs font-semibold text-mute cursor-pointer select-none">সেভ করা ছবি ({{ $productImageMemories->count() }})</summary>
+                    <div class="border-t border-ink/10 p-2 space-y-2">
+                        @foreach ($productImageMemories as $productImage)
+                            <details class="rounded-lg border border-ink/10 bg-white">
+                                <summary class="px-3 py-2.5 text-sm font-semibold cursor-pointer select-none flex items-center gap-2">
+                                    <img src="{{ asset('storage/'.$productImage->image_path) }}" alt="" class="w-8 h-8 rounded object-cover">
+                                    {{ $productImage->product_name }}
+                                </summary>
+                                <div class="px-3 pb-3">
+                                    <div class="flex items-center gap-3 mt-2">
+                                        <details class="inline-block">
+                                            <summary class="text-xs text-leaf hover:underline cursor-pointer">এডিট</summary>
+                                            <form method="POST" action="{{ route('tenant.product-image-memory.update', $productImage) }}" enctype="multipart/form-data" class="space-y-2 mt-2">
+                                                @csrf @method('PUT')
+                                                <input name="product_name" required maxlength="255" value="{{ $productImage->product_name }}"
+                                                       class="w-full rounded-btn border border-ink/15 px-3 py-2 text-sm">
+                                                <input type="file" name="image" accept="image/jpeg,image/png,image/webp" class="w-full text-sm">
+                                                <p class="text-xs text-mute">নতুন ছবি না দিলে আগের ছবিটাই থাকবে।</p>
+                                                <x-ui.button type="submit" variant="accent" size="sm">আপডেট করুন</x-ui.button>
+                                            </form>
+                                        </details>
+                                        <form method="POST" action="{{ route('tenant.product-image-memory.destroy', $productImage) }}" onsubmit="return confirm('এই পণ্যের ছবিটি মুছে ফেলবেন?')">
+                                            @csrf @method('DELETE')
+                                            <button class="text-xs text-red-600 hover:underline">ডিলিট</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </details>
+                        @endforeach
+                    </div>
+                </details>
+            @else
+                <p class="text-xs text-mute">এখনো কোনো পণ্যের ছবি সেভ করা হয়নি।</p>
             @endif
         </div>
     </x-ui.collapsible-card>

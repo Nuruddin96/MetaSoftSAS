@@ -49,6 +49,7 @@ use App\Http\Controllers\Tenant\NotificationPreferenceController;
 use App\Http\Controllers\Tenant\OrderController;
 use App\Http\Controllers\Tenant\PosController;
 use App\Http\Controllers\Tenant\ProductController;
+use App\Http\Controllers\Tenant\ProductImageMemoryController;
 use App\Http\Controllers\Tenant\ProductImportController;
 use App\Http\Controllers\Tenant\ProductSourceController;
 use App\Http\Controllers\Tenant\PushSubscriptionController;
@@ -404,6 +405,14 @@ $tenantRoutes = function () {
             Route::post('ai-memory', [AiMemoryController::class, 'store'])->name('ai-memory.store');
             Route::put('ai-memory/{aiMemory}', [AiMemoryController::class, 'update'])->name('ai-memory.update');
             Route::delete('ai-memory/{aiMemory}', [AiMemoryController::class, 'destroy'])->name('ai-memory.destroy');
+
+            // "পণ্যের ছবি" (Product Image Memory) — tenant-authored
+            // product-name -> image mapping (App\Models\
+            // TenantProductImage). Same tenant-isolated route-binding
+            // pattern as {aiMemory} above.
+            Route::post('product-image-memory', [ProductImageMemoryController::class, 'store'])->name('product-image-memory.store');
+            Route::put('product-image-memory/{productImage}', [ProductImageMemoryController::class, 'update'])->name('product-image-memory.update');
+            Route::delete('product-image-memory/{productImage}', [ProductImageMemoryController::class, 'destroy'])->name('product-image-memory.destroy');
 
             // Facebook OAuth "Connect Facebook" (Phase 1). The callback these
             // redirect out to is registered separately, outside this tenant
