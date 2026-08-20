@@ -10,6 +10,8 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Laravel\Sanctum\Http\Middleware\CheckAbilities;
+use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -26,6 +28,15 @@ return Application::configure(basePath: dirname(__DIR__))
             // Mobile API only — see that middleware's docblock for why
             // resolve.tenant (URL-driven) doesn't apply to API requests.
             'bind.tenant.token' => BindTenantFromSanctumUser::class,
+            // Remote Support device-credential routes (heartbeat/signal) —
+            // gates by Sanctum token ability so a device credential can
+            // never be used to call ordinary Business App endpoints and
+            // vice versa (see MobileDevice's docblock on why device
+            // credentials are separate tokens from the user's login token).
+            // Laravel's default skeleton doesn't alias Sanctum's own
+            // ability middleware, so this registers it explicitly.
+            'abilities' => CheckAbilities::class,
+            'ability' => CheckForAnyAbility::class,
         ]);
 
         // Must run before routing (not a route middleware) so a verified

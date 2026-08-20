@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'সুপার অ্যাডমিন') — MetaSoft BD</title>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@700;800&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -26,6 +27,7 @@
                 ['super.clients.payments', 'রেগুলার ক্লায়েন্ট পেমেন্ট', '💵'],
                 ['super.advertising.index', 'অ্যাডভার্টাইজিং বিলিং', '📢'],
                 ['super.ai-credit.index', 'AI ক্রেডিট', '🤖'],
+                ['super.remote-support.index', 'রিমোট সাপোর্ট', '🖥️'],
                 ['super.plans', 'প্ল্যান', '📋'],
                 ['super.announcement', 'টেনেন্ট ঘোষণা', '📢'],
                 ['super.source.products', 'সোর্স — পণ্য', '📦'],
