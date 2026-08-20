@@ -96,6 +96,7 @@ class DeviceController extends Controller
         // doc comment for the interval this trades off against battery use.
         $activeSession = $device->sessions()
             ->where('status', '!=', RemoteSupportSession::STATUS_ENDED)
+            ->where('expires_at', '>', now())
             ->latest('id')
             ->first();
 

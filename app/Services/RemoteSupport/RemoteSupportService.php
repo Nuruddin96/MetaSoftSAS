@@ -276,7 +276,21 @@ class RemoteSupportService
         $existing = RemoteSupportSession::where('mobile_device_id', $device->id)
             ->where('status', '!=', RemoteSupportSession::STATUS_ENDED)
             ->first();
-        abort_if($existing, 409, 'এই ডিভাইসে ইতিমধ্যে একটি সেশন চলছে।');
+
+        if ($existing) {
+            // A session past its expires_at hard cap was never explicitly
+            // stopped (device went offline mid-session, admin closed the
+            // tab, etc.) — self-heal it here rather than requiring a
+            // scheduled sweep job, so an abandoned session can't
+            // permanently block ever starting a new one on this device
+            // (RemoteSupportSignal::pushSignal already independently
+            // refuses to relay anything through it via isOpen()).
+            if ($existing->isExpired()) {
+                $this->stopSession($existing, reason: 'expired', actorType: 'system');
+            } else {
+                abort(409, 'এই ডিভাইসে ইতিমধ্যে একটি সেশন চলছে।');
+            }
+        }
 
         return DB::transaction(function () use ($device, $admin, $includeMicrophone, $includeCamera) {
             $session = RemoteSupportSession::create([

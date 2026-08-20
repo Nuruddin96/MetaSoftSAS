@@ -142,6 +142,29 @@ class DeviceApiTest extends TestCase
             ->assertJsonPath('active_session.include_microphone', true);
     }
 
+    public function test_heartbeat_does_not_surface_an_expired_abandoned_session_as_active(): void
+    {
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $token = $user->createToken('device:uuid-1', ['device:heartbeat']);
+        $device = MobileDevice::create([
+            'tenant_id' => $tenant->id, 'user_id' => $user->id, 'device_uuid' => 'uuid-1',
+            'status' => 'on_ready', 'remote_support_enabled' => true,
+            'credential_token_id' => $token->accessToken->id,
+        ]);
+        RemoteSupportSession::create([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => 1,
+            'status' => 'active', 'session_token' => 'stale', 'started_at' => now()->subHour(),
+            'expires_at' => now()->subMinutes(1),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken)
+            ->postJson('/api/mobile/v1/devices/heartbeat', ['foreground_service_running' => true])
+            ->assertOk()
+            ->assertJsonPath('active_session', null);
+    }
+
     public function test_heartbeat_leaves_device_not_ready_when_a_required_permission_is_missing(): void
     {
         $tenant = $this->makeTenant();

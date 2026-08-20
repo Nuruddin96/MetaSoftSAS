@@ -193,6 +193,55 @@ class RemoteSupportControllerTest extends TestCase
         $this->assertDatabaseHas('device_events', ['mobile_device_id' => $device->id, 'event_type' => 'session_started']);
     }
 
+    public function test_a_second_session_is_rejected_while_the_first_is_still_open(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
+        ]);
+        DB::table('remote_support_sessions')->insert([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'still-open', 'started_at' => now(),
+            'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.session.start', [$tenant, $device]), [])
+            ->assertStatus(409);
+
+        $this->assertDatabaseCount('remote_support_sessions', 1);
+    }
+
+    public function test_an_abandoned_expired_session_self_heals_and_does_not_block_a_new_one(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
+        ]);
+        // Never explicitly stopped (e.g. the admin closed the browser tab
+        // mid-session) — still `active` in the DB, but its hard cap has
+        // already passed.
+        DB::table('remote_support_sessions')->insert([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'abandoned', 'started_at' => now()->subHour(),
+            'expires_at' => now()->subMinutes(5), 'created_at' => now()->subHour(), 'updated_at' => now()->subHour(),
+        ]);
+
+        $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.session.start', [$tenant, $device]), [])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('remote_support_sessions', ['session_token' => 'abandoned', 'status' => 'ended', 'end_reason' => 'expired']);
+        $this->assertDatabaseHas('remote_support_sessions', ['mobile_device_id' => $device->id, 'status' => 'active']);
+        $this->assertDatabaseCount('remote_support_sessions', 2);
+    }
+
     public function test_a_device_stuck_offline_is_not_eligible_even_if_status_column_says_on_ready(): void
     {
         $tenant = $this->makeTenant();
