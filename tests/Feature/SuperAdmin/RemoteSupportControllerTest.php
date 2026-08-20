@@ -39,6 +39,63 @@ class RemoteSupportControllerTest extends TestCase
         $this->get(route('super.remote-support.show', $tenant))->assertRedirect();
     }
 
+    /**
+     * Renders the ACTUAL shared Super Admin layout (layouts/super.blade.php)
+     * that every other Super Admin page uses — the nav item lives there,
+     * not in this feature's own view, so this is the real integration
+     * check for "I cannot see any Remote Support option in the Super Admin
+     * dashboard": it proves the menu link is actually present in the
+     * rendered HTML a logged-in Super Admin's browser receives, not just
+     * that the route exists in isolation.
+     */
+    public function test_the_remote_support_menu_item_is_visible_to_a_logged_in_super_admin(): void
+    {
+        $admin = $this->makeSuperAdmin();
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.index'));
+
+        $response->assertOk();
+        $response->assertSee('রিমোট সাপোর্ট');
+        $response->assertSee(route('super.remote-support.index'), escape: false);
+    }
+
+    public function test_index_lists_tenants_with_their_remote_support_status(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $enabledTenant = $this->makeTenant(['store_name' => 'Enabled Shop']);
+        RemoteSupportSetting::create(['tenant_id' => $enabledTenant->id, 'enabled' => true]);
+        $disabledTenant = $this->makeTenant(['store_name' => 'Disabled Shop']);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.index'));
+
+        $response->assertOk();
+        $response->assertSee('Enabled Shop');
+        $response->assertSee('Disabled Shop');
+    }
+
+    public function test_show_page_surfaces_device_approval_and_open_live_screen_action(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $pending = $this->makeDevice($tenant->id, $user->id, ['device_model' => 'Pixel 8', 'verification_code' => 'CODE99']);
+        $ready = $this->makeDevice($tenant->id, $user->id, [
+            'device_model' => 'Samsung A14', 'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
+
+        $response->assertOk();
+        // Pending device: verification-code approval form, not a live-screen action.
+        $response->assertSee('Pixel 8');
+        $response->assertSee('অনুমোদন');
+        // Ready device: the actual "Open Live Screen" action.
+        $response->assertSee('Samsung A14');
+        $response->assertSee('লাইভ স্ক্রিন দেখুন');
+        $response->assertSee(route('super.remote-support.session.start', [$tenant, $ready]), escape: false);
+    }
+
     public function test_super_admin_can_enable_remote_support_for_a_tenant(): void
     {
         $admin = $this->makeSuperAdmin();
