@@ -162,7 +162,8 @@ CREATE TABLE users (
     remember_token VARCHAR(100) DEFAULT NULL,
     created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-    UNIQUE KEY uq_tenant_email (tenant_id, email)
+    UNIQUE KEY uq_tenant_email (tenant_id, email),
+    INDEX idx_users_email (email)
 );
 
 CREATE TABLE warehouses (

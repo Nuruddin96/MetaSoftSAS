@@ -21,7 +21,7 @@ class LogoutTest extends TestCase
         $this->makeUser($tenant->id, ['email' => 'owner@example.com']);
 
         $login = $this->postJson('/api/mobile/v1/auth/login', [
-            'subdomain' => 'logout-shop', 'email' => 'owner@example.com', 'password' => 'password',
+            'email' => 'owner@example.com', 'password' => 'password',
         ])->assertOk();
 
         $token = $login->json('token');
