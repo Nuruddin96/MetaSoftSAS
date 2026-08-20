@@ -4,7 +4,6 @@ namespace Tests\Feature\SuperAdmin;
 
 use App\Models\MobileDevice;
 use App\Models\RemoteSupportSetting;
-use App\Models\Tenant;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\InteractsWithRemoteSupportSchema;
@@ -27,8 +26,7 @@ class RemoteSupportControllerTest extends TestCase
             'tenant_id' => $tenantId,
             'user_id' => $userId,
             'device_uuid' => 'dev-'.uniqid(),
-            'status' => 'pending_verification',
-            'verification_code' => 'ABC123',
+            'status' => 'off',
         ], $attrs));
     }
 
@@ -73,13 +71,12 @@ class RemoteSupportControllerTest extends TestCase
         $response->assertSee('Disabled Shop');
     }
 
-    public function test_show_page_surfaces_device_approval_and_open_live_screen_action(): void
+    public function test_show_page_surfaces_the_open_live_screen_action_for_a_ready_device(): void
     {
         $admin = $this->makeSuperAdmin();
         $tenant = $this->makeTenant();
         RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
         $user = $this->makeUser($tenant->id);
-        $pending = $this->makeDevice($tenant->id, $user->id, ['device_model' => 'Pixel 8', 'verification_code' => 'CODE99']);
         $ready = $this->makeDevice($tenant->id, $user->id, [
             'device_model' => 'Samsung A14', 'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
         ]);
@@ -87,13 +84,14 @@ class RemoteSupportControllerTest extends TestCase
         $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
 
         $response->assertOk();
-        // Pending device: verification-code approval form, not a live-screen action.
-        $response->assertSee('Pixel 8');
-        $response->assertSee('অনুমোদন');
-        // Ready device: the actual "Open Live Screen" action.
         $response->assertSee('Samsung A14');
         $response->assertSee('লাইভ স্ক্রিন দেখুন');
         $response->assertSee(route('super.remote-support.session.start', [$tenant, $ready]), escape: false);
+        // No approval workflow anywhere on this page — see
+        // RemoteSupportService::registerDevice()'s doc comment on why
+        // that step was removed entirely, not just hidden.
+        $response->assertDontSee('verification_code');
+        $response->assertDontSee('অনুমোদন');
     }
 
     public function test_super_admin_can_enable_remote_support_for_a_tenant(): void
@@ -120,47 +118,6 @@ class RemoteSupportControllerTest extends TestCase
             ->assertRedirect();
 
         $this->assertFalse($tenant->fresh()->hasRemoteSupportEnabled());
-    }
-
-    public function test_approving_a_device_requires_the_correct_verification_code(): void
-    {
-        $admin = $this->makeSuperAdmin();
-        $tenant = $this->makeTenant();
-        $user = $this->makeUser($tenant->id);
-        $device = $this->makeDevice($tenant->id, $user->id, ['verification_code' => 'WXYZ99']);
-
-        $this->actingAs($admin, 'super_admin')
-            ->post(route('super.remote-support.devices.approve', [$tenant, $device]), ['verification_code' => 'WRONG1'])
-            ->assertSessionHasErrors('verification_code');
-
-        $this->assertSame('pending_verification', $device->fresh()->status);
-
-        $this->actingAs($admin, 'super_admin')
-            ->post(route('super.remote-support.devices.approve', [$tenant, $device]), ['verification_code' => 'WXYZ99'])
-            ->assertRedirect();
-
-        $fresh = $device->fresh();
-        $this->assertSame('off', $fresh->status);
-        $this->assertTrue((bool) $fresh->remote_support_enabled);
-        $this->assertDatabaseHas('device_events', ['mobile_device_id' => $device->id, 'event_type' => 'device_approved']);
-    }
-
-    public function test_super_admin_from_another_tenant_route_cannot_approve_a_different_tenants_device(): void
-    {
-        $admin = $this->makeSuperAdmin();
-        $tenantA = $this->makeTenant();
-        $tenantB = $this->makeTenant();
-        $userB = $this->makeUser($tenantB->id);
-        $device = $this->makeDevice($tenantB->id, $userB->id, ['verification_code' => 'CODE12']);
-
-        // Device belongs to tenant B but the route is scoped to tenant A —
-        // must 404, never leak/act on another tenant's device (tenant
-        // isolation, see RemoteSupportController's docblock).
-        $this->actingAs($admin, 'super_admin')
-            ->post(route('super.remote-support.devices.approve', [$tenantA, $device]), ['verification_code' => 'CODE12'])
-            ->assertNotFound();
-
-        $this->assertSame('pending_verification', $device->fresh()->status);
     }
 
     public function test_revoking_a_device_ends_any_open_session_and_deletes_its_credential(): void

@@ -52,14 +52,7 @@
                 <td class="px-4 py-3 text-mute text-xs">{{ $d->last_seen_at?->diffForHumans() ?? '—' }}</td>
                 <td class="px-4 py-3 text-mute text-xs">{{ $d->battery_pct !== null ? $d->battery_pct.'%'.($d->charging ? ' ⚡' : '') : '—' }}</td>
                 <td class="px-4 py-3 space-y-2">
-                    @if ($d->status === 'pending_verification')
-                        <form method="POST" action="{{ route('super.remote-support.devices.approve', [$tenant, $d]) }}" class="flex gap-2">
-                            @csrf
-                            <input name="verification_code" placeholder="কোড" required
-                                   class="rounded-lg border border-ink/15 px-2 py-1.5 text-xs w-24">
-                            <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leaf text-white">অনুমোদন</button>
-                        </form>
-                    @elseif ($d->status === 'revoked')
+                    @if ($d->status === 'revoked')
                         <span class="text-mute text-xs">{{ $d->revoke_reason }}</span>
                     @else
                         <div class="flex flex-wrap gap-2">

@@ -32,7 +32,16 @@ class DeviceApiTest extends TestCase
         $this->assertDatabaseCount('mobile_devices', 0);
     }
 
-    public function test_registration_creates_a_pending_device_and_issues_a_separate_device_token(): void
+    /**
+     * The whole point of the "Allow Access" flow (see SetupController on
+     * the Dart side): registration itself auto-approves immediately, no
+     * verification code, no Super Admin per-device confirmation step —
+     * see RemoteSupportService::registerDevice()'s doc comment for why
+     * that's still safe. Tenant-level enable (checked above,
+     * test_registration_is_rejected_when_tenant_does_not_have_remote_support_enabled)
+     * is the real gate.
+     */
+    public function test_registration_auto_approves_and_issues_a_separate_device_token(): void
     {
         $tenant = $this->makeTenant();
         RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
@@ -48,20 +57,24 @@ class DeviceApiTest extends TestCase
                 'app_version' => '1.0.0',
             ])->assertCreated();
 
-        $response->assertJsonPath('status', 'pending_verification');
-        $this->assertNotEmpty($response->json('verification_code'));
+        $response->assertJsonPath('status', 'off');
+        $response->assertJsonMissing(['verification_code']);
         $this->assertNotEmpty($response->json('device_token'));
 
         $device = MobileDevice::where('device_uuid', 'uuid-1')->first();
         $this->assertSame($tenant->id, $device->tenant_id);
+        $this->assertTrue((bool) $device->remote_support_enabled);
+        $this->assertNotNull($device->approved_at);
+        $this->assertNull($device->approved_by_super_admin_id);
         $this->assertNotNull($device->credential_token_id);
+        $this->assertDatabaseHas('device_events', ['mobile_device_id' => $device->id, 'event_type' => 'device_registered_auto_approved']);
 
         // The device token must be a DIFFERENT credential than the user's
         // own login token (security-model.md §4), not the same row.
         $this->assertNotSame($loginToken->accessToken->id, $device->credential_token_id);
     }
 
-    public function test_re_registering_an_already_approved_device_resets_it_to_pending_rather_than_keeping_trust(): void
+    public function test_re_registering_a_lost_uuid_device_auto_approves_again(): void
     {
         $tenant = $this->makeTenant();
         RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
@@ -75,7 +88,33 @@ class DeviceApiTest extends TestCase
         $this->postJson('/api/mobile/v1/devices/register', ['device_uuid' => 'uuid-1'])->assertCreated();
 
         $device = MobileDevice::where('device_uuid', 'uuid-1')->first();
-        $this->assertSame('pending_verification', $device->status);
+        $this->assertSame('off', $device->status);
+        $this->assertTrue((bool) $device->remote_support_enabled);
+    }
+
+    /**
+     * The one case that must NOT auto-approve: a Super Admin revoking a
+     * device is a deliberate security decision and must stay terminal
+     * regardless of who re-registers that device_uuid — otherwise
+     * removing the code-paste workflow would have quietly made revoke
+     * bypassable by the tenant themselves.
+     */
+    public function test_a_revoked_device_cannot_re_register_itself_back_to_trusted(): void
+    {
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        MobileDevice::create([
+            'tenant_id' => $tenant->id, 'user_id' => $user->id, 'device_uuid' => 'uuid-1',
+            'status' => 'revoked', 'remote_support_enabled' => false,
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/mobile/v1/devices/register', ['device_uuid' => 'uuid-1'])
+            ->assertStatus(403);
+
+        $device = MobileDevice::where('device_uuid', 'uuid-1')->first();
+        $this->assertSame('revoked', $device->status);
         $this->assertFalse((bool) $device->remote_support_enabled);
     }
 

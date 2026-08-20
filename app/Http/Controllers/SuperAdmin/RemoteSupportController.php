@@ -60,15 +60,6 @@ class RemoteSupportController extends Controller
         return back()->with('success', $enabled ? 'রিমোট সাপোর্ট চালু করা হয়েছে।' : 'রিমোট সাপোর্ট বন্ধ করা হয়েছে।');
     }
 
-    public function approveDevice(Request $request, Tenant $tenant, int $device)
-    {
-        $data = $request->validate(['verification_code' => 'required|string|max:12']);
-
-        $this->service->approveDevice($this->device($tenant, $device), auth('super_admin')->user(), $data['verification_code']);
-
-        return back()->with('success', 'ডিভাইসটি অনুমোদিত হয়েছে।');
-    }
-
     public function revokeDevice(Request $request, Tenant $tenant, int $device)
     {
         $data = $request->validate(['reason' => 'nullable|string|max:255']);

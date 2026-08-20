@@ -197,8 +197,6 @@ Route::domain(config('app.central_domain'))->group(function () {
                 Route::get('/', [SuperRemoteSupportController::class, 'index'])->name('index');
                 Route::get('{tenant}', [SuperRemoteSupportController::class, 'show'])->name('show');
                 Route::post('{tenant}/toggle', [SuperRemoteSupportController::class, 'toggleTenant'])->name('toggle');
-                Route::post('{tenant}/devices/{device}/approve', [SuperRemoteSupportController::class, 'approveDevice'])
-                    ->whereNumber('device')->name('devices.approve');
                 Route::post('{tenant}/devices/{device}/revoke', [SuperRemoteSupportController::class, 'revokeDevice'])
                     ->whereNumber('device')->name('devices.revoke');
                 Route::post('{tenant}/devices/{device}/toggle', [SuperRemoteSupportController::class, 'toggleDevice'])

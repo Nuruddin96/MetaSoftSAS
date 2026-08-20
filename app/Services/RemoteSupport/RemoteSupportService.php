@@ -13,16 +13,23 @@ use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Single place every Remote Support state mutation goes through — tenant
- * enable/disable, device registration/approval/revocation, heartbeats,
- * and session lifecycle — so every transition is validated against the
- * three-tier trust model (docs/security-model.md §3) and logged as a
- * DeviceEvent (docs/device-lifecycle.md "Session audit trail") in the same
- * transaction as the change it describes. Controllers never write to these
- * tables directly.
+ * enable/disable, device registration (auto-approved, see registerDevice's
+ * doc comment) and revocation, heartbeats, and session lifecycle — so
+ * every transition is validated and logged as a DeviceEvent
+ * (docs/device-lifecycle.md "Session audit trail") in the same transaction
+ * as the change it describes. Controllers never write to these tables
+ * directly.
+ *
+ * Trust model is two-tier now (simplified from an earlier design that
+ * required a per-device Super Admin approval code, removed entirely —
+ * see registerDevice's doc comment for why that's still safe): (1)
+ * tenant-level Super Admin enable (RemoteSupportSetting) and (2)
+ * per-session MediaProjection consent, which is inherently on-device and
+ * can never be represented by a server-side flag — see startSession's
+ * doc comment.
  */
 class RemoteSupportService
 {
@@ -55,11 +62,30 @@ class RemoteSupportService
     /**
      * Called from the mobile API by an authenticated tenant user's own
      * login token (not the device credential — that doesn't exist yet at
-     * this point). Idempotent on `device_uuid`: re-registering an already-
-     * approved device (e.g. app reinstall) does NOT silently restore
-     * trust — it resets to `pending_verification` and a fresh code, same
-     * as a brand-new device, per docs/security-model.md's "not
-     * reinstallable to bypass revocation" intent.
+     * this point), and ONLY once the on-device "Allow Access" permission
+     * flow has actually completed (see Api\Mobile\DeviceController::
+     * register's doc comment) — never before.
+     *
+     * Auto-approves immediately (no verification code, no per-device
+     * Super Admin confirmation step) — this is a deliberate trust-model
+     * simplification: DeviceController::register() has ALREADY verified
+     * `tenant->hasRemoteSupportEnabled()` before this is ever called, so
+     * the only two ways to reach this method at all are (a) a
+     * legitimately authenticated staff login at a tenant a Super Admin
+     * has explicitly opted in, or (b) that login token being compromised
+     * — a risk identical to every other authenticated mobile endpoint in
+     * this codebase, not something a per-device code was ever actually
+     * defending against once tenant-level enable already gates it. The
+     * security boundary that matters (which tenants can use Remote
+     * Support at all) still requires an explicit Super Admin action; see
+     * docs/security-model.md's trust tiers, now two rather than three.
+     *
+     * A REVOKED device_uuid is the one case that must NOT auto-approve —
+     * that action is a deliberate Super Admin security decision and must
+     * stay terminal regardless of who re-registers it (previously this
+     * only blocked a *different* user; now it blocks unconditionally,
+     * since a bypassable revoke would be exactly the kind of security
+     * weakening removing the code flow must not introduce).
      */
     public function registerDevice(User $user, array $attrs): array
     {
@@ -71,34 +97,28 @@ class RemoteSupportService
                 ->where('device_uuid', $attrs['device_uuid'])
                 ->first();
 
-            $code = strtoupper(Str::random(6));
+            abort_if($device && $device->status === MobileDevice::STATUS_REVOKED, 403, 'ডিভাইসটি বাতিল করা হয়েছে।');
+
+            $attributes = [
+                'user_id' => $user->id,
+                'platform' => $attrs['platform'] ?? 'android',
+                'device_model' => $attrs['device_model'] ?? null,
+                'os_version' => $attrs['os_version'] ?? null,
+                'app_version' => $attrs['app_version'] ?? null,
+                'status' => MobileDevice::STATUS_OFF,
+                'verified_at' => now(),
+                'approved_at' => now(),
+                'approved_by_super_admin_id' => null,
+                'remote_support_enabled' => true,
+            ];
 
             if ($device) {
-                abort_if($device->status === MobileDevice::STATUS_REVOKED && $device->user_id !== $user->id, 403);
-
-                $device->fill([
-                    'user_id' => $user->id,
-                    'platform' => $attrs['platform'] ?? 'android',
-                    'device_model' => $attrs['device_model'] ?? null,
-                    'os_version' => $attrs['os_version'] ?? null,
-                    'app_version' => $attrs['app_version'] ?? null,
-                    'status' => MobileDevice::STATUS_PENDING_VERIFICATION,
-                    'verification_code' => $code,
-                    'verified_at' => null,
-                    'remote_support_enabled' => false,
-                ]);
+                $device->fill($attributes);
                 $device->save();
             } else {
-                $device = MobileDevice::create([
+                $device = MobileDevice::create($attributes + [
                     'tenant_id' => $tenant->id,
-                    'user_id' => $user->id,
                     'device_uuid' => $attrs['device_uuid'],
-                    'platform' => $attrs['platform'] ?? 'android',
-                    'device_model' => $attrs['device_model'] ?? null,
-                    'os_version' => $attrs['os_version'] ?? null,
-                    'app_version' => $attrs['app_version'] ?? null,
-                    'status' => MobileDevice::STATUS_PENDING_VERIFICATION,
-                    'verification_code' => $code,
                 ]);
             }
 
@@ -118,37 +138,11 @@ class RemoteSupportService
             $this->log(
                 tenantId: $tenant->id,
                 deviceId: $device->id,
-                eventType: 'device_registered',
+                eventType: 'device_registered_auto_approved',
                 actorType: 'device',
             );
 
             return ['device' => $device, 'device_token' => $token->plainTextToken];
-        });
-    }
-
-    public function approveDevice(MobileDevice $device, SuperAdmin $admin, string $verificationCode): MobileDevice
-    {
-        if (! hash_equals((string) $device->verification_code, $verificationCode)) {
-            throw ValidationException::withMessages(['verification_code' => ['ভেরিফিকেশন কোড মিলছে না।']]);
-        }
-
-        return DB::transaction(function () use ($device, $admin) {
-            $device->status = MobileDevice::STATUS_OFF;
-            $device->verified_at = now();
-            $device->approved_by_super_admin_id = $admin->id;
-            $device->approved_at = now();
-            $device->remote_support_enabled = true;
-            $device->save();
-
-            $this->log(
-                tenantId: $device->tenant_id,
-                deviceId: $device->id,
-                eventType: 'device_approved',
-                actorType: 'super_admin',
-                actorId: $admin->id,
-            );
-
-            return $device;
         });
     }
 

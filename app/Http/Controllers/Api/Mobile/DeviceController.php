@@ -26,6 +26,16 @@ class DeviceController extends Controller
 {
     public function __construct(protected RemoteSupportService $service) {}
 
+    /**
+     * The Flutter app calls this only AFTER the tenant has tapped "Allow
+     * Access" and the required on-device permissions were actually
+     * granted (see SetupController.requestAccess() on the Dart side) —
+     * never before, and never as a prerequisite to showing that screen.
+     * Auto-approves immediately, no verification code — see
+     * RemoteSupportService::registerDevice()'s doc comment for why that's
+     * still a safe trust model: tenant-level enable, checked below, is
+     * the real gate.
+     */
     public function register(Request $request)
     {
         $data = $request->validate([
@@ -45,7 +55,6 @@ class DeviceController extends Controller
         return response()->json([
             'device_uuid' => $device->device_uuid,
             'status' => $device->status,
-            'verification_code' => $device->verification_code,
             'device_token' => $result['device_token'],
         ], 201);
     }
