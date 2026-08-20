@@ -55,7 +55,7 @@
                     @if ($d->status === 'revoked')
                         <span class="text-mute text-xs">{{ $d->revoke_reason }}</span>
                     @else
-                        <div class="flex flex-wrap gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
                             <form method="POST" action="{{ route('super.remote-support.devices.toggle', [$tenant, $d]) }}">
                                 @csrf
                                 <input type="hidden" name="enabled" value="{{ $d->remote_support_enabled ? '0' : '1' }}">
@@ -63,12 +63,31 @@
                                     {{ $d->remote_support_enabled ? 'ডিভাইস বন্ধ করুন' : 'ডিভাইস চালু করুন' }}
                                 </button>
                             </form>
-                            @if ($d->liveStatus() === 'on_ready')
+
+                            {{-- "🎥 Live Screen" is ALWAYS shown once a device is trusted
+                                 (not revoked) — only its enabled/disabled state and reason
+                                 change, so it's never silently missing from the row; it
+                                 only ever actually starts a session
+                                 (RemoteSupportService::startSession) when the device is
+                                 genuinely on_ready. --}}
+                            @if (! $d->remote_support_enabled)
+                                <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-ink/5 text-mute" title="ডিভাইসটি বন্ধ আছে">
+                                    🎥 লাইভ স্ক্রিন অনুপলব্ধ
+                                </span>
+                            @elseif ($d->liveStatus() === 'offline')
+                                <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600">
+                                    🎥 লাইভ স্ক্রিন — ডিভাইস অফলাইন
+                                </span>
+                            @elseif ($d->liveStatus() !== 'on_ready')
+                                <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber/10 text-amber">
+                                    🎥 লাইভ স্ক্রিন — ডিভাইস প্রস্তুত হচ্ছে…
+                                </span>
+                            @else
                                 <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}" class="flex items-center gap-2">
                                     @csrf
-                                    <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_microphone" value="1"> মাইক্রোফোন</label>
-                                    <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_camera" value="1"> ক্যামেরা</label>
-                                    <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">লাইভ স্ক্রিন দেখুন</button>
+                                    <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_microphone" value="1"> 🎙 মাইক্রোফোন</label>
+                                    <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_camera" value="1"> 📷 ক্যামেরা</label>
+                                    <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🎥 Live Screen</button>
                                 </form>
                             @endif
                         </div>

@@ -85,13 +85,54 @@ class RemoteSupportControllerTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Samsung A14');
-        $response->assertSee('লাইভ স্ক্রিন দেখুন');
+        $response->assertSee('Live Screen');
         $response->assertSee(route('super.remote-support.session.start', [$tenant, $ready]), escape: false);
         // No approval workflow anywhere on this page — see
         // RemoteSupportService::registerDevice()'s doc comment on why
         // that step was removed entirely, not just hidden.
         $response->assertDontSee('verification_code');
         $response->assertDontSee('অনুমোদন');
+    }
+
+    /**
+     * The Live Screen action must never simply be MISSING from the row —
+     * every non-revoked device shows it, with its enabled/disabled state
+     * and reason making clear why it can't be opened yet, rather than the
+     * action silently disappearing (which previously looked like the
+     * feature wasn't implemented at all when a device was merely offline
+     * or not yet ready).
+     */
+    public function test_offline_and_not_ready_devices_show_a_disabled_live_screen_state_with_a_reason(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $offline = $this->makeDevice($tenant->id, $user->id, [
+            'device_model' => 'Offline Phone', 'status' => 'on_ready', 'remote_support_enabled' => true,
+            'last_seen_at' => now()->subMinutes(10),
+        ]);
+        $notReady = $this->makeDevice($tenant->id, $user->id, [
+            'device_model' => 'Not Ready Phone', 'status' => 'on_not_ready', 'remote_support_enabled' => true,
+            'last_seen_at' => now(),
+        ]);
+        $disabled = $this->makeDevice($tenant->id, $user->id, [
+            'device_model' => 'Disabled Phone', 'status' => 'off', 'remote_support_enabled' => false,
+            'last_seen_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
+
+        $response->assertOk();
+        $response->assertSee('ডিভাইস অফলাইন');
+        $response->assertSee('প্রস্তুত হচ্ছে');
+        $response->assertSee('লাইভ স্ক্রিন অনুপলব্ধ');
+
+        // None of these three devices should render an actual submittable
+        // session-start form — only the status labels above.
+        $response->assertDontSee(route('super.remote-support.session.start', [$tenant, $offline]), escape: false);
+        $response->assertDontSee(route('super.remote-support.session.start', [$tenant, $notReady]), escape: false);
+        $response->assertDontSee(route('super.remote-support.session.start', [$tenant, $disabled]), escape: false);
     }
 
     public function test_super_admin_can_enable_remote_support_for_a_tenant(): void
@@ -269,5 +310,67 @@ class RemoteSupportControllerTest extends TestCase
 
         $this->assertSame('offline', $device->liveStatus());
         $this->assertFalse($device->isEligibleForSession());
+    }
+
+    /**
+     * Verifies the viewer page actually EXPOSES the mic/camera/screen
+     * controls (not just that the backend/session model supports them) —
+     * and that each control's initial state reflects the device's real,
+     * last-heartbeated permission state (mic granted, camera not) rather
+     * than a fake "on" for something the device never actually granted.
+     */
+    public function test_viewer_exposes_real_screen_mic_and_camera_state_for_the_session(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant(['store_name' => 'Viewer Test Shop']);
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'device_model' => 'Pixel Viewer Test',
+            'status' => 'on_ready',
+            'remote_support_enabled' => true,
+            'last_seen_at' => now(),
+            'permissions' => ['notifications' => true, 'battery_optimization_exempt' => true, 'microphone' => true, 'camera' => false],
+        ]);
+        $session = DB::table('remote_support_sessions')->insertGetId([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'viewer-test', 'include_microphone' => true, 'include_camera' => true,
+            'started_at' => now(), 'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')
+            ->get(route('super.remote-support.session.viewer', [$tenant, $device, $session]));
+
+        $response->assertOk();
+        $response->assertSee('Viewer Test Shop');
+        $response->assertSee('Pixel Viewer Test');
+        // Screen: always present, real WebRTC track state driven client-side.
+        $response->assertSee('স্ক্রিন');
+        $response->assertSee('remoteVideo', escape: false);
+        // The URL is embedded via Blade's @json(), which escapes forward
+        // slashes — match that same encoding rather than the raw route().
+        $response->assertSee(
+            str_replace('/', '\/', route('super.remote-support.session.stop', [$tenant, $device, $session])),
+            escape: false,
+        );
+
+        // Camera requested but device does NOT hold the permission → must
+        // show the real "permission required" state; microphone requested
+        // AND permitted → must NOT show that same state — asserted by
+        // isolating each control's own <p id="...State"> block rather than
+        // a page-wide assertSee, so this can't pass by matching the wrong
+        // control's text.
+        $micBlock = $this->extractBetween($response->getContent(), 'id="micState"', '</p>');
+        $cameraBlock = $this->extractBetween($response->getContent(), 'id="cameraState"', '</p>');
+        $this->assertStringNotContainsString('ডিভাইসে অনুমতি নেই', $micBlock);
+        $this->assertStringContainsString('ডিভাইসে অনুমতি নেই', $cameraBlock);
+    }
+
+    private function extractBetween(string $haystack, string $start, string $end): string
+    {
+        $startPos = strpos($haystack, $start);
+        $endPos = strpos($haystack, $end, $startPos);
+
+        return substr($haystack, $startPos, $endPos - $startPos);
     }
 }
