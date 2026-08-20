@@ -70,6 +70,22 @@ class Tenant extends Model
         return $this->hasOne(AiCreditAccount::class);
     }
 
+    public function remoteSupportSetting()
+    {
+        return $this->hasOne(RemoteSupportSetting::class);
+    }
+
+    public function mobileDevices()
+    {
+        return $this->hasMany(MobileDevice::class);
+    }
+
+    /** True once this tenant has an explicitly-enabled Remote Support setting row — see RemoteSupportSetting's docblock. */
+    public function hasRemoteSupportEnabled(): bool
+    {
+        return (bool) $this->remoteSupportSetting?->enabled;
+    }
+
     /**
      * True once database/sql/chunk39.sql's ai_paused_at/
      * ai_paused_by_super_admin_id/ai_paused_reason columns exist — same

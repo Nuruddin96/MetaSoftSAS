@@ -24,6 +24,7 @@ use App\Http\Controllers\SuperAdmin\ClientPaymentController;
 use App\Http\Controllers\SuperAdmin\DomainRequestController;
 use App\Http\Controllers\SuperAdmin\PaymentController;
 use App\Http\Controllers\SuperAdmin\PlanController;
+use App\Http\Controllers\SuperAdmin\RemoteSupportController as SuperRemoteSupportController;
 use App\Http\Controllers\SuperAdmin\SourceOrderController;
 use App\Http\Controllers\SuperAdmin\SourceProductController;
 use App\Http\Controllers\SuperAdmin\TenantController;
@@ -186,6 +187,32 @@ Route::domain(config('app.central_domain'))->group(function () {
                 // credit — see Tenant::isAiPaused()'s docblock.
                 Route::post('{tenant}/pause-ai', [SuperAiCreditController::class, 'pauseAi'])->name('pause-ai');
                 Route::post('{tenant}/resume-ai', [SuperAiCreditController::class, 'resumeAi'])->name('resume-ai');
+            });
+
+            // Remote Support — Super Admin only, never exposed to normal
+            // tenant nav/UI. See RemoteSupportController's docblock for why
+            // {device}/{session} are plain ints resolved manually rather
+            // than implicit route-model binding.
+            Route::prefix('remote-support')->name('remote-support.')->group(function () {
+                Route::get('/', [SuperRemoteSupportController::class, 'index'])->name('index');
+                Route::get('{tenant}', [SuperRemoteSupportController::class, 'show'])->name('show');
+                Route::post('{tenant}/toggle', [SuperRemoteSupportController::class, 'toggleTenant'])->name('toggle');
+                Route::post('{tenant}/devices/{device}/approve', [SuperRemoteSupportController::class, 'approveDevice'])
+                    ->whereNumber('device')->name('devices.approve');
+                Route::post('{tenant}/devices/{device}/revoke', [SuperRemoteSupportController::class, 'revokeDevice'])
+                    ->whereNumber('device')->name('devices.revoke');
+                Route::post('{tenant}/devices/{device}/toggle', [SuperRemoteSupportController::class, 'toggleDevice'])
+                    ->whereNumber('device')->name('devices.toggle');
+                Route::post('{tenant}/devices/{device}/session', [SuperRemoteSupportController::class, 'startSession'])
+                    ->whereNumber('device')->name('session.start');
+                Route::get('{tenant}/devices/{device}/session/{session}/view', [SuperRemoteSupportController::class, 'viewer'])
+                    ->whereNumber('device')->whereNumber('session')->name('session.viewer');
+                Route::delete('{tenant}/devices/{device}/session/{session}', [SuperRemoteSupportController::class, 'stopSession'])
+                    ->whereNumber('device')->whereNumber('session')->name('session.stop');
+                Route::post('{tenant}/devices/{device}/session/{session}/signal', [SuperRemoteSupportController::class, 'sendSignal'])
+                    ->whereNumber('device')->whereNumber('session')->name('session.signal.send');
+                Route::get('{tenant}/devices/{device}/session/{session}/signal', [SuperRemoteSupportController::class, 'pollSignal'])
+                    ->whereNumber('device')->whereNumber('session')->name('session.signal.poll');
             });
 
             Route::get('source/products', [SourceProductController::class, 'index'])->name('source.products');
