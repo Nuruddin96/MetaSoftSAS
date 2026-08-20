@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\BindTenantFromSanctumUser;
 use App\Http\Middleware\CheckSubscription;
 use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\ResolveCustomDomain;
@@ -13,6 +14,7 @@ use Illuminate\Http\Request;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
@@ -21,6 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'resolve.tenant' => ResolveTenant::class,
             'check.subscription' => CheckSubscription::class,
             'feature' => EnsureFeatureEnabled::class,
+            // Mobile API only — see that middleware's docblock for why
+            // resolve.tenant (URL-driven) doesn't apply to API requests.
+            'bind.tenant.token' => BindTenantFromSanctumUser::class,
         ]);
 
         // Must run before routing (not a route middleware) so a verified

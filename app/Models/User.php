@@ -4,10 +4,11 @@ namespace App\Models;
 
 use App\Traits\BelongsToTenant;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use BelongsToTenant;
+    use BelongsToTenant, HasApiTokens;
 
     protected $guarded = [];
 

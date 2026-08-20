@@ -1,0 +1,114 @@
+<?php
+
+namespace Tests\Feature\Api\Mobile;
+
+use App\Models\Customer;
+use App\Models\Order;
+use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\Sanctum;
+use Tests\Concerns\InteractsWithApiSchema;
+use Tests\TestCase;
+
+class TenantIsolationTest extends TestCase
+{
+    use InteractsWithApiSchema;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpApiSchema();
+    }
+
+    protected function makeOrder(int $tenantId, array $attrs = []): Order
+    {
+        app()->instance('currentTenant', \App\Models\Tenant::find($tenantId));
+
+        return Order::create(array_merge([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'Test Customer', 'customer_phone' => '01712345678',
+            'subtotal' => 500, 'total' => 500, 'payment_method' => 'cod', 'status' => 'pending',
+        ], $attrs));
+    }
+
+    public function test_authenticated_tenant_can_access_its_own_dashboard(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/mobile/v1/dashboard')
+            ->assertOk()
+            ->assertJsonStructure(['today_orders', 'today_sales', 'pending_orders', 'courier_pending_count', 'total_customers', 'today_expenses', 'low_stock_count', 'by_channel', 'top_districts', 'more_districts_count', 'recent_orders']);
+    }
+
+    public function test_tenant_cannot_view_another_tenants_order(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+
+        $orderA = $this->makeOrder($tenantA->id);
+
+        Sanctum::actingAs($userB);
+
+        $this->getJson("/api/mobile/v1/orders/{$orderA->id}")->assertNotFound();
+    }
+
+    public function test_tenant_order_list_never_includes_other_tenants_orders(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userA = $this->makeUser($tenantA->id);
+
+        $this->makeOrder($tenantA->id, ['order_number' => 'ORD-A1']);
+        $this->makeOrder($tenantB->id, ['order_number' => 'ORD-B1']);
+
+        Sanctum::actingAs($userA);
+
+        $response = $this->getJson('/api/mobile/v1/orders')->assertOk();
+        $numbers = collect($response->json('data'))->pluck('order_number');
+
+        $this->assertTrue($numbers->contains('ORD-A1'));
+        $this->assertFalse($numbers->contains('ORD-B1'));
+    }
+
+    public function test_tenant_cannot_view_another_tenants_customer(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+
+        $customerA = DB::table('customers')->insertGetId([
+            'tenant_id' => $tenantA->id, 'name' => 'Cust A', 'phone' => '01711111111',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        Sanctum::actingAs($userB);
+
+        $this->getJson("/api/mobile/v1/customers/{$customerA}")->assertNotFound();
+    }
+
+    public function test_tenant_customer_list_never_includes_other_tenants_customers(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userA = $this->makeUser($tenantA->id);
+
+        Customer::create(['tenant_id' => $tenantA->id, 'name' => 'A Customer', 'phone' => '01711111111']);
+        Customer::create(['tenant_id' => $tenantB->id, 'name' => 'B Customer', 'phone' => '01722222222']);
+
+        Sanctum::actingAs($userA);
+
+        $response = $this->getJson('/api/mobile/v1/customers')->assertOk();
+        $names = collect($response->json('data'))->pluck('name');
+
+        $this->assertTrue($names->contains('A Customer'));
+        $this->assertFalse($names->contains('B Customer'));
+    }
+
+    public function test_unauthenticated_request_is_rejected(): void
+    {
+        $this->getJson('/api/mobile/v1/dashboard')->assertUnauthorized();
+    }
+}
