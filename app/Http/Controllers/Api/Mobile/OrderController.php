@@ -37,7 +37,15 @@ class OrderController extends Controller
             })
             ->latest()->paginate(20);
 
-        return response()->json(['data' => OrderResource::collection($orders->items())]);
+        return response()->json([
+            'data' => OrderResource::collection($orders->items()),
+            'meta' => [
+                'current_page' => $orders->currentPage(),
+                'last_page' => $orders->lastPage(),
+                'per_page' => $orders->perPage(),
+                'total' => $orders->total(),
+            ],
+        ]);
     }
 
     public function show(Request $request, int $order)
@@ -122,6 +130,21 @@ class OrderController extends Controller
             // friendly Bengali message intact on the client instead of
             // falling back to a generic "কিছু একটা ভুল হয়েছে".
             throw ValidationException::withMessages(['provider' => [$e->getMessage()]]);
+        }
+
+        return response()->json((new OrderResource($order->load('items')))->toArray($request));
+    }
+
+    public function refreshCourierStatus(Request $request, int $order, CourierDispatchService $service)
+    {
+        $tenant = app('currentTenant');
+        $order = Order::where('tenant_id', $tenant->id)->findOrFail($order);
+
+        try {
+            $order = $service->refreshStatus($order);
+        } catch (\RuntimeException $e) {
+            // Same 422-not-409 reasoning as courier() above.
+            throw ValidationException::withMessages(['courier' => [$e->getMessage()]]);
         }
 
         return response()->json((new OrderResource($order->load('items')))->toArray($request));
