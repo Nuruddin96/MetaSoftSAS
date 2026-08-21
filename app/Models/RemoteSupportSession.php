@@ -46,6 +46,22 @@ class RemoteSupportSession extends Model
         return $this->expires_at->isPast();
     }
 
+    /**
+     * A liveness check, deliberately separate from and much shorter than
+     * [isExpired] — see config('remote_support.abandoned_session_grace_seconds')'s
+     * doc comment for the real on-device failure mode this recovers from.
+     * `connected_at` only gets set once the admin's WebRTC answer actually
+     * lands (RemoteSupportService::pushSignal()); a session that never
+     * reaches that within the grace window was never live in the first
+     * place — the device process died (or otherwise failed) before ever
+     * negotiating, not merely slow.
+     */
+    public function isLikelyAbandoned(): bool
+    {
+        return $this->connected_at === null
+            && $this->started_at->copy()->addSeconds((int) config('remote_support.abandoned_session_grace_seconds'))->isPast();
+    }
+
     public function isOpen(): bool
     {
         return $this->status !== self::STATUS_ENDED && ! $this->isExpired();

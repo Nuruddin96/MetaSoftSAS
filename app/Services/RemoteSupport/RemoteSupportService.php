@@ -298,8 +298,23 @@ class RemoteSupportService
             // permanently block ever starting a new one on this device
             // (RemoteSupportSignal::pushSignal already independently
             // refuses to relay anything through it via isOpen()).
-            if ($existing->isExpired()) {
-                $this->stopSession($existing, reason: 'expired', actorType: 'system');
+            //
+            // isLikelyAbandoned() covers a real, physically-confirmed
+            // failure mode isExpired() alone left open for up to the full
+            // max_session_minutes: a tenant revoking the Remote Support
+            // notification permission makes Android kill the device's
+            // whole app process immediately (confirmed via logcat,
+            // 2026-08-22, TECNO CK7n — this is OS policy on any runtime
+            // permission revocation, not something the app can prevent),
+            // before it ever gets a chance to send a 'bye' signal. That
+            // leaves a genuinely-dead session stuck at status=active,
+            // connected_at=null, 409-blocking every retry until the full
+            // expiry window passes — see that model method's doc comment
+            // for why "never connected within a short grace window" is a
+            // safe, narrow signal for "this one is actually dead", not
+            // just slow.
+            if ($existing->isExpired() || $existing->isLikelyAbandoned()) {
+                $this->stopSession($existing, reason: $existing->isExpired() ? 'expired' : 'abandoned_no_connection', actorType: 'system');
             } else {
                 abort(409, 'এই ডিভাইসে ইতিমধ্যে একটি সেশন চলছে।');
             }

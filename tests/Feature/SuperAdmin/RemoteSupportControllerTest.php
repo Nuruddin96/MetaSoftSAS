@@ -345,6 +345,70 @@ class RemoteSupportControllerTest extends TestCase
         $this->assertDatabaseCount('remote_support_sessions', 2);
     }
 
+    /**
+     * Reproduces the real physical-device failure (2026-08-22, TECNO
+     * CK7n): the tenant revoking the Remote Support notification
+     * permission makes Android kill the device's whole app process
+     * before it ever sends a 'bye' signal, leaving a session stuck
+     * active/never-connected well inside its full 30-minute expiry —
+     * previously a 409 for the rest of that window.
+     */
+    public function test_a_never_connected_session_past_the_liveness_grace_window_self_heals_and_does_not_block_a_new_one(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
+        ]);
+        // Started 3 minutes ago, never connected (connected_at stays
+        // null), but its 30-minute hard cap is nowhere near expired —
+        // isExpired() alone would still 409 this.
+        DB::table('remote_support_sessions')->insert([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'never-connected', 'started_at' => now()->subMinutes(3),
+            'connected_at' => null, 'expires_at' => now()->addMinutes(27),
+            'created_at' => now()->subMinutes(3), 'updated_at' => now()->subMinutes(3),
+        ]);
+
+        $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.session.start', [$tenant, $device]), [])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('remote_support_sessions', [
+            'session_token' => 'never-connected', 'status' => 'ended', 'end_reason' => 'abandoned_no_connection',
+        ]);
+        $this->assertDatabaseHas('remote_support_sessions', ['mobile_device_id' => $device->id, 'status' => 'active']);
+        $this->assertDatabaseCount('remote_support_sessions', 2);
+    }
+
+    public function test_a_recently_started_never_connected_session_still_within_the_grace_window_is_not_self_healed(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
+        ]);
+        // Started seconds ago — a real in-flight session still
+        // legitimately negotiating must NOT be treated as abandoned just
+        // because connected_at hasn't landed yet.
+        DB::table('remote_support_sessions')->insert([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'just-started', 'started_at' => now(),
+            'connected_at' => null, 'expires_at' => now()->addMinutes(30),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.session.start', [$tenant, $device]), [])
+            ->assertStatus(409);
+
+        $this->assertDatabaseCount('remote_support_sessions', 1);
+    }
+
     public function test_a_device_stuck_offline_is_not_eligible_even_if_status_column_says_on_ready(): void
     {
         $tenant = $this->makeTenant();
