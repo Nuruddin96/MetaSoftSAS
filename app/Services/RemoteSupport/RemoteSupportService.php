@@ -178,7 +178,19 @@ class RemoteSupportService
         });
     }
 
-    /** Per-device kill switch, independent of full revocation — see MobileDevice migration's docblock. */
+    /**
+     * Per-device kill switch, independent of full revocation — see
+     * MobileDevice migration's docblock.
+     *
+     * Re-enabling recomputes readiness from the device's own last-reported
+     * permissions/foreground-service state (the same computation
+     * recordHeartbeat uses) instead of always resetting to on_not_ready —
+     * found while diagnosing a device stuck showing not-ready right after
+     * being re-enabled despite its last heartbeat having already reported
+     * every precondition satisfied. This does NOT invent a new readiness
+     * signal or fake anything: it's the exact same stored data a heartbeat
+     * would have used, just not thrown away by this action.
+     */
     public function toggleDevice(MobileDevice $device, bool $enabled, SuperAdmin $admin): MobileDevice
     {
         abort_if($device->status === MobileDevice::STATUS_REVOKED, 409, 'ডিভাইসটি বাতিল করা হয়েছে।');
@@ -188,7 +200,7 @@ class RemoteSupportService
             if (! $enabled) {
                 $device->status = MobileDevice::STATUS_OFF;
             } elseif ($device->status === MobileDevice::STATUS_OFF) {
-                $device->status = MobileDevice::STATUS_ON_NOT_READY;
+                $device->status = $this->computeReadiness($device);
             }
             $device->save();
 
@@ -230,15 +242,22 @@ class RemoteSupportService
                 ? $device->status
                 : MobileDevice::STATUS_OFF;
         } elseif (in_array($device->status, [MobileDevice::STATUS_OFF, MobileDevice::STATUS_ON_NOT_READY, MobileDevice::STATUS_ON_READY], true)) {
-            $requiredGranted = $this->requiredPermissionsGranted($device->permissions ?? []);
-            $device->status = ($requiredGranted && $device->foreground_service_running)
-                ? MobileDevice::STATUS_ON_READY
-                : MobileDevice::STATUS_ON_NOT_READY;
+            $device->status = $this->computeReadiness($device);
         }
 
         $device->save();
 
         return $device;
+    }
+
+    /** Shared by recordHeartbeat and toggleDevice — see toggleDevice's doc comment for why the latter needs this too. */
+    private function computeReadiness(MobileDevice $device): string
+    {
+        $requiredGranted = $this->requiredPermissionsGranted($device->permissions ?? []);
+
+        return ($requiredGranted && $device->foreground_service_running)
+            ? MobileDevice::STATUS_ON_READY
+            : MobileDevice::STATUS_ON_NOT_READY;
     }
 
     private function requiredPermissionsGranted(array $permissions): bool
@@ -351,10 +370,10 @@ class RemoteSupportService
             'created_at' => now(),
         ]);
 
-        if ($sender === RemoteSupportSignal::SENDER_DEVICE && $type === 'answer' && ! $session->connected_at) {
+        if ($sender === RemoteSupportSignal::SENDER_ADMIN && $type === 'answer' && ! $session->connected_at) {
             $session->connected_at = now();
             $session->save();
-            $this->log($session->tenant_id, $session->mobile_device_id, $session->id, 'session_connected', 'device');
+            $this->log($session->tenant_id, $session->mobile_device_id, $session->id, 'session_connected', 'admin');
         }
 
         if ($type === 'bye') {

@@ -4,6 +4,7 @@ namespace Tests\Feature\SuperAdmin;
 
 use App\Models\MobileDevice;
 use App\Models\RemoteSupportSetting;
+use App\Models\RemoteSupportSignal;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\InteractsWithRemoteSupportSchema;
@@ -159,6 +160,53 @@ class RemoteSupportControllerTest extends TestCase
             ->assertRedirect();
 
         $this->assertFalse($tenant->fresh()->hasRemoteSupportEnabled());
+    }
+
+    /**
+     * Found while diagnosing a device stuck showing not-ready right after
+     * being re-enabled: toggling a device back on used to always reset
+     * status to on_not_ready, discarding the fact that its last heartbeat
+     * had already reported every precondition satisfied. It now
+     * recomputes readiness from that same stored data instead.
+     */
+    public function test_re_enabling_a_device_recomputes_readiness_instead_of_always_resetting_to_not_ready(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'status' => 'off',
+            'remote_support_enabled' => false,
+            'foreground_service_running' => true,
+            'permissions' => ['notifications' => true, 'battery_optimization_exempt' => true],
+        ]);
+
+        $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.devices.toggle', [$tenant, $device]), ['enabled' => '1'])
+            ->assertRedirect();
+
+        $this->assertSame('on_ready', $device->fresh()->status);
+    }
+
+    public function test_re_enabling_a_device_missing_a_precondition_still_lands_on_not_ready(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'status' => 'off',
+            'remote_support_enabled' => false,
+            'foreground_service_running' => false,
+            'permissions' => ['notifications' => true, 'battery_optimization_exempt' => true],
+        ]);
+
+        $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.devices.toggle', [$tenant, $device]), ['enabled' => '1'])
+            ->assertRedirect();
+
+        $this->assertSame('on_not_ready', $device->fresh()->status);
     }
 
     public function test_revoking_a_device_ends_any_open_session_and_deletes_its_credential(): void
@@ -364,6 +412,107 @@ class RemoteSupportControllerTest extends TestCase
         $cameraBlock = $this->extractBetween($response->getContent(), 'id="cameraState"', '</p>');
         $this->assertStringNotContainsString('ডিভাইসে অনুমতি নেই', $micBlock);
         $this->assertStringContainsString('ডিভাইসে অনুমতি নেই', $cameraBlock);
+    }
+
+    /**
+     * The Super Admin side of the WebRTC signal relay (sendSignal/
+     * pollSignal) had NO coverage at all before this — every existing test
+     * either exercised the device side (Api\Mobile\SignalController, see
+     * DeviceApiTest) or wrote signal rows directly to the DB, bypassing
+     * this controller entirely. That gap is exactly why the
+     * SENDER_DEVICE/SENDER_ADMIN mixup in
+     * RemoteSupportService::pushSignal() (fixed alongside this test) went
+     * unnoticed: nothing ever posted a real admin 'answer' through the
+     * actual HTTP endpoint the browser viewer uses.
+     */
+    public function test_admin_posting_an_answer_signal_flips_the_session_to_connected(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
+        ]);
+        $sessionId = DB::table('remote_support_sessions')->insertGetId([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'sess-answer', 'started_at' => now(),
+            'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin, 'super_admin')
+            ->postJson(route('super.remote-support.session.signal.send', [$tenant, $device, $sessionId]), [
+                'type' => 'answer', 'payload' => '{"sdp":"v=0...","type":"answer"}',
+            ])->assertCreated();
+
+        $this->assertDatabaseHas('remote_support_signals', [
+            'remote_support_session_id' => $sessionId, 'sender' => 'admin', 'type' => 'answer',
+        ]);
+        $session = DB::table('remote_support_sessions')->find($sessionId);
+        $this->assertNotNull($session->connected_at);
+        $this->assertDatabaseHas('device_events', [
+            'remote_support_session_id' => $sessionId, 'event_type' => 'session_connected', 'actor_type' => 'admin',
+        ]);
+    }
+
+    /**
+     * A device sending its own 'answer' type is not a real flow (the
+     * device only ever offers), but pushSignal's connected_at trigger must
+     * key off SENDER_ADMIN specifically, not merely `type === 'answer'` —
+     * this pins that down as a regression guard for the exact mixup fixed
+     * in pushSignal().
+     */
+    public function test_a_device_sent_answer_signal_does_not_flip_the_session_to_connected(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, ['status' => 'on_ready', 'remote_support_enabled' => true]);
+        $sessionId = DB::table('remote_support_sessions')->insertGetId([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'sess-device-answer', 'started_at' => now(),
+            'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        RemoteSupportSignal::create([
+            'tenant_id' => $tenant->id, 'remote_support_session_id' => $sessionId,
+            'sender' => 'device', 'type' => 'answer', 'payload' => '{}', 'created_at' => now(),
+        ]);
+
+        $this->assertNull(DB::table('remote_support_sessions')->find($sessionId)->connected_at);
+    }
+
+    /**
+     * The viewer's pollLoop only makes sense if it never echoes the
+     * admin's own outgoing signals back to itself — pollSignals() must
+     * filter to the opposite sender.
+     */
+    public function test_admin_polling_signals_only_returns_device_sent_signals(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, ['status' => 'on_ready', 'remote_support_enabled' => true]);
+        $sessionId = DB::table('remote_support_sessions')->insertGetId([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'sess-poll', 'started_at' => now(),
+            'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        RemoteSupportSignal::create([
+            'tenant_id' => $tenant->id, 'remote_support_session_id' => $sessionId,
+            'sender' => 'device', 'type' => 'offer', 'payload' => '{"sdp":"...","type":"offer"}', 'created_at' => now(),
+        ]);
+        RemoteSupportSignal::create([
+            'tenant_id' => $tenant->id, 'remote_support_session_id' => $sessionId,
+            'sender' => 'admin', 'type' => 'ice-candidate', 'payload' => '{}', 'created_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')
+            ->getJson(route('super.remote-support.session.signal.poll', [$tenant, $device, $sessionId]).'?since=0')
+            ->assertOk();
+
+        $this->assertCount(1, $response->json('signals'));
+        $this->assertSame('offer', $response->json('signals.0.type'));
     }
 
     private function extractBetween(string $haystack, string $start, string $end): string

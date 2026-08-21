@@ -15,8 +15,31 @@
     <button id="stopBtn" class="ml-auto px-4 py-2 rounded-lg text-sm font-medium bg-red-50 text-red-600">সেশন বন্ধ করুন</button>
 </div>
 
-<div class="bg-black rounded-xl overflow-hidden aspect-video relative flex items-center justify-center">
-    <video id="remoteVideo" autoplay playsinline class="w-full h-full object-contain"></video>
+{{--
+    Bounded-height box + `object-contain` on the <video> itself (not a
+    fixed-aspect-ratio box): confirmed live (2026-08-21) that a plain
+    `aspect-video`/16:9 box was the wrong fix — it forces every stream,
+    portrait phones included, into a landscape-shaped frame, so a real
+    1080x2400 portrait capture only occupies a thin pillarboxed sliver in
+    the middle of a wide black box. The <video> element is a *replaced
+    element*: giving it `max-width/max-height` bounds (instead of forcing
+    `w-full h-full`) plus `object-contain` lets the browser size it from
+    its own real intrinsic videoWidth/videoHeight — the largest size that
+    fits both the available width AND the available height — which is
+    exactly "fit the whole phone screen, preserve its real aspect ratio, no
+    stretch/crop, no scrolling" for ANY device orientation, not just 16:9,
+    with no JS needed to read/track the stream's real dimensions. The outer
+    box only supplies the available area: full width, and a height capped
+    well inside the viewport (`clamp(...)`) so the whole frame — whatever
+    its real shape — is always visible without scrolling to reach it,
+    exactly the earlier bug (box rendering at native ~3500px height,
+    confirmed via video.videoWidth/videoHeight matching the real device and
+    connectionState 'connected' — the stream itself was never broken, only
+    this container's sizing).
+--}}
+<div class="bg-black rounded-xl overflow-hidden relative flex items-center justify-center mx-auto"
+     style="width: 100%; height: clamp(240px, calc(100vh - 320px), 900px);">
+    <video id="remoteVideo" autoplay playsinline class="max-w-full max-h-full object-contain"></video>
     <p id="waitingNote" class="text-white/50 text-sm absolute">ডিভাইসের স্ক্রিন ক্যাপচার অনুমতির জন্য অপেক্ষা করা হচ্ছে…</p>
     <video id="cameraVideo" autoplay playsinline muted
            class="hidden absolute bottom-3 right-3 w-32 h-24 rounded-lg border-2 border-white/40 object-cover bg-black"></video>

@@ -298,9 +298,8 @@ class DeviceApiTest extends TestCase
 
         // Simulate the admin's answer landing in the queue directly (the
         // admin side is SuperAdmin\RemoteSupportController, exercised in
-        // its own test) — the device polls and must see it, and the
-        // session flips to connected only once the DEVICE's own answer
-        // signal is posted, not the admin's offer.
+        // its own test, including the connected_at flip this answer
+        // triggers) — here we only need the device to poll and see it.
         RemoteSupportSignal::create([
             'tenant_id' => $tenant->id, 'remote_support_session_id' => $session->id,
             'sender' => 'admin', 'type' => 'answer', 'payload' => '{"sdp":"..."}', 'created_at' => now(),
