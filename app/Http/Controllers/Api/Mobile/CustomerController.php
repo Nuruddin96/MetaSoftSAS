@@ -27,7 +27,15 @@ class CustomerController extends Controller
             ->when($request->due, fn ($q) => $q->where('due_balance', '>', 0))
             ->orderByDesc('id')->paginate(25);
 
-        return response()->json(['data' => CustomerResource::collection($customers->items())]);
+        return response()->json([
+            'data' => CustomerResource::collection($customers->items()),
+            'meta' => [
+                'current_page' => $customers->currentPage(),
+                'last_page' => $customers->lastPage(),
+                'per_page' => $customers->perPage(),
+                'total' => $customers->total(),
+            ],
+        ]);
     }
 
     public function show(Request $request, int $customer)

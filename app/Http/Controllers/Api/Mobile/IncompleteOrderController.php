@@ -26,6 +26,12 @@ class IncompleteOrderController extends Controller
 
         return response()->json([
             'data' => $items->getCollection()->map(fn ($item) => (new IncompleteOrderResource($item, $variantNames))->toArray($request)),
+            'meta' => [
+                'current_page' => $items->currentPage(),
+                'last_page' => $items->lastPage(),
+                'per_page' => $items->perPage(),
+                'total' => $items->total(),
+            ],
         ]);
     }
 

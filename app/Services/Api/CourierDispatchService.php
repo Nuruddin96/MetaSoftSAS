@@ -59,4 +59,35 @@ class CourierDispatchService
 
         return $order->fresh();
     }
+
+    /**
+     * Mobile-API equivalent of Tenant\CourierController::refreshStatus() —
+     * same CourierManager::getStatus() call (genuinely live for Steadfast;
+     * a confirming no-op for Pathao, which has no public status-lookup
+     * endpoint — see that method's own doc comment on the Tenant side).
+     *
+     * @throws \RuntimeException with a Bengali, user-facing message on any failure
+     */
+    public function refreshStatus(Order $order): Order
+    {
+        if (! $order->courier_provider || ! $order->courier_consignment_id) {
+            throw new \RuntimeException('এই অর্ডার এখনো কুরিয়ারে পাঠানো হয়নি।');
+        }
+
+        $service = CourierManager::forProvider($order->courier_provider);
+
+        if (! $service) {
+            throw new \RuntimeException('কুরিয়ারের API সেটিংস পাওয়া যায়নি — সেটিংস পেজে ক্রেডেনশিয়াল দিন।');
+        }
+
+        try {
+            $status = $service->getStatus($order);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('স্ট্যাটাস রিফ্রেশ করা যায়নি: '.Str::limit($e->getMessage(), 120));
+        }
+
+        $order->update(['courier_status' => $status]);
+
+        return $order->fresh();
+    }
 }

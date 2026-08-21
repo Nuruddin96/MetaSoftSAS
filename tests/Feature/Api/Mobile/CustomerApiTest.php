@@ -62,6 +62,20 @@ class CustomerApiTest extends TestCase
         $this->assertDatabaseCount('due_ledger', 2);
     }
 
+    public function test_index_returns_pagination_meta(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        Customer::create(['tenant_id' => $tenant->id, 'name' => 'A', 'phone' => '01712345671']);
+        Customer::create(['tenant_id' => $tenant->id, 'name' => 'B', 'phone' => '01712345672']);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/mobile/v1/customers')->assertOk();
+        $response->assertJsonStructure(['data', 'meta' => ['current_page', 'last_page', 'per_page', 'total']]);
+        $this->assertSame(2, $response->json('meta.total'));
+    }
+
     public function test_receive_due_cannot_exceed_current_balance(): void
     {
         $tenant = $this->makeTenant();
