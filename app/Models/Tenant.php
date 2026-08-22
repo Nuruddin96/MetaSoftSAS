@@ -15,6 +15,7 @@ class Tenant extends Model
         'subscription_ends_at' => 'datetime',
         'custom_domain_dns_verified_at' => 'datetime',
         'ai_paused_at' => 'datetime',
+        'onboarding_completed_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -43,6 +44,30 @@ class Tenant extends Model
     public function plan()
     {
         return $this->belongsTo(Plan::class);
+    }
+
+    public function businessType()
+    {
+        return $this->belongsTo(BusinessType::class);
+    }
+
+    /** True once database/sql/chunk52.sql's onboarding columns exist — same additive-column guard as aiPauseColumnsReady(). */
+    public static function onboardingColumnsReady(): bool
+    {
+        return Schema::hasColumn('tenants', 'onboarding_completed_at');
+    }
+
+    /**
+     * Gate for App\Http\Middleware\RequireOnboarding — a tenant that
+     * existed before this feature shipped was backfilled with
+     * onboarding_completed_at set (chunk52.sql), so this is false for them
+     * from day one and the wizard never interrupts an existing tenant. On
+     * an environment where the chunk hasn't been imported yet, treat
+     * onboarding as already done rather than 500ing or blocking the panel.
+     */
+    public function needsOnboarding(): bool
+    {
+        return self::onboardingColumnsReady() && $this->onboarding_completed_at === null;
     }
 
     public function subscriptions()

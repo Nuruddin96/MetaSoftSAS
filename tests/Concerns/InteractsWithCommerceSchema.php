@@ -46,12 +46,40 @@ trait InteractsWithCommerceSchema
             });
         }
 
+        if (! Schema::hasTable('business_types')) {
+            Schema::create('business_types', function (Blueprint $table) {
+                $table->id();
+                $table->string('slug', 60)->unique();
+                $table->string('name_bn', 100);
+                $table->string('name_en', 100);
+                $table->string('icon', 10)->nullable();
+                $table->json('default_attributes')->nullable();
+                $table->integer('sort_order')->default(0);
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('business_type_categories')) {
+            Schema::create('business_type_categories', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('business_type_id');
+                $table->string('name', 150);
+                $table->string('parent_name', 150)->nullable();
+                $table->integer('sort_order')->default(0);
+            });
+        }
+
         if (! Schema::hasTable('tenants')) {
             Schema::create('tenants', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('plan_id')->nullable();
+                $table->unsignedBigInteger('business_type_id')->nullable();
+                $table->string('onboarding_step', 30)->nullable();
+                $table->timestamp('onboarding_completed_at')->nullable();
                 $table->string('subdomain')->unique();
                 $table->string('store_name');
+                $table->string('theme', 50)->default('default');
                 $table->string('status')->default('active');
                 $table->timestamp('trial_ends_at')->nullable();
                 $table->timestamp('subscription_ends_at')->nullable();
@@ -520,6 +548,15 @@ trait InteractsWithCommerceSchema
         ], $attrs));
     }
 
+    /**
+     * onboarding_completed_at defaults to "already done" — every existing
+     * test that calls makeTenant() and then exercises ordinary panel routes
+     * predates the Onboarding Wizard and expects normal (non-redirected)
+     * behavior, exactly like a real pre-existing tenant (backfilled by
+     * chunk52.sql). Pass onboarding_completed_at => null explicitly in
+     * $attrs for a test that specifically exercises the wizard/
+     * RequireOnboarding.
+     */
     protected function makeTenant(array $attrs = []): Tenant
     {
         $id = DB::table('tenants')->insertGetId(array_merge([
@@ -527,6 +564,7 @@ trait InteractsWithCommerceSchema
             'store_name' => 'Test Store',
             'status' => 'active',
             'subscription_ends_at' => now()->addYear(),
+            'onboarding_completed_at' => now(),
             'created_at' => now(),
             'updated_at' => now(),
         ], $attrs));
