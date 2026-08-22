@@ -51,8 +51,18 @@ class DashboardSummaryService
             'total_customers' => Customer::where('tenant_id', $tenantId)->count(),
             'today_expenses' => (float) Expense::where('tenant_id', $tenantId)->whereDate('expense_date', $today)->sum('amount'),
             'low_stock_count' => $lowStockCount,
-            'by_channel' => Order::where('tenant_id', $tenantId)
-                ->selectRaw('channel, COUNT(*) as c')->groupBy('channel')->pluck('c', 'channel'),
+            // Cast to object: `pluck('c','channel')->toArray()` is `[]` (a
+            // plain empty PHP array) for a tenant with zero orders — e.g.
+            // right after onboarding completes — and json_encode() serializes
+            // an empty array as JSON `[]`, not `{}`, even though every
+            // non-empty result already serializes correctly as an object
+            // (PHP string-keyed arrays always do). The mobile client's
+            // DashboardSummary.fromJson always casts this field to
+            // `Map<String, dynamic>?`, so an inconsistently-shaped empty
+            // response crashed it with a type-cast error. `(object)` forces
+            // `{}` in both the empty and non-empty cases.
+            'by_channel' => (object) Order::where('tenant_id', $tenantId)
+                ->selectRaw('channel, COUNT(*) as c')->groupBy('channel')->pluck('c', 'channel')->toArray(),
             'top_districts' => $districtStats->take(5)->map(fn ($d) => [
                 'district_name' => $d->name,
                 'order_count' => (int) $d->orders,

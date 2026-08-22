@@ -42,6 +42,33 @@ class TenantIsolationTest extends TestCase
             ->assertJsonStructure(['today_orders', 'today_sales', 'pending_orders', 'courier_pending_count', 'total_customers', 'today_expenses', 'low_stock_count', 'by_channel', 'top_districts', 'more_districts_count', 'recent_orders']);
     }
 
+    /**
+     * Regression test: a tenant with zero orders (e.g. immediately after
+     * onboarding) made `by_channel` serialize as `[]` — `pluck('c',
+     * 'channel')->toArray()` on an empty result is a plain PHP array with
+     * no string keys, and json_encode() renders that as a JSON array, not
+     * `{}`, even though every non-empty response already serializes
+     * correctly as an object. The mobile client's DashboardSummary.fromJson
+     * always casts this field `as Map<String, dynamic>?`, so the
+     * inconsistent shape crashed it with a type-cast error right after
+     * onboarding completion. assertJsonStructure above only checks the key
+     * exists, not its JSON type, so it passed even with the bug — this test
+     * decodes with `assoc: false` specifically to catch array-vs-object.
+     */
+    public function test_dashboard_by_channel_is_a_json_object_even_when_tenant_has_zero_orders(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/mobile/v1/dashboard')->assertOk();
+
+        $decoded = json_decode($response->getContent());
+        $this->assertIsObject($decoded->by_channel);
+        $this->assertSame([], (array) $decoded->by_channel);
+    }
+
     public function test_tenant_cannot_view_another_tenants_order(): void
     {
         $tenantA = $this->makeTenant();
