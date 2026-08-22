@@ -13,11 +13,12 @@ use App\Http\Controllers\Api\Mobile\IncompleteOrderController;
 use App\Http\Controllers\Api\Mobile\InventoryController;
 use App\Http\Controllers\Api\Mobile\MessengerController;
 use App\Http\Controllers\Api\Mobile\NotificationController;
+use App\Http\Controllers\Api\Mobile\OnboardingController;
 use App\Http\Controllers\Api\Mobile\OrderController;
+use App\Http\Controllers\Api\Mobile\PosController;
 use App\Http\Controllers\Api\Mobile\ProductCatalogController;
 use App\Http\Controllers\Api\Mobile\ProductController;
 use App\Http\Controllers\Api\Mobile\ProductSourceController;
-use App\Http\Controllers\Api\Mobile\PosController;
 use App\Http\Controllers\Api\Mobile\ReferenceDataController;
 use App\Http\Controllers\Api\Mobile\ReportController;
 use App\Http\Controllers\Api\Mobile\SignalController;
@@ -58,6 +59,21 @@ Route::prefix('mobile/v1')->group(function () {
 
         Route::get('reference/divisions', [ReferenceDataController::class, 'divisions']);
         Route::get('reference/districts', [ReferenceDataController::class, 'districts']);
+
+        // Tenant Onboarding Wizard — mobile counterpart of the web wizard
+        // (routes/web.php's tenant.onboarding.* group), same
+        // TenantOnboardingService underneath. See Api\Mobile\
+        // OnboardingController's docblock for why categories add/remove has
+        // no endpoint here (reuses the existing categories endpoints below).
+        Route::get('onboarding', [OnboardingController::class, 'status']);
+        Route::post('onboarding/business-type', [OnboardingController::class, 'storeBusinessType']);
+        Route::post('onboarding/business-info', [OnboardingController::class, 'storeBusinessInfo']);
+        Route::post('onboarding/categories/continue', [OnboardingController::class, 'continueCategories']);
+        Route::post('onboarding/store-settings', [OnboardingController::class, 'storeStoreSettings']);
+        Route::post('onboarding/first-product', [OnboardingController::class, 'storeFirstProduct']);
+        Route::post('onboarding/first-product/skip', [OnboardingController::class, 'skipFirstProduct']);
+        Route::post('onboarding/describe-image', [OnboardingController::class, 'describeImage']);
+        Route::post('onboarding/complete', [OnboardingController::class, 'complete']);
 
         Route::get('products', [ProductController::class, 'index']);
 

@@ -47,6 +47,7 @@ use App\Http\Controllers\Tenant\InventoryController;
 use App\Http\Controllers\Tenant\MessengerInboxController;
 use App\Http\Controllers\Tenant\NotificationController;
 use App\Http\Controllers\Tenant\NotificationPreferenceController;
+use App\Http\Controllers\Tenant\OnboardingController;
 use App\Http\Controllers\Tenant\OrderController;
 use App\Http\Controllers\Tenant\PosController;
 use App\Http\Controllers\Tenant\ProductController;
@@ -268,9 +269,29 @@ $tenantRoutes = function () {
         Route::get('manifest.json', [TenantPwaController::class, 'manifest'])->name('pwa.manifest');
         Route::get('sw.js', [TenantPwaController::class, 'serviceWorker'])->name('pwa.sw');
 
-        Route::middleware(['auth:tenant', 'check.subscription'])->group(function () {
+        Route::middleware(['auth:tenant', 'check.subscription', 'require.onboarding'])->group(function () {
 
             Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+            // Tenant Onboarding Wizard — shown once right after signup
+            // instead of an empty dashboard (see RequireOnboarding and
+            // TenantOnboardingService). Sits inside this same
+            // auth:tenant+check.subscription group (a brand-new trial is
+            // always valid) but is exempted from require.onboarding itself
+            // via RequireOnboarding::$allowed, so visiting these routes
+            // never redirect-loops back to themselves.
+            Route::prefix('onboarding')->name('onboarding.')->group(function () {
+                Route::get('/', [OnboardingController::class, 'redirect'])->name('redirect');
+                Route::get('{step}', [OnboardingController::class, 'show'])->name('show');
+                Route::post('business-type', [OnboardingController::class, 'storeBusinessType'])->name('business_type.store');
+                Route::post('business-info', [OnboardingController::class, 'storeBusinessInfo'])->name('business_info.store');
+                Route::post('categories/continue', [OnboardingController::class, 'continueCategories'])->name('categories.continue');
+                Route::post('store-settings', [OnboardingController::class, 'storeStoreSettings'])->name('store_settings.store');
+                Route::post('first-product', [OnboardingController::class, 'storeFirstProduct'])->name('first_product.store');
+                Route::post('first-product/skip', [OnboardingController::class, 'skipFirstProduct'])->name('first_product.skip');
+                Route::post('describe-image', [OnboardingController::class, 'describeImage'])->name('describe_image');
+                Route::post('complete', [OnboardingController::class, 'complete'])->name('complete');
+            });
 
             // AI Agent panel chat (Phase 4) — the first live consumer of
             // the AI tool registry; see Tenant\AiChatController's docblock

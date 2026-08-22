@@ -3,6 +3,7 @@
 use App\Http\Middleware\BindTenantFromSanctumUser;
 use App\Http\Middleware\CheckSubscription;
 use App\Http\Middleware\EnsureFeatureEnabled;
+use App\Http\Middleware\RequireOnboarding;
 use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\ResolveTenant;
 use App\Http\Middleware\ResolveTenantSessionCookie;
@@ -24,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'resolve.tenant' => ResolveTenant::class,
             'check.subscription' => CheckSubscription::class,
+            'require.onboarding' => RequireOnboarding::class,
             'feature' => EnsureFeatureEnabled::class,
             // Mobile API only — see that middleware's docblock for why
             // resolve.tenant (URL-driven) doesn't apply to API requests.

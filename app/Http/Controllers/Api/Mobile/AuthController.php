@@ -79,6 +79,12 @@ class AuthController extends Controller
                 'business_name' => $tenant->store_name,
                 'plan_name' => $tenant->plan?->name,
                 'plan_expires_at' => optional($tenant->subscription_ends_at)->toIso8601String(),
+                // Tenant Onboarding Wizard — see Api\Mobile\OnboardingController
+                // and App\Services\Tenant\TenantOnboardingService. false/null
+                // for every tenant that existed before this feature shipped
+                // (backfilled onboarding_completed_at, see chunk52.sql).
+                'needs_onboarding' => $tenant->needsOnboarding(),
+                'onboarding_step' => $tenant->needsOnboarding() ? ($tenant->onboarding_step ?: 'business_type') : null,
             ],
         ]);
     }
@@ -100,6 +106,12 @@ class AuthController extends Controller
                 'business_name' => $tenant->store_name,
                 'plan_name' => $tenant->plan?->name,
                 'plan_expires_at' => optional($tenant->subscription_ends_at)->toIso8601String(),
+                // Tenant Onboarding Wizard — see Api\Mobile\OnboardingController
+                // and App\Services\Tenant\TenantOnboardingService. false/null
+                // for every tenant that existed before this feature shipped
+                // (backfilled onboarding_completed_at, see chunk52.sql).
+                'needs_onboarding' => $tenant->needsOnboarding(),
+                'onboarding_step' => $tenant->needsOnboarding() ? ($tenant->onboarding_step ?: 'business_type') : null,
             ],
         ]);
     }
