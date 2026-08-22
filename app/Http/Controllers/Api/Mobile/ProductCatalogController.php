@@ -45,7 +45,7 @@ class ProductCatalogController extends Controller
     public function index(Request $request)
     {
         $products = Product::query()
-            ->with(['category', 'variants.inventory'])
+            ->with(['category.parent', 'variants.inventory'])
             ->when($request->filled('q'), function ($query) use ($request) {
                 $q = $request->string('q')->toString();
                 $query->where(function ($qq) use ($q) {
@@ -87,7 +87,7 @@ class ProductCatalogController extends Controller
     {
         $tenant = app('currentTenant');
         $product = Product::where('tenant_id', $tenant->id)
-            ->with(['category', 'variants.inventory.warehouse', 'images' => fn ($q) => $q->orderBy('sort_order')])
+            ->with(['category.parent', 'variants.inventory.warehouse', 'images' => fn ($q) => $q->orderBy('sort_order')])
             ->findOrFail($product);
 
         return response()->json($this->presentDetail($product));
@@ -106,13 +106,24 @@ class ProductCatalogController extends Controller
 
         try {
             $product = DB::transaction(function () use ($request, $data, $tenant, &$uploadedPaths) {
-                $names = ! empty($data['variant_names']) ? $data['variant_names'] : [null];
+                // New, additive path: a richer `variants[]` array (each row
+                // with its own name/selling_price/sku/attributes — built by
+                // the Attributes/variant-combination UI) wins when present.
+                // Otherwise falls back to the original flat `variant_names`
+                // + single top-level `selling_price`, unchanged, for the
+                // simple-product form that has always worked this way.
+                $rows = ! empty($data['variants'])
+                    ? $data['variants']
+                    : array_map(
+                        fn ($name) => ['name' => $name, 'selling_price' => $data['selling_price'], 'sku' => null],
+                        ! empty($data['variant_names']) ? $data['variant_names'] : [null],
+                    );
 
                 $product = Product::create([
                     'name' => $data['name'],
                     'category_id' => $data['category_id'] ?? null,
                     'is_active' => true,
-                    'has_variants' => count($names) > 1 ? 1 : 0,
+                    'has_variants' => count($rows) > 1 ? 1 : 0,
                 ]);
 
                 if ($request->hasFile('thumbnail')) {
@@ -124,12 +135,13 @@ class ProductCatalogController extends Controller
                 $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
                 $qty = (int) ($data['initial_stock'] ?? 0);
 
-                foreach ($names as $name) {
+                foreach ($rows as $row) {
                     $variant = $product->variants()->create([
                         'tenant_id' => $tenant->id,
-                        'variant_name' => $name ?: 'Default',
-                        'selling_price' => $data['selling_price'],
-                        'sku' => count($names) === 1 ? ($data['sku'] ?? null) : null,
+                        'variant_name' => ($row['name'] ?? null) ?: 'Default',
+                        'selling_price' => $row['selling_price'] ?? $data['selling_price'],
+                        'sku' => count($rows) === 1 ? ($row['sku'] ?? $data['sku'] ?? null) : ($row['sku'] ?? null),
+                        'attributes' => $this->attributesFromRow($row),
                     ]);
 
                     if ($warehouse) {
@@ -224,11 +236,21 @@ class ProductCatalogController extends Controller
         return $request->validate([
             'name' => 'required|string|max:255',
             'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')->where('tenant_id', $tenant->id)],
-            'selling_price' => 'required|numeric|min:0.01',
+            // Only required when the caller isn't using the new per-row
+            // `variants[]` path below (each row supplies its own price).
+            'selling_price' => 'required_without:variants|nullable|numeric|min:0.01',
             'sku' => ['nullable', 'string', 'max:80', Rule::unique('product_variants', 'sku')->where('tenant_id', $tenant->id)],
             'initial_stock' => 'nullable|integer|min:0',
             'variant_names' => 'nullable|array|max:20',
             'variant_names.*' => 'string|max:150',
+            // New, additive alternative to variant_names — wins when
+            // present, see store()'s doc comment.
+            'variants' => 'nullable|array|max:50',
+            'variants.*.name' => 'nullable|string|max:150',
+            'variants.*.selling_price' => 'required_with:variants|numeric|min:0.01',
+            'variants.*.sku' => 'nullable|string|max:80',
+            'variants.*.attributes' => 'nullable|array',
+            'variants.*.attributes.*' => 'nullable|string|max:60',
             'thumbnail' => 'nullable|image|max:4096',
         ], [
             'category_id.exists' => 'অবৈধ ক্যাটাগরি।',
@@ -266,6 +288,11 @@ class ProductCatalogController extends Controller
             'sku' => $variants->count() === 1 ? $variants->first()->sku : null,
             'category_id' => $product->category_id,
             'category_name' => $product->category?->name,
+            // Catalog Architecture project — null when the product's
+            // category is itself top-level (or the product has none); set
+            // to the parent's name when it's a subcategory, so the client
+            // can show "Category: X / Subcategory: Y" instead of just Y.
+            'parent_category_name' => $product->category?->parent?->name,
             'selling_price' => $prices->isNotEmpty() ? (float) $prices->min() : 0,
             'stock_quantity' => (int) $stock,
             'is_active' => (bool) $product->is_active,
@@ -294,6 +321,12 @@ class ProductCatalogController extends Controller
                 'compare_at_price' => $v->compare_at_price !== null ? (float) $v->compare_at_price : null,
                 'stock_quantity' => $v->relationLoaded('inventory') ? (int) $v->inventory->sum('quantity') : $v->totalStock(),
                 'is_active' => (bool) $v->is_active,
+                // New, additive — was never returned before (only ever
+                // read via the web ProductController for storefront
+                // display). Whatever shape an existing variant's JSON
+                // happens to have (including `null`) passes through as-is;
+                // no coercion, so an older row never becomes {} on read.
+                'attributes' => $v->attributes,
             ])->values()->all(),
             'warehouse_stock' => collect($warehouseTotals)->map(fn ($qty, $name) => [
                 'warehouse_name' => $name,
@@ -305,5 +338,115 @@ class ProductCatalogController extends Controller
                 'sort_order' => $img->sort_order,
             ])->values()->all(),
         ];
+    }
+
+    /** @return array<string, string>|null */
+    protected function attributesFromRow(array $row): ?array
+    {
+        if (empty($row['attributes']) || ! is_array($row['attributes'])) {
+            return null;
+        }
+
+        $attrs = [];
+        foreach ($row['attributes'] as $name => $value) {
+            $name = trim((string) $name);
+            $value = trim((string) $value);
+            if ($name !== '' && $value !== '') {
+                $attrs[$name] = $value;
+            }
+        }
+
+        return $attrs ?: null;
+    }
+
+    /**
+     * New, additive — add one variant to an existing product without
+     * resubmitting the whole product form. Mirrors store()'s per-row
+     * shape exactly (name/selling_price/sku/attributes).
+     */
+    public function storeVariant(Request $request, int $product)
+    {
+        $tenant = app('currentTenant');
+        $product = Product::where('tenant_id', $tenant->id)->findOrFail($product);
+
+        $data = $request->validate([
+            'name' => 'nullable|string|max:150',
+            'selling_price' => 'required|numeric|min:0',
+            'sku' => ['nullable', 'string', 'max:80', Rule::unique('product_variants', 'sku')->where('tenant_id', $tenant->id)],
+            'attributes' => 'nullable|array',
+            'attributes.*' => 'nullable|string|max:60',
+        ]);
+
+        $variant = $product->variants()->create([
+            'tenant_id' => $tenant->id,
+            'variant_name' => $data['name'] ?: 'Default',
+            'selling_price' => $data['selling_price'],
+            'sku' => $data['sku'] ?? null,
+            'attributes' => $this->attributesFromRow($data),
+        ]);
+
+        $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
+        if ($warehouse) {
+            Inventory::create(['tenant_id' => $tenant->id, 'variant_id' => $variant->id, 'warehouse_id' => $warehouse->id, 'quantity' => 0]);
+        }
+
+        if ($product->variants()->count() > 1) {
+            $product->update(['has_variants' => true]);
+        }
+
+        return response()->json(['id' => $variant->id], 201);
+    }
+
+    /** New, additive — edit one variant's own fields directly. */
+    public function updateVariant(Request $request, int $product, int $variant)
+    {
+        $tenant = app('currentTenant');
+        $product = Product::where('tenant_id', $tenant->id)->findOrFail($product);
+        $variant = $product->variants()->findOrFail($variant);
+
+        $data = $request->validate([
+            'name' => 'nullable|string|max:150',
+            'selling_price' => 'nullable|numeric|min:0',
+            'sku' => ['nullable', 'string', 'max:80', Rule::unique('product_variants', 'sku')->where('tenant_id', $tenant->id)->ignore($variant->id)],
+            'attributes' => 'nullable|array',
+            'attributes.*' => 'nullable|string|max:60',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $variant->update([
+            'variant_name' => $data['name'] ?? $variant->variant_name,
+            'selling_price' => $data['selling_price'] ?? $variant->selling_price,
+            'sku' => $data['sku'] ?? $variant->sku,
+            'attributes' => array_key_exists('attributes', $data) ? $this->attributesFromRow($data) : $variant->attributes,
+            'is_active' => $data['is_active'] ?? $variant->is_active,
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * New, additive — delete one variant. Blocked when it's the product's
+     * only remaining variant: `product_variants`' own schema comment
+     * states "every product has at least ONE variant row", and Order/POS/
+     * storefront code all assume a product resolves to at least one
+     * sellable row.
+     */
+    public function destroyVariant(int $product, int $variant)
+    {
+        $tenant = app('currentTenant');
+        $product = Product::where('tenant_id', $tenant->id)->findOrFail($product);
+        $variant = $product->variants()->findOrFail($variant);
+
+        if ($product->variants()->count() <= 1) {
+            return response()->json(['message' => 'প্রোডাক্টের অন্তত একটি ভ্যারিয়েন্ট থাকতে হবে।'], 422);
+        }
+
+        $variant->delete();
+
+        if ($product->variants()->count() <= 1) {
+            $product->update(['has_variants' => false]);
+        }
+
+        return response()->json(['ok' => true]);
     }
 }

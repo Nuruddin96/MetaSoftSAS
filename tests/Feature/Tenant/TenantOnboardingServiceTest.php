@@ -103,19 +103,77 @@ class TenantOnboardingServiceTest extends TestCase
         app()->forgetInstance('currentTenant');
     }
 
-    public function test_seeding_only_creates_top_level_categories_not_subcategories(): void
+    /**
+     * Catalog Architecture project: CategoryController::store()/update() now
+     * accept parent_id (see Category model's parent()/children()), so this
+     * gap (documented in the old test this replaces) is closed — a
+     * subcategory row is created with parent_id resolved from its
+     * top-level sibling by name, in the SAME seeding pass.
+     */
+    public function test_seeding_creates_subcategories_with_parent_id_resolved_by_name(): void
     {
         $tenant = $this->makeTenant(['onboarding_completed_at' => null]);
         app()->instance('currentTenant', $tenant);
 
         $businessType = $this->makeBusinessType();
         $businessType->categories()->create(['name' => 'Face Care', 'sort_order' => 10]);
-        $businessType->categories()->create(['name' => 'Sub Item', 'parent_name' => 'Face Care', 'sort_order' => 20]);
+        $businessType->categories()->create(['name' => 'Cleanser', 'parent_name' => 'Face Care', 'sort_order' => 11]);
 
         $created = $this->service()->seedDefaultCategories($tenant, $businessType);
 
-        $this->assertSame(1, $created);
-        $this->assertFalse(Category::where('name', 'Sub Item')->exists());
+        $this->assertSame(2, $created);
+        $faceCare = Category::where('name', 'Face Care')->firstOrFail();
+        $cleanser = Category::where('name', 'Cleanser')->firstOrFail();
+        $this->assertNull($faceCare->parent_id);
+        $this->assertSame($faceCare->id, $cleanser->parent_id);
+
+        app()->forgetInstance('currentTenant');
+    }
+
+    /** A subcategory row whose named parent isn't in this business type's own top-level set is skipped, not created as an orphaned top-level category. */
+    public function test_seeding_skips_a_subcategory_whose_named_parent_does_not_exist(): void
+    {
+        $tenant = $this->makeTenant(['onboarding_completed_at' => null]);
+        app()->instance('currentTenant', $tenant);
+
+        $businessType = $this->makeBusinessType();
+        $businessType->categories()->create(['name' => 'Orphan Sub', 'parent_name' => 'Nonexistent Parent', 'sort_order' => 10]);
+
+        $created = $this->service()->seedDefaultCategories($tenant, $businessType);
+
+        $this->assertSame(0, $created);
+        $this->assertFalse(Category::where('name', 'Orphan Sub')->exists());
+
+        app()->forgetInstance('currentTenant');
+    }
+
+    public function test_saving_business_type_seeds_default_attributes_from_business_type_once(): void
+    {
+        $tenant = $this->makeTenant(['onboarding_completed_at' => null]);
+        app()->instance('currentTenant', $tenant);
+
+        $businessType = $this->makeBusinessType(['default_attributes' => ['Size', 'ML']]);
+
+        $this->service()->saveBusinessType($tenant, $businessType->id, null);
+
+        $this->assertSame(2, \App\Models\ProductAttribute::count());
+        $this->assertTrue(\App\Models\ProductAttribute::where('name', 'Size')->exists());
+
+        app()->forgetInstance('currentTenant');
+    }
+
+    public function test_seeding_attributes_never_duplicates_a_tenants_own_attributes(): void
+    {
+        $tenant = $this->makeTenant(['onboarding_completed_at' => null]);
+        app()->instance('currentTenant', $tenant);
+
+        \App\Models\ProductAttribute::create(['tenant_id' => $tenant->id, 'name' => 'My Own Attribute']);
+
+        $businessType = $this->makeBusinessType(['default_attributes' => ['Size', 'ML']]);
+        $created = $this->service()->seedDefaultAttributes($tenant, $businessType);
+
+        $this->assertSame(0, $created);
+        $this->assertSame(1, \App\Models\ProductAttribute::count());
 
         app()->forgetInstance('currentTenant');
     }

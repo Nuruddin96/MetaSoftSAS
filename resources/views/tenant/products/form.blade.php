@@ -126,7 +126,22 @@
                                    class="rounded-lg border border-ink/15 px-3 py-2 text-sm">
                         </div>
                     </div>
-                    <button type="button" onclick="removeVariantRow(this)" class="shrink-0 text-red-600 text-sm px-2 py-2" aria-label="ভ্যারিয়েন্ট মুছুন">✕</button>
+                    @if (!empty($v['id']))
+                        {{-- Real deletion (Catalog Architecture project) — this row is
+                             an already-saved variant, so just hiding it in the DOM
+                             would NOT delete it server-side (ProductController::update()
+                             only creates/updates rows present in the submitted array,
+                             it never deletes ones missing from it). Submits to the new
+                             products.variants.destroy route instead, which the backend
+                             also blocks on the product's last remaining variant. --}}
+                        <form method="POST" action="{{ route('tenant.products.variants.destroy', [$product, $v['id']]) }}"
+                              onsubmit="return confirm('এই ভ্যারিয়েন্ট মুছে ফেলবেন?')" class="shrink-0">
+                            @csrf @method('DELETE')
+                            <button type="submit" class="text-red-600 text-sm px-2 py-2" aria-label="ভ্যারিয়েন্ট মুছুন">✕</button>
+                        </form>
+                    @else
+                        <button type="button" onclick="removeVariantRow(this)" class="shrink-0 text-red-600 text-sm px-2 py-2" aria-label="ভ্যারিয়েন্ট মুছুন">✕</button>
+                    @endif
                 </div>
             @endforeach
         </div>

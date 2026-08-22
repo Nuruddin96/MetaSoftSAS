@@ -4,6 +4,7 @@ namespace App\Services\Tenant;
 
 use App\Models\BusinessType;
 use App\Models\Category;
+use App\Models\ProductAttribute;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
 use Illuminate\Support\Str;
@@ -73,6 +74,7 @@ class TenantOnboardingService
                 $businessType->slug === 'other' ? trim((string) $otherLabel) ?: null : null
             );
             $this->seedDefaultCategories($tenant, $businessType);
+            $this->seedDefaultAttributes($tenant, $businessType);
             $this->maybeApplyTheme($tenant, $businessType);
         }
 
@@ -87,11 +89,15 @@ class TenantOnboardingService
      * first successful run — same idempotent-by-construction shape as
      * Tenant::booted()'s warehouse/store_settings auto-provisioning).
      *
-     * Only top-level categories (business_type_categories.parent_name IS
-     * NULL) are seeded — CategoryController::store() has no parent_id
-     * input today, so seeding a subcategory here would create an
-     * orphaned, unreachable-from-the-UI parent relationship. See
-     * chunk52.sql's docblock on business_type_categories.parent_name.
+     * Top-level rows (business_type_categories.parent_name IS NULL) are
+     * created first, then subcategory rows (parent_name set) resolve their
+     * parent from that same batch by name and are created with parent_id
+     * set — now safe to do since CategoryController::store()/update()
+     * accept parent_id (Catalog Architecture project). A subcategory row
+     * whose named parent doesn't exist in this business type's own
+     * top-level set (a seed-data typo) is skipped rather than created as
+     * an orphaned top-level category — same "never guess" principle as
+     * the rest of this class.
      */
     public function seedDefaultCategories(Tenant $tenant, BusinessType $businessType): int
     {
@@ -100,9 +106,24 @@ class TenantOnboardingService
         }
 
         $created = 0;
+        $idsByName = [];
 
         foreach ($businessType->categories as $defaultCategory) {
             if ($defaultCategory->parent_name !== null) {
+                continue;
+            }
+
+            $category = Category::create([
+                'tenant_id' => $tenant->id,
+                'name' => $defaultCategory->name,
+                'slug' => Str::slug($defaultCategory->name).'-'.Str::lower(Str::random(3)),
+            ]);
+            $idsByName[$defaultCategory->name] = $category->id;
+            $created++;
+        }
+
+        foreach ($businessType->categories as $defaultCategory) {
+            if ($defaultCategory->parent_name === null || ! isset($idsByName[$defaultCategory->parent_name])) {
                 continue;
             }
 
@@ -110,7 +131,38 @@ class TenantOnboardingService
                 'tenant_id' => $tenant->id,
                 'name' => $defaultCategory->name,
                 'slug' => Str::slug($defaultCategory->name).'-'.Str::lower(Str::random(3)),
+                'parent_id' => $idsByName[$defaultCategory->parent_name],
             ]);
+            $created++;
+        }
+
+        return $created;
+    }
+
+    /**
+     * Seeds the tenant's reusable attribute vocabulary (Catalog
+     * Architecture project) from business_types.default_attributes — the
+     * same list Step 5's first-product screen already shows as plain
+     * suggestion text (e.g. "Size, ML"). Purely additive convenience: no
+     * values are pre-filled (the tenant types their own, e.g. "Red"/"M"),
+     * and — same idempotent-by-condition guard as seedDefaultCategories()
+     * — only ever runs for a tenant with ZERO attributes of its own.
+     */
+    public function seedDefaultAttributes(Tenant $tenant, BusinessType $businessType): int
+    {
+        if (ProductAttribute::count() > 0) {
+            return 0;
+        }
+
+        $created = 0;
+
+        foreach ($businessType->default_attributes ?? [] as $i => $name) {
+            $name = trim((string) $name);
+            if ($name === '') {
+                continue;
+            }
+
+            ProductAttribute::create(['tenant_id' => $tenant->id, 'name' => $name, 'sort_order' => $i]);
             $created++;
         }
 
