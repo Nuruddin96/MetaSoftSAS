@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers\Api\Mobile;
 
+use App\Http\Controllers\CentralAuth\RegisterController;
 use App\Http\Controllers\Controller;
+use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -35,6 +38,87 @@ use Illuminate\Validation\ValidationException;
  */
 class AuthController extends Controller
 {
+    /**
+     * Same validation, subdomain generation, and Tenant+User creation as
+     * `CentralAuth\RegisterController::store()` (reuses its
+     * `makeSubdomain()` helper directly rather than duplicating the
+     * slug/uniqueness logic) — a mobile signup must create the exact same
+     * kind of tenant a web signup does. Deliberately omits the web
+     * controller's affiliate-referral (`?ref=`) handling: that's a
+     * marketing-link feature with no equivalent entry point in the mobile
+     * app, not a piece of the core registration business logic. Returns
+     * the same `{token, user, tenant}` shape as `login()` so the client
+     * can reuse one response model; a freshly created tenant naturally
+     * has `needs_onboarding: true` (`onboarding_completed_at` starts
+     * NULL), which is what routes it into the Onboarding Wizard.
+     */
+    public function register(Request $request)
+    {
+        $data = $request->validate([
+            'store_name' => ['required', 'string', 'max:100'],
+            'owner_name' => ['required', 'string', 'max:100'],
+            'owner_phone' => ['required', 'regex:/^01[3-9][0-9]{8}$/'],
+            'owner_email' => ['required', 'email', 'unique:tenants,owner_email'],
+            'password' => ['required', 'string', 'min:6', 'confirmed'],
+        ], [
+            'owner_phone.regex' => 'সঠিক বাংলাদেশি মোবাইল নাম্বার দিন (01XXXXXXXXX)।',
+            'owner_email.unique' => 'এই ইমেইলে আগেই একাউন্ট খোলা হয়েছে।',
+            'password.confirmed' => 'দুইবার দেয়া পাসওয়ার্ড মিলছে না।',
+        ]);
+
+        $subdomain = RegisterController::makeSubdomain($data['store_name']);
+        if ($subdomain === null) {
+            throw ValidationException::withMessages([
+                'store_name' => ['ওয়েবসাইট ঠিকানা তৈরির জন্য বিজনেসের নামটি ইংরেজি অক্ষরে লিখুন (যেমন: Rahim Fashion House)।'],
+            ]);
+        }
+
+        [$user, $tenant] = DB::transaction(function () use ($data, $subdomain) {
+            $tenant = Tenant::create([
+                'store_name' => $data['store_name'],
+                'subdomain' => $subdomain,
+                'owner_name' => $data['owner_name'],
+                'owner_phone' => $data['owner_phone'],
+                'owner_email' => $data['owner_email'],
+                'status' => 'trial',
+                'plan_id' => 1,
+            ]);
+
+            $user = User::withoutGlobalScopes()->create([
+                'tenant_id' => $tenant->id,
+                'name' => $data['owner_name'],
+                'email' => $data['owner_email'],
+                'phone' => $data['owner_phone'],
+                'password' => Hash::make($data['password']),
+                'role' => 'owner',
+            ]);
+
+            return [$user, $tenant];
+        });
+
+        app()->instance('currentTenant', $tenant);
+
+        $token = $user->createToken('mobile-app')->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+            ],
+            'tenant' => [
+                'id' => $tenant->id,
+                'business_name' => $tenant->store_name,
+                'plan_name' => $tenant->plan?->name,
+                'plan_expires_at' => optional($tenant->subscription_ends_at)->toIso8601String(),
+                'needs_onboarding' => $tenant->needsOnboarding(),
+                'onboarding_step' => $tenant->needsOnboarding() ? ($tenant->onboarding_step ?: 'business_type') : null,
+            ],
+        ], 201);
+    }
+
     public function login(Request $request)
     {
         $data = $request->validate([
