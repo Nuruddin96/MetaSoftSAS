@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\Mobile\NotificationController;
 use App\Http\Controllers\Api\Mobile\OnboardingController;
 use App\Http\Controllers\Api\Mobile\OrderController;
 use App\Http\Controllers\Api\Mobile\PosController;
+use App\Http\Controllers\Api\Mobile\ProductAttributeController;
 use App\Http\Controllers\Api\Mobile\ProductCatalogController;
 use App\Http\Controllers\Api\Mobile\ProductController;
 use App\Http\Controllers\Api\Mobile\ProductSourceController;
@@ -86,13 +87,32 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('product-catalog/{product}', [ProductCatalogController::class, 'show'])->whereNumber('product');
         Route::post('product-catalog', [ProductCatalogController::class, 'store']);
         Route::post('product-catalog/{product}', [ProductCatalogController::class, 'update'])->whereNumber('product');
+        // New, additive — single-variant CRUD independent of the whole-
+        // product update above (see ProductCatalogController's docblock).
+        Route::post('product-catalog/{product}/variants', [ProductCatalogController::class, 'storeVariant'])->whereNumber('product');
+        Route::patch('product-catalog/{product}/variants/{variant}', [ProductCatalogController::class, 'updateVariant'])->whereNumber('product')->whereNumber('variant');
+        Route::delete('product-catalog/{product}/variants/{variant}', [ProductCatalogController::class, 'destroyVariant'])->whereNumber('product')->whereNumber('variant');
 
         // Categories — mirrors Tenant\CategoryController's real capability
-        // exactly (list/create/delete only, see CategoryController's
-        // docblock). Consumed by the Product Form's category picker too.
+        // (list/create/update/delete, see CategoryController's docblock;
+        // `update` is new — the web/mobile backend never had one before).
+        // Consumed by the Product Form's category picker too.
         Route::get('categories', [CategoryController::class, 'index']);
         Route::post('categories', [CategoryController::class, 'store']);
+        Route::patch('categories/{category}', [CategoryController::class, 'update'])->whereNumber('category');
         Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->whereNumber('category');
+
+        // Product Attributes — new, additive vocabulary layer (Color/Size/
+        // Storage + their values) a tenant can reuse when building variants.
+        // Does not touch product_variants.attributes JSON — see
+        // ProductAttributeController's docblock.
+        Route::get('attributes', [ProductAttributeController::class, 'index']);
+        Route::post('attributes', [ProductAttributeController::class, 'store']);
+        Route::patch('attributes/{attribute}', [ProductAttributeController::class, 'update'])->whereNumber('attribute');
+        Route::delete('attributes/{attribute}', [ProductAttributeController::class, 'destroy'])->whereNumber('attribute');
+        Route::post('attributes/{attribute}/values', [ProductAttributeController::class, 'addValue'])->whereNumber('attribute');
+        Route::patch('attribute-values/{value}', [ProductAttributeController::class, 'updateValue'])->whereNumber('value');
+        Route::delete('attribute-values/{value}', [ProductAttributeController::class, 'destroyValue'])->whereNumber('value');
 
         // Inventory — mirrors Tenant\InventoryController's real capability
         // (index/adjust; low-stock folded into index via ?low_stock=1, see

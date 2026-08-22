@@ -129,6 +129,7 @@
                     'প্রোডাক্ট' => [
                         ['tenant.products.index', 'প্রোডাক্ট', 'package'],
                         ['tenant.categories.index', 'ক্যাটাগরি', 'folder-tree'],
+                        ['tenant.attributes.index', 'অ্যাট্রিবিউট', 'tag'],
                         ['tenant.inventory', 'ইনভেন্টরি', 'warehouse'],
                         ['tenant.inventory.low', 'লো স্টক', 'triangle-alert'],
                     ],

@@ -432,6 +432,26 @@ trait InteractsWithCommerceSchema
             });
         }
 
+        if (! Schema::hasTable('product_attributes')) {
+            Schema::create('product_attributes', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 60);
+                $table->integer('sort_order')->default(0);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('product_attribute_values')) {
+            Schema::create('product_attribute_values', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('product_attribute_id');
+                $table->string('value', 80);
+                $table->integer('sort_order')->default(0);
+                $table->timestamps();
+            });
+        }
+
         if (! Schema::hasTable('inventory')) {
             Schema::create('inventory', function (Blueprint $table) {
                 $table->id();

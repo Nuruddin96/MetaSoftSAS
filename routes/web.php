@@ -35,6 +35,7 @@ use App\Http\Controllers\Tenant\AiMemoryController;
 use App\Http\Controllers\Tenant\BarcodeController;
 use App\Http\Controllers\Tenant\BillingController;
 use App\Http\Controllers\Tenant\CategoryController;
+use App\Http\Controllers\Tenant\ProductAttributeController;
 use App\Http\Controllers\Tenant\CourierController;
 use App\Http\Controllers\Tenant\CustomerController;
 use App\Http\Controllers\Tenant\DashboardController;
@@ -323,7 +324,18 @@ $tenantRoutes = function () {
             // Catalog
             Route::get('categories', [CategoryController::class, 'index'])->name('categories.index');
             Route::post('categories', [CategoryController::class, 'store'])->name('categories.store');
+            Route::put('categories/{category}', [CategoryController::class, 'update'])->name('categories.update');
             Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->name('categories.destroy');
+
+            // Product Attributes — new, additive vocabulary layer (Color/
+            // Size/Storage + values) reusable when building variants.
+            Route::get('attributes', [ProductAttributeController::class, 'index'])->name('attributes.index');
+            Route::post('attributes', [ProductAttributeController::class, 'store'])->name('attributes.store');
+            Route::put('attributes/{attribute}', [ProductAttributeController::class, 'update'])->name('attributes.update');
+            Route::delete('attributes/{attribute}', [ProductAttributeController::class, 'destroy'])->name('attributes.destroy');
+            Route::post('attributes/{attribute}/values', [ProductAttributeController::class, 'addValue'])->name('attributes.values.store');
+            Route::put('attribute-values/{value}', [ProductAttributeController::class, 'updateValue'])->name('attributes.values.update');
+            Route::delete('attribute-values/{value}', [ProductAttributeController::class, 'destroyValue'])->name('attributes.values.destroy');
 
             Route::get('products', [ProductController::class, 'index'])->name('products.index');
             Route::get('products/create', [ProductController::class, 'create'])->name('products.create');
@@ -331,6 +343,7 @@ $tenantRoutes = function () {
             Route::get('products/{product}/edit', [ProductController::class, 'edit'])->name('products.edit');
             Route::put('products/{product}', [ProductController::class, 'update'])->name('products.update');
             Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('products.destroy');
+            Route::delete('products/{product}/variants/{variant}', [ProductController::class, 'destroyVariant'])->name('products.variants.destroy');
             Route::get('products/{product}/barcodes', [BarcodeController::class, 'print'])->name('products.barcodes');
             Route::delete('products/images/{image}', [ProductController::class, 'destroyImage'])->name('products.images.destroy');
             Route::post('products/{product}/images/reorder', [ProductController::class, 'reorderImages'])->name('products.images.reorder');
