@@ -34,6 +34,26 @@ class DeliveryChargeService
     }
 
     /**
+     * Resolves the division to charge/attribute an order or customer by,
+     * given whichever of division_id/district_id a caller actually
+     * submitted. The order/customer address forms now only collect
+     * district_id (District→Thana UX, Priority 2) — division_id is derived
+     * here from bd_districts so delivery pricing and any division-based
+     * report keep working without asking the user for it again. An
+     * explicitly submitted division_id (a legacy/stale client) always wins,
+     * same as CustomerInfoExtractor's identical district->division lookup
+     * for AI-extracted addresses.
+     */
+    public function resolveDivisionId(?int $submittedDivisionId, ?int $districtId): ?int
+    {
+        if ($submittedDivisionId !== null) {
+            return $submittedDivisionId;
+        }
+
+        return $districtId === null ? null : DB::table('bd_districts')->where('id', $districtId)->value('division_id');
+    }
+
+    /**
      * Both configured amounts + the Dhaka division id, shaped for embedding
      * directly into a Blade view's client-side JS (json_encode-able) — lets
      * a division <select> change recalculate the displayed delivery charge

@@ -164,17 +164,16 @@
                     </div>
                     <div class="grid sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="text-sm font-medium">বিভাগ</label>
-                            <select name="division_id" id="divisionSelect" onchange="calcTotal()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
+                            <label class="text-sm font-medium">জেলা</label>
+                            <select name="district_id" id="districtSelect" onchange="onDistrictChange()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
                                 <option value="">— নেই —</option>
-                                @foreach ($divisions as $d)<option value="{{ $d->id }}" @selected(old('division_id', $order->division_id) == $d->id)>{{ $d->bn_name }}</option>@endforeach
+                                @foreach ($districts as $d)<option value="{{ $d->id }}" data-division-id="{{ $d->division_id }}" @selected(old('district_id', $order->district_id) == $d->id)>{{ $d->bn_name }}</option>@endforeach
                             </select>
                         </div>
                         <div>
-                            <label class="text-sm font-medium">জেলা</label>
-                            <select name="district_id" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
+                            <label class="text-sm font-medium">থানা / উপজেলা</label>
+                            <select name="upazila_id" id="upazilaSelect" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
                                 <option value="">— নেই —</option>
-                                @foreach ($districts as $d)<option value="{{ $d->id }}" @selected(old('district_id', $order->district_id) == $d->id)>{{ $d->bn_name }}</option>@endforeach
                             </select>
                         </div>
                     </div>
@@ -210,8 +209,9 @@
                     </div>
                     {{-- No manual delivery-charge field here either — same
                          DeliveryChargeService-driven, division-based
-                         auto-calculation as the New Order form. --}}
-                    <p class="text-xs text-mute">ডেলিভারি চার্জ বিভাগ অনুযায়ী স্বয়ংক্রিয়ভাবে হিসাব হয় — <a href="{{ route('tenant.settings') }}" class="text-leaf hover:underline">সেটিংসে বদলান</a>।</p>
+                         auto-calculation as the New Order form (division
+                         resolved server-side from the selected জেলা). --}}
+                    <p class="text-xs text-mute">ডেলিভারি চার্জ জেলা অনুযায়ী স্বয়ংক্রিয়ভাবে হিসাব হয় — <a href="{{ route('tenant.settings') }}" class="text-leaf hover:underline">সেটিংসে বদলান</a>।</p>
 
                     @if ($errors->any())
                         <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-btn p-3">
@@ -365,11 +365,31 @@
     const dhakaDivisionId = @json($dhakaDivisionId);
     const chargeInside = @json($chargeInside);
     const chargeOutside = @json($chargeOutside);
+    const upazilas = @json($upazilas);
+    const initialUpazilaId = @json($order->upazila_id);
     let rowIdx = 0;
 
-    /** No manual delivery-charge input exists — same client-side-preview-only computation as tenant/orders/create.blade.php; the server independently recomputes from division_id and never trusts a submitted amount. */
+    /** District→Thana cascading, same as tenant/orders/create.blade.php — preselects [preselectUpazilaId] so a Messenger-extracted or previously-saved thana survives a page reload. */
+    function onDistrictChange(preselectUpazilaId) {
+        const districtId = parseInt(document.getElementById('districtSelect').value, 10) || null;
+        const upazilaSelect = document.getElementById('upazilaSelect');
+        upazilaSelect.innerHTML = '<option value="">— নেই —</option>';
+        if (districtId) {
+            upazilas.filter(u => u.district_id === districtId).forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.id; opt.textContent = u.bn_name;
+                if (preselectUpazilaId && u.id === preselectUpazilaId) opt.selected = true;
+                upazilaSelect.appendChild(opt);
+            });
+        }
+        calcTotal();
+    }
+
+    /** No manual delivery-charge input exists — same client-side-preview-only computation as tenant/orders/create.blade.php; the server independently recomputes (see DeliveryChargeService::resolveDivisionId()) and never trusts a submitted amount. */
     function currentDeliveryCharge() {
-        const divisionId = parseInt(document.getElementById('divisionSelect').value, 10) || null;
+        const districtSelect = document.getElementById('districtSelect');
+        const opt = districtSelect.options[districtSelect.selectedIndex];
+        const divisionId = opt ? parseInt(opt.dataset.divisionId, 10) || null : null;
         return divisionId === dhakaDivisionId ? chargeInside : chargeOutside;
     }
 
@@ -494,7 +514,7 @@
     });
 
     addRow(); // start with one row
-    calcTotal(); // initializes the delivery-charge preview from any division_id already on this order (e.g. from a Messenger conversation)
+    onDistrictChange(initialUpazilaId); // populates থানা for any district_id already on this order (e.g. from a Messenger conversation) and initializes the delivery-charge preview
 </script>
 @endif
 @endpush

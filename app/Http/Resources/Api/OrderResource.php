@@ -27,6 +27,9 @@ class OrderResource extends JsonResource
             'district_name' => $this->district_id
                 ? DB::table('bd_districts')->where('id', $this->district_id)->value('bn_name')
                 : null,
+            'upazila_name' => $this->upazila_id
+                ? DB::table('bd_upazilas')->where('id', $this->upazila_id)->value('bn_name')
+                : null,
             'subtotal' => (float) $this->subtotal,
             'discount' => (float) $this->discount,
             'delivery_charge' => (float) $this->delivery_charge,

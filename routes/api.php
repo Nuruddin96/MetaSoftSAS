@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\Mobile\ProductCatalogController;
 use App\Http\Controllers\Api\Mobile\ProductController;
 use App\Http\Controllers\Api\Mobile\ProductSourceController;
 use App\Http\Controllers\Api\Mobile\ReferenceDataController;
+use App\Http\Controllers\Api\Mobile\SettingController;
 use App\Http\Controllers\Api\Mobile\ReportController;
 use App\Http\Controllers\Api\Mobile\SignalController;
 use App\Http\Controllers\Api\Mobile\WhatsAppController;
@@ -45,7 +46,9 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('orders', [OrderController::class, 'index']);
         Route::post('orders', [OrderController::class, 'store']);
         Route::get('orders/{order}', [OrderController::class, 'show'])->whereNumber('order');
+        Route::post('orders/{order}/complete', [OrderController::class, 'complete'])->whereNumber('order');
         Route::patch('orders/{order}/status', [OrderController::class, 'updateStatus'])->whereNumber('order');
+        Route::patch('orders/{order}/channel', [OrderController::class, 'updateChannel'])->whereNumber('order');
         Route::post('orders/{order}/courier', [OrderController::class, 'courier'])->whereNumber('order');
         Route::post('orders/{order}/courier/refresh', [OrderController::class, 'refreshCourierStatus'])->whereNumber('order');
 
@@ -61,6 +64,13 @@ Route::prefix('mobile/v1')->group(function () {
 
         Route::get('reference/divisions', [ReferenceDataController::class, 'divisions']);
         Route::get('reference/districts', [ReferenceDataController::class, 'districts']);
+        Route::get('reference/upazilas', [ReferenceDataController::class, 'upazilas']);
+
+        // Delivery-charge settings only — see SettingController's docblock
+        // for why the rest of Tenant\SettingController's surface (courier
+        // connect, AI-agent toggles, marketing pixel) isn't mirrored here.
+        Route::get('settings', [SettingController::class, 'index']);
+        Route::post('settings', [SettingController::class, 'store']);
 
         // Tenant Onboarding Wizard — mobile counterpart of the web wizard
         // (routes/web.php's tenant.onboarding.* group), same
@@ -87,6 +97,8 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('product-catalog/{product}', [ProductCatalogController::class, 'show'])->whereNumber('product');
         Route::post('product-catalog', [ProductCatalogController::class, 'store']);
         Route::post('product-catalog/{product}', [ProductCatalogController::class, 'update'])->whereNumber('product');
+        // Whole-product delete — mirrors Tenant\ProductController::destroy().
+        Route::delete('product-catalog/{product}', [ProductCatalogController::class, 'destroy'])->whereNumber('product');
         // New, additive — single-variant CRUD independent of the whole-
         // product update above (see ProductCatalogController's docblock).
         Route::post('product-catalog/{product}/variants', [ProductCatalogController::class, 'storeVariant'])->whereNumber('product');
@@ -139,7 +151,7 @@ Route::prefix('mobile/v1')->group(function () {
 
         // Messenger — mirrors Tenant\MessengerInboxController's real
         // capability (list via the same UnifiedInboxService the web
-        // unified inbox uses, show, reply [text-only, see
+        // unified inbox uses, show, reply [text/image/audio, see
         // MessengerController's docblock], status, resume-ai).
         Route::get('messenger/conversations', [MessengerController::class, 'index']);
         Route::get('messenger/{psid}', [MessengerController::class, 'show']);

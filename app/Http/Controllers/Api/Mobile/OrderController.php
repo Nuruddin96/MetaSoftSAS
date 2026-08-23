@@ -64,6 +64,7 @@ class OrderController extends Controller
             'customer_address' => 'nullable|string|max:1000',
             'division_id' => 'nullable|integer|exists:bd_divisions,id',
             'district_id' => 'nullable|integer|exists:bd_districts,id',
+            'upazila_id' => 'nullable|integer|exists:bd_upazilas,id',
             'channel' => 'required|in:website,facebook,instagram,whatsapp,call,others',
             'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
             'order_date' => 'nullable|date|before_or_equal:today',
@@ -91,6 +92,53 @@ class OrderController extends Controller
         return response()->json((new OrderResource($order->load('items')))->toArray($request), 201);
     }
 
+    /**
+     * Mirrors Tenant\OrderController::complete() — confirms a Messenger-
+     * originated pending order (status=pending, zero items) by attaching
+     * the staff-picked product/variant/qty/price. Priority 3 parity pass:
+     * previously only the web panel could finish these orders.
+     */
+    public function complete(Request $request, int $order, OrderCreationService $service)
+    {
+        $tenant = app('currentTenant');
+        $order = Order::where('tenant_id', $tenant->id)->findOrFail($order);
+
+        abort_if($order->status !== 'pending' || $order->items()->exists(), 409);
+
+        $data = $request->validate([
+            'customer_name' => 'nullable|string|max:150',
+            'customer_phone' => 'nullable|regex:/^01[3-9][0-9]{8}$/',
+            'customer_address' => 'nullable|string|max:1000',
+            'division_id' => 'nullable|integer|exists:bd_divisions,id',
+            'district_id' => 'nullable|integer|exists:bd_districts,id',
+            'upazila_id' => 'nullable|integer|exists:bd_upazilas,id',
+            'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
+            'order_date' => 'nullable|date|before_or_equal:today',
+            'discount' => 'nullable|numeric|min:0',
+            'note' => 'nullable|string|max:500',
+            'variant_ids' => 'required|array|min:1',
+            'variant_ids.*' => 'required|exists:product_variants,id',
+            'quantities' => 'required|array|min:1',
+            'quantities.*' => 'required|integer|min:1',
+        ], [
+            'customer_phone.regex' => 'সঠিক মোবাইল নাম্বার দিন (01XXXXXXXXX)।',
+        ]);
+
+        try {
+            $order = $service->completeFromMessenger(
+                $order,
+                $data,
+                $request->user()->id,
+                $request->ip(),
+                $request->userAgent(),
+            );
+        } catch (\InvalidArgumentException $e) {
+            throw ValidationException::withMessages(['variant_ids' => [$e->getMessage()]]);
+        }
+
+        return response()->json((new OrderResource($order->load('items')))->toArray($request));
+    }
+
     public function updateStatus(Request $request, int $order)
     {
         $tenant = app('currentTenant');
@@ -111,6 +159,20 @@ class OrderController extends Controller
         if ($data['status'] === 'confirmed' && ! $wasConfirmed) {
             MetaCapiService::sendPurchaseForOrder($order, $request->ip(), $request->userAgent());
         }
+
+        return response()->json((new OrderResource($order->load('items')))->toArray($request));
+    }
+
+    /** Mirrors Tenant\OrderController::updateChannel() — order-source correction, missing from this mobile surface until now. */
+    public function updateChannel(Request $request, int $order)
+    {
+        $tenant = app('currentTenant');
+        $data = $request->validate([
+            'channel' => 'required|in:website,facebook,instagram,whatsapp,call,others',
+        ]);
+
+        $order = Order::where('tenant_id', $tenant->id)->findOrFail($order);
+        $order->update(['channel' => $data['channel']]);
 
         return response()->json((new OrderResource($order->load('items')))->toArray($request));
     }

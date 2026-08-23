@@ -281,6 +281,34 @@ class ProductCatalogApiTest extends TestCase
         $this->assertSame(150.0, (float) $v2->fresh()->selling_price);
     }
 
+    public function test_destroy_deletes_the_product(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $product = $this->makeProductWithStock($tenant->id);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $this->deleteJson("/api/mobile/v1/product-catalog/{$product->id}")->assertOk()->assertJsonPath('ok', true);
+
+        $this->assertNull(Product::withoutGlobalScopes()->find($product->id));
+    }
+
+    public function test_tenant_cannot_delete_another_tenants_product(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+        $productA = $this->makeProductWithStock($tenantA->id);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($userB);
+
+        $this->deleteJson("/api/mobile/v1/product-catalog/{$productA->id}")->assertNotFound();
+        $this->assertNotNull(Product::withoutGlobalScopes()->find($productA->id));
+    }
+
     public function test_tenant_cannot_view_or_update_another_tenants_product(): void
     {
         $tenantA = $this->makeTenant();
