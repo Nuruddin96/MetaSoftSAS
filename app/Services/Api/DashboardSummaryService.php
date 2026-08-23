@@ -3,8 +3,13 @@
 namespace App\Services\Api;
 
 use App\Models\Customer;
+use App\Models\CourierSetting;
 use App\Models\Expense;
+use App\Models\IncompleteOrder;
+use App\Models\MessengerMessage;
 use App\Models\Order;
+use App\Models\Product;
+use App\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -14,13 +19,15 @@ use Illuminate\Support\Facades\DB;
  * same definitions (see that controller's inline comments for why each is
  * shaped the way it is, e.g. courierPendingCount using
  * courier_consignment_id + non-terminal status rather than courier_status).
- * Deliberately omits checklist/newMessages/newIncomplete/totalProducts —
- * not part of the Flutter Dashboard screen's scope.
+ * Also mirrors checklist/newMessages/newIncomplete/totalProducts — added
+ * for Priority 3 parity (Flutter's own dashboard_screen.dart docblock
+ * already documented this exact gap).
  */
 class DashboardSummaryService
 {
-    public function summary(int $tenantId): array
+    public function summary(Tenant $tenant): array
     {
+        $tenantId = $tenant->id;
         $today = now()->startOfDay();
 
         $lowStockCount = (int) DB::table('product_variants as pv')
@@ -69,6 +76,16 @@ class DashboardSummaryService
             ])->values(),
             'more_districts_count' => max(0, $districtStats->count() - 5),
             'recent_orders' => Order::where('tenant_id', $tenantId)->with('items')->latest()->limit(10)->get(),
+            'checklist' => [
+                'product' => Product::where('tenant_id', $tenantId)->exists(),
+                'logo' => (bool) $tenant->logo_path,
+                'courier' => CourierSetting::where('tenant_id', $tenantId)->where('is_active', 1)->exists(),
+                'order' => Order::where('tenant_id', $tenantId)->exists(),
+            ],
+            'new_messages' => MessengerMessage::where('tenant_id', $tenantId)
+                ->where('status', 'new')->where('direction', 'in')->count(),
+            'new_incomplete' => IncompleteOrder::where('tenant_id', $tenantId)->where('status', 'abandoned')->count(),
+            'total_products' => Product::where('tenant_id', $tenantId)->count(),
         ];
     }
 }

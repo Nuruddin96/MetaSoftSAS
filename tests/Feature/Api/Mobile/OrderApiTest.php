@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\Mobile;
 
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\Concerns\InteractsWithApiSchema;
 use Tests\TestCase;
@@ -64,6 +65,171 @@ class OrderApiTest extends TestCase
             'variant_ids' => [$variant->id],
             'quantities' => [1],
         ])->assertStatus(422)->assertJsonValidationErrors('customer_phone');
+    }
+
+    /**
+     * The Flutter create-order form (District→Thana UX, Priority 2) no
+     * longer submits division_id at all — proves OrderCreationService still
+     * derives it from district_id via DeliveryChargeService::resolveDivisionId()
+     * and stores upazila_id, matching the web panel's identical change.
+     */
+    public function test_create_order_resolves_division_from_district_and_stores_upazila(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 500]);
+        app()->instance('currentTenant', $tenant);
+        DB::table('bd_divisions')->insert(['id' => 3, 'name' => 'Dhaka', 'bn_name' => 'ঢাকা']);
+        DB::table('bd_districts')->insert(['id' => 30, 'division_id' => 3, 'name' => 'Dhaka', 'bn_name' => 'ঢাকা']);
+        DB::table('bd_upazilas')->insert(['id' => 300, 'district_id' => 30, 'name' => 'Mirpur', 'bn_name' => 'মিরপুর']);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/mobile/v1/orders', [
+            'customer_name' => 'Karim',
+            'customer_phone' => '01712345678',
+            'channel' => 'call',
+            'payment_method' => 'cod',
+            'district_id' => 30,
+            'upazila_id' => 300,
+            'variant_ids' => [$variant->id],
+            'quantities' => [1],
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('division_name', 'ঢাকা')
+            ->assertJsonPath('district_name', 'ঢাকা')
+            ->assertJsonPath('upazila_name', 'মিরপুর');
+    }
+
+    /**
+     * Mirrors Tenant\OrderController::complete() — Priority 3 parity pass.
+     * Confirms a Messenger-originated pending order (zero items) by
+     * attaching staff-picked product/variant/qty/price.
+     */
+    public function test_complete_attaches_items_decrements_inventory_and_confirms(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        $customer = \App\Models\Customer::create(['tenant_id' => $tenant->id, 'name' => 'Rahim', 'phone' => '01712345678']);
+        $order = \App\Models\Order::create([
+            'tenant_id' => $tenant->id, 'source' => 'messenger', 'channel' => 'facebook',
+            'messenger_psid' => 'psid-1', 'customer_id' => $customer->id,
+            'customer_name' => $customer->name, 'customer_phone' => $customer->phone,
+            'status' => 'pending', 'subtotal' => 0, 'total' => 0,
+        ]);
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 800]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/mobile/v1/orders/{$order->id}/complete", [
+            'payment_method' => 'cod',
+            'variant_ids' => [$variant->id],
+            'quantities' => [2],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('status', 'confirmed')
+            ->assertJsonPath('subtotal', 1600)
+            ->assertJsonCount(1, 'items');
+
+        $order->refresh();
+        $this->assertSame('confirmed', $order->status);
+        $this->assertNotNull($order->confirmed_at);
+        $this->assertSame(1, $order->items()->count());
+    }
+
+    public function test_complete_rejects_an_order_that_already_has_items(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 500]);
+        app()->instance('currentTenant', $tenant);
+        $order = \App\Models\Order::create([
+            'tenant_id' => $tenant->id, 'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'A', 'customer_phone' => '01712345678',
+            'subtotal' => 500, 'total' => 500, 'payment_method' => 'cod', 'status' => 'confirmed',
+        ]);
+        $order->items()->create([
+            'tenant_id' => $tenant->id, 'variant_id' => $variant->id, 'product_name' => 'P',
+            'variant_name' => 'V', 'sku' => 'SKU', 'unit_price' => 500, 'purchase_price' => 0,
+            'quantity' => 1, 'line_total' => 500,
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $this->postJson("/api/mobile/v1/orders/{$order->id}/complete", [
+            'payment_method' => 'cod',
+            'variant_ids' => [$variant->id],
+            'quantities' => [1],
+        ])->assertStatus(409);
+    }
+
+    public function test_complete_is_tenant_isolated(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+        app()->instance('currentTenant', $tenantA);
+        $orderA = \App\Models\Order::create([
+            'tenant_id' => $tenantA->id, 'source' => 'messenger', 'channel' => 'facebook',
+            'customer_name' => 'A', 'customer_phone' => '01712345678',
+            'status' => 'pending', 'subtotal' => 0, 'total' => 0,
+        ]);
+        $variant = $this->makeSellableVariant($tenantA->id, ['selling_price' => 500]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($userB);
+
+        $this->postJson("/api/mobile/v1/orders/{$orderA->id}/complete", [
+            'payment_method' => 'cod',
+            'variant_ids' => [$variant->id],
+            'quantities' => [1],
+        ])->assertNotFound();
+    }
+
+    /** Mirrors Tenant\OrderController::updateChannel() — Priority 3 parity pass. */
+    public function test_update_channel_corrects_the_order_source(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        $order = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'A', 'customer_phone' => '01712345678',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'pending',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $this->patchJson("/api/mobile/v1/orders/{$order->id}/channel", ['channel' => 'facebook'])
+            ->assertOk()->assertJsonPath('channel', 'facebook');
+
+        $this->assertSame('facebook', $order->fresh()->channel);
+    }
+
+    public function test_update_channel_is_tenant_isolated(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+        app()->instance('currentTenant', $tenantA);
+        $orderA = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'A', 'customer_phone' => '01712345678',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'pending',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($userB);
+
+        $this->patchJson("/api/mobile/v1/orders/{$orderA->id}/channel", ['channel' => 'facebook'])->assertNotFound();
+        $this->assertSame('call', $orderA->fresh()->channel);
     }
 
     public function test_index_returns_pagination_meta_and_supports_channel_filter(): void

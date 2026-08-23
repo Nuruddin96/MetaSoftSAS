@@ -449,4 +449,14 @@ class ProductCatalogController extends Controller
 
         return response()->json(['ok' => true]);
     }
+
+    /** Mirrors Tenant\ProductController::destroy() — whole-product delete, missing from this mobile surface until now. */
+    public function destroy(int $product)
+    {
+        $tenant = app('currentTenant');
+        $product = Product::where('tenant_id', $tenant->id)->findOrFail($product);
+        $product->delete();
+
+        return response()->json(['ok' => true]);
+    }
 }

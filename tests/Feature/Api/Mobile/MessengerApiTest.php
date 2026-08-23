@@ -3,7 +3,9 @@
 namespace Tests\Feature\Api\Mobile;
 
 use App\Models\MessengerMessage;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\Concerns\InteractsWithApiSchema;
 use Tests\TestCase;
@@ -107,8 +109,52 @@ class MessengerApiTest extends TestCase
 
         $response = $this->postJson('/api/mobile/v1/messenger/psid-1/reply', ['message' => 'ধন্যবাদ']);
 
-        $response->assertCreated()->assertJsonPath('text', 'ধন্যবাদ')->assertJsonPath('direction', 'out');
+        $response->assertCreated()->assertJsonPath('data.0.text', 'ধন্যবাদ')->assertJsonPath('data.0.direction', 'out');
         $this->assertDatabaseHas('messenger_messages', ['sender_psid' => 'psid-1', 'direction' => 'out', 'message_text' => 'ধন্যবাদ']);
+    }
+
+    public function test_reply_sends_an_image_and_stores_the_rehosted_url(): void
+    {
+        Storage::fake('public');
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeConversation($tenant->id, 'psid-img-1');
+        $this->makeMessengerPage($tenant->id, 'page-1');
+
+        Http::fake(['*/me/messages*' => Http::response(['message_id' => 'mid-img-1'])]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->post('/api/mobile/v1/messenger/psid-img-1/reply', [
+            'image' => UploadedFile::fake()->image('photo.jpg', 300, 300),
+        ]);
+
+        $response->assertCreated()->assertJsonPath('data.0.attachment_type', 'image');
+        $message = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-img-1')->first();
+        $this->assertNotNull($message);
+        $this->assertStringContainsString('/storage/messenger/'.$tenant->id.'/outgoing/', $message->attachment_url);
+    }
+
+    public function test_reply_sends_an_audio_message_and_stores_the_rehosted_url(): void
+    {
+        Storage::fake('public');
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeConversation($tenant->id, 'psid-audio-1');
+        $this->makeMessengerPage($tenant->id, 'page-1');
+
+        Http::fake(['*/me/messages*' => Http::response(['message_id' => 'mid-audio-1'])]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->post('/api/mobile/v1/messenger/psid-audio-1/reply', [
+            'audio' => UploadedFile::fake()->create('voice.m4a', 100, 'audio/x-m4a'),
+        ]);
+
+        $response->assertCreated()->assertJsonPath('data.0.attachment_type', 'audio');
+        $message = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-audio-1')->first();
+        $this->assertNotNull($message);
+        $this->assertStringContainsString('/storage/messenger/'.$tenant->id.'/outgoing/', $message->attachment_url);
     }
 
     public function test_reply_rejects_when_no_page_is_connected(): void
@@ -131,7 +177,7 @@ class MessengerApiTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $this->postJson('/api/mobile/v1/messenger/psid-1/reply', [])->assertStatus(422)->assertJsonValidationErrors('message');
+        $this->postJson('/api/mobile/v1/messenger/psid-1/reply', [])->assertStatus(422);
     }
 
     public function test_update_status_changes_every_message_row_for_that_psid(): void

@@ -11,6 +11,7 @@ use App\Models\MessengerSetting;
 use App\Models\Order;
 use App\Services\AI\AiConversationStyleService;
 use App\Services\AI\AiHandoffService;
+use App\Services\ImageOptimizer;
 use App\Services\Inbox\UnifiedConversation;
 use App\Services\Inbox\UnifiedInboxService;
 use App\Services\Messenger\MessengerApi;
@@ -21,16 +22,11 @@ use Illuminate\Support\Facades\URL;
  * Mirrors Tenant\MessengerInboxController's real capability — list (via the
  * same UnifiedInboxService the web unified inbox uses), show (same
  * messages/customer-identity/linkedOrder/matchedCustomer/handoff
- * resolution), reply, updateStatus, resumeAi. Reused logic, not
+ * resolution), reply (text + image + audio, same rehosted-URL convention
+ * as the web panel), updateStatus, resumeAi. Reused logic, not
  * reimplemented business rules — same "documented duplication over
  * refactor risk" convention CourierDispatchService/OrderCreationService
  * already established for this API surface.
- *
- * TEXT-ONLY reply for this pass — the web reply() also accepts image/audio
- * (uploads to Facebook via a rehosted URL). Left out deliberately: real,
- * substantial extra work (multipart upload + ImageOptimizer + Facebook
- * Send API attachment payload), not a small mirror. Documented as a
- * remaining limitation, not silently dropped.
  */
 class MessengerController extends Controller
 {
@@ -116,9 +112,32 @@ class MessengerController extends Controller
         ]);
     }
 
+    /**
+     * Text + image + audio, same rehosted-URL convention as
+     * Tenant\MessengerInboxController::reply() — Meta's Send API fetches a
+     * URL, never a direct upload, so media is stored on our own disk first
+     * and sent by its public asset() URL. All three fields are independently
+     * nullable/combinable exactly like the web form; the client only ever
+     * sends one per request in practice (matching the chat-composer UX),
+     * but nothing here assumes that.
+     *
+     * Response shape is `{data: [...]}` (one entry per attachment/text
+     * actually created) rather than a single object, since a request can
+     * create more than one MessengerMessage row.
+     */
     public function reply(Request $request, string $psid, MessengerApi $api, AiConversationStyleService $style)
     {
-        $data = $request->validate(['message' => 'required|string|max:1000']);
+        $data = $request->validate([
+            'message' => 'nullable|string|max:1000',
+            'image' => 'nullable|image|max:8192',
+            'audio' => 'nullable|file|mimetypes:audio/webm,audio/ogg,audio/mpeg,audio/mp3,audio/mp4,audio/wav,audio/x-m4a,audio/aac|max:8192',
+        ]);
+
+        $message = $data['message'] ?? null;
+
+        if (! $message && ! $request->hasFile('image') && ! $request->hasFile('audio')) {
+            return response()->json(['message' => 'মেসেজ, ছবি অথবা ভয়েস — অন্তত একটি দিন।'], 422);
+        }
 
         $token = $this->resolveReplyToken($psid);
 
@@ -130,37 +149,115 @@ class MessengerController extends Controller
             return response()->json(['message' => 'মেসেঞ্জার পেজ কানেক্ট করা নেই।'], 422);
         }
 
-        try {
-            $result = $api->sendMessage($psid, $data['message'], $token);
-        } catch (\Throwable $e) {
-            return response()->json(['message' => 'মেসেজ পাঠানো যায়নি: '.$e->getMessage()], 422);
+        $created = [];
+
+        if ($message) {
+            try {
+                $result = $api->sendMessage($psid, $message, $token);
+            } catch (\Throwable $e) {
+                return response()->json(['message' => 'মেসেজ পাঠানো যায়নি: '.$e->getMessage()], 422);
+            }
+
+            if (isset($result['error'])) {
+                return response()->json(['message' => 'মেসেজ পাঠানো যায়নি: '.($result['error']['message'] ?? 'Facebook API error')], 422);
+            }
+
+            $textAttrs = [
+                'sender_psid' => $psid,
+                'mid' => $result['message_id'] ?? null,
+                'message_text' => $message,
+                'direction' => 'out',
+                'status' => 'contacted',
+            ];
+
+            if (MessengerMessage::sentByColumnReady()) {
+                $textAttrs['sent_by'] = 'human';
+            }
+
+            $created[] = MessengerMessage::create($textAttrs);
+            $style->forgetMessengerStyleCache(app('currentTenant')->id);
         }
 
-        if (isset($result['error'])) {
-            return response()->json(['message' => 'মেসেজ পাঠানো যায়নি: '.($result['error']['message'] ?? 'Facebook API error')], 422);
+        if ($request->hasFile('image')) {
+            $path = app(ImageOptimizer::class)->storeOptimized(
+                $request->file('image'), 'public', 'messenger/'.app('currentTenant')->id.'/outgoing'
+            );
+            $url = asset('storage/'.$path);
+
+            try {
+                $result = $api->sendAttachment($psid, $url, 'image', $token);
+            } catch (\Throwable $e) {
+                return response()->json(['message' => 'ছবি পাঠানো যায়নি: '.$e->getMessage()], 422);
+            }
+
+            if (isset($result['error'])) {
+                return response()->json(['message' => 'ছবি পাঠানো যায়নি: '.($result['error']['message'] ?? 'Facebook API error')], 422);
+            }
+
+            $attrs = [
+                'sender_psid' => $psid,
+                'mid' => $result['message_id'] ?? null,
+                'attachment_url' => $url,
+                'direction' => 'out',
+                'status' => 'contacted',
+            ];
+
+            if (MessengerMessage::attachmentColumnsReady()) {
+                $attrs['attachment_type'] = 'image';
+            }
+
+            if (MessengerMessage::sentByColumnReady()) {
+                $attrs['sent_by'] = 'human';
+            }
+
+            $created[] = MessengerMessage::create($attrs);
         }
 
-        $textAttrs = [
-            'sender_psid' => $psid,
-            'mid' => $result['message_id'] ?? null,
-            'message_text' => $data['message'],
-            'direction' => 'out',
-            'status' => 'contacted',
-        ];
+        if ($request->hasFile('audio')) {
+            $path = $request->file('audio')->store('messenger/'.app('currentTenant')->id.'/outgoing', 'public');
+            $url = asset('storage/'.$path);
 
-        if (MessengerMessage::sentByColumnReady()) {
-            $textAttrs['sent_by'] = 'human';
+            try {
+                $result = $api->sendAttachment($psid, $url, 'audio', $token);
+            } catch (\Throwable $e) {
+                return response()->json(['message' => 'ভয়েস মেসেজ পাঠানো যায়নি: '.$e->getMessage()], 422);
+            }
+
+            if (isset($result['error'])) {
+                return response()->json(['message' => 'ভয়েস মেসেজ পাঠানো যায়নি: '.($result['error']['message'] ?? 'Facebook API error')], 422);
+            }
+
+            $attrs = [
+                'sender_psid' => $psid,
+                'mid' => $result['message_id'] ?? null,
+                'attachment_url' => $url,
+                'direction' => 'out',
+                'status' => 'contacted',
+            ];
+
+            if (MessengerMessage::attachmentColumnsReady()) {
+                $attrs['attachment_type'] = 'audio';
+            }
+
+            if (MessengerMessage::sentByColumnReady()) {
+                $attrs['sent_by'] = 'human';
+            }
+
+            $created[] = MessengerMessage::create($attrs);
         }
 
-        $message = MessengerMessage::create($textAttrs);
-        $style->forgetMessengerStyleCache(app('currentTenant')->id);
+        MessengerMessage::where('sender_psid', $psid)->where('status', 'new')->update(['status' => 'contacted']);
 
         return response()->json([
-            'id' => $message->id,
-            'text' => $message->message_text,
-            'direction' => $message->direction,
-            'sent_by' => $message->sent_by ?? null,
-            'created_at' => $message->created_at?->toIso8601String(),
+            'data' => collect($created)->map(fn (MessengerMessage $m) => [
+                'id' => $m->id,
+                'text' => $m->message_text,
+                'attachment_url' => $m->attachment_url,
+                'attachment_type' => $m->attachment_type,
+                'direction' => $m->direction,
+                'sent_by' => $m->sent_by ?? null,
+                'created_at' => $m->created_at?->toIso8601String(),
+            ])->values(),
         ], 201);
     }
 

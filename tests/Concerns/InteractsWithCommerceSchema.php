@@ -513,6 +513,16 @@ trait InteractsWithCommerceSchema
                 $table->string('fb_event_id', 64)->nullable();
                 $table->string('utm_source', 100)->nullable();
                 $table->text('note')->nullable();
+                // Matches schema.sql's real order_date column —
+                // OrderController::store()/complete() have always set this
+                // on every write, so its absence here was a pre-existing
+                // gap (silently breaking any test class using only this
+                // trait that exercises those two actions), not something
+                // introduced by Priority 2's district/upazila work. Same
+                // fix InteractsWithApiSchema already applied locally for
+                // its own test suite — added here at the root instead,
+                // since it recurred a third time.
+                $table->date('order_date')->nullable();
                 $table->timestamp('confirmed_at')->nullable();
                 $table->timestamp('delivered_at')->nullable();
                 $table->timestamps();

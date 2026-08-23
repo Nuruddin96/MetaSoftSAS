@@ -44,6 +44,15 @@ class DeliveryChargeServiceTest extends TestCase
             });
         }
 
+        if (! Schema::hasTable('bd_districts')) {
+            Schema::create('bd_districts', function (Blueprint $table) {
+                $table->increments('id');
+                $table->unsignedInteger('division_id');
+                $table->string('name', 50);
+                $table->string('bn_name', 50);
+            });
+        }
+
         if (! Schema::hasTable('store_settings')) {
             Schema::create('store_settings', function (Blueprint $table) {
                 $table->id();
@@ -58,6 +67,11 @@ class DeliveryChargeServiceTest extends TestCase
             ['id' => 1, 'name' => 'Barishal', 'bn_name' => 'বরিশাল'],
             ['id' => 2, 'name' => 'Chattogram', 'bn_name' => 'চট্টগ্রাম'],
             ['id' => 3, 'name' => 'Dhaka', 'bn_name' => 'ঢাকা'],
+        ]);
+
+        DB::table('bd_districts')->insert([
+            ['id' => 10, 'division_id' => 3, 'name' => 'Dhaka', 'bn_name' => 'ঢাকা'],
+            ['id' => 11, 'division_id' => 2, 'name' => 'Chattogram', 'bn_name' => 'চট্টগ্রাম'],
         ]);
 
         $this->dhakaDivisionId = 3;
@@ -144,5 +158,30 @@ class DeliveryChargeServiceTest extends TestCase
         app()->instance('currentTenant', $tenantB);
         // Tenant B configured nothing — must get the hardcoded default, never tenant A's 70.
         $this->assertEquals(60.0, (new DeliveryChargeService)->calculate($this->dhakaDivisionId));
+    }
+
+    public function test_resolve_division_id_derives_from_district_when_division_not_submitted(): void
+    {
+        $service = new DeliveryChargeService;
+
+        $this->assertSame($this->dhakaDivisionId, $service->resolveDivisionId(null, 10));
+        $this->assertSame($this->otherDivisionId, $service->resolveDivisionId(null, 11));
+    }
+
+    public function test_resolve_division_id_prefers_an_explicitly_submitted_division_over_district(): void
+    {
+        $service = new DeliveryChargeService;
+
+        // District 11 (Chattogram) is submitted alongside an explicit
+        // division_id — the explicit value must win, never be silently
+        // overridden by the district's own division.
+        $this->assertSame($this->dhakaDivisionId, $service->resolveDivisionId($this->dhakaDivisionId, 11));
+    }
+
+    public function test_resolve_division_id_is_null_when_neither_is_submitted(): void
+    {
+        $service = new DeliveryChargeService;
+
+        $this->assertNull($service->resolveDivisionId(null, null));
     }
 }

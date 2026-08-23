@@ -31,7 +31,7 @@ class OrderCreationService
     }
 
     /**
-     * @param  array{customer_name:string,customer_phone:string,customer_address:?string,division_id:?int,district_id:?int,channel:string,payment_method:string,order_date:?string,discount:?float,note:?string,variant_ids:int[],quantities:int[]}  $data
+     * @param  array{customer_name:string,customer_phone:string,customer_address:?string,division_id:?int,district_id:?int,upazila_id:?int,channel:string,payment_method:string,order_date:?string,discount:?float,note:?string,variant_ids:int[],quantities:int[]}  $data
      */
     public function createFromManualEntry(array $data, ?int $actingUserId, ?string $clientIp, ?string $userAgent): Order
     {
@@ -41,20 +41,28 @@ class OrderCreationService
             throw new \InvalidArgumentException('একটি বা একাধিক প্রোডাক্ট পাওয়া যায়নি।');
         }
 
-        $order = DB::transaction(function () use ($data, $variants, $actingUserId) {
+        // Same district->division resolution as Tenant\OrderController::store()
+        // — the create-order form (Web and Flutter) only collects
+        // district_id now (District→Thana UX), so division_id is derived
+        // here for correct delivery pricing and to keep division-based
+        // reports working without asking the user for it again.
+        $divisionId = $this->deliveryChargeService->resolveDivisionId($data['division_id'] ?? null, $data['district_id'] ?? null);
+
+        $order = DB::transaction(function () use ($data, $variants, $actingUserId, $divisionId) {
             $customer = Customer::firstOrCreate(
                 ['phone' => $data['customer_phone']],
                 [
                     'name' => $data['customer_name'],
                     'address' => $data['customer_address'] ?? null,
-                    'division_id' => $data['division_id'] ?? null,
+                    'division_id' => $divisionId,
                     'district_id' => $data['district_id'] ?? null,
+                    'upazila_id' => $data['upazila_id'] ?? null,
                 ]
             );
 
             $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
             $discount = min((float) ($data['discount'] ?? 0), $subtotal);
-            $deliveryCharge = $this->deliveryChargeService->calculate($data['division_id'] ?? null);
+            $deliveryCharge = $this->deliveryChargeService->calculate($divisionId);
 
             $order = Order::create([
                 'source' => 'manual',
@@ -63,8 +71,9 @@ class OrderCreationService
                 'customer_name' => $data['customer_name'],
                 'customer_phone' => $data['customer_phone'],
                 'customer_address' => $data['customer_address'] ?? null,
-                'division_id' => $data['division_id'] ?? null,
+                'division_id' => $divisionId,
                 'district_id' => $data['district_id'] ?? null,
+                'upazila_id' => $data['upazila_id'] ?? null,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
                 'delivery_charge' => $deliveryCharge,
@@ -88,6 +97,70 @@ class OrderCreationService
         // Created directly as 'confirmed' (no separate pending stage for
         // this entry path), so this is always a genuine first confirmation
         // — matches OrderController::store()'s identical CAPI call site.
+        MetaCapiService::sendPurchaseForOrder($order, $clientIp, $userAgent);
+
+        return $order;
+    }
+
+    /**
+     * Mirrors Tenant\OrderController::complete() — confirms a Messenger-
+     * originated pending order (status=pending, zero items, auto-created by
+     * MessengerWebhookController::maybeCreatePendingOrder()) by attaching
+     * the staff-picked product/variant/qty/price. NOT a second order-
+     * creation path — same Order row, same order_number, same
+     * DeliveryChargeService resolution and item-attach/inventory-decrement/
+     * stock-movement writes as createFromManualEntry() above. Caller is
+     * responsible for the pending/no-items guard (see
+     * Api\Mobile\OrderController::complete()) since that's an HTTP-shaped
+     * concern (409), not a service-layer one.
+     *
+     * @param  array{customer_name:?string,customer_phone:?string,customer_address:?string,division_id:?int,district_id:?int,upazila_id:?int,payment_method:string,order_date:?string,discount:?float,note:?string,variant_ids:int[],quantities:int[]}  $data
+     */
+    public function completeFromMessenger(Order $order, array $data, ?int $actingUserId, ?string $clientIp, ?string $userAgent): Order
+    {
+        $variants = ProductVariant::with('product')->whereIn('id', $data['variant_ids'])->get()->keyBy('id');
+
+        if ($variants->count() !== count(array_unique($data['variant_ids']))) {
+            throw new \InvalidArgumentException('একটি বা একাধিক প্রোডাক্ট পাওয়া যায়নি।');
+        }
+
+        DB::transaction(function () use ($order, $data, $variants, $actingUserId) {
+            $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
+            $discount = min((float) ($data['discount'] ?? 0), $subtotal);
+            $resolvedDivisionId = $this->deliveryChargeService->resolveDivisionId($data['division_id'] ?? null, $data['district_id'] ?? null);
+            $effectiveDivisionId = $resolvedDivisionId ?? $order->division_id;
+            $deliveryCharge = $this->deliveryChargeService->calculate($effectiveDivisionId);
+
+            $order->update(array_filter([
+                'customer_name' => $data['customer_name'] ?? null,
+                'customer_phone' => $data['customer_phone'] ?? null,
+                'customer_address' => $data['customer_address'] ?? null,
+                'division_id' => $resolvedDivisionId,
+                'district_id' => $data['district_id'] ?? null,
+                'upazila_id' => $data['upazila_id'] ?? null,
+            ]) + [
+                'subtotal' => $subtotal,
+                'discount' => $discount,
+                'delivery_charge' => $deliveryCharge,
+                'total' => $subtotal - $discount + $deliveryCharge,
+                'payment_method' => $data['payment_method'],
+                'note' => $data['note'] ?? $order->note,
+                'status' => 'confirmed',
+                'confirmed_at' => now(),
+                'order_date' => $data['order_date'] ?? now()->toDateString(),
+            ]);
+
+            $this->attachItems($order, $variants, $data['variant_ids'], $data['quantities'], $actingUserId);
+
+            $customer = $order->customer;
+            $customer?->increment('total_orders');
+            $customer?->increment('total_spent', $order->total);
+        });
+
+        // Caller (Api\Mobile\OrderController::complete()) guards status ===
+        // 'pending' before calling this, so every call here is a genuine
+        // first pending -> confirmed transition — same guarantee
+        // Tenant\OrderController::complete()'s identical CAPI call site has.
         MetaCapiService::sendPurchaseForOrder($order, $clientIp, $userAgent);
 
         return $order;

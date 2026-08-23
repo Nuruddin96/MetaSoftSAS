@@ -12,7 +12,7 @@ class DashboardController extends Controller
     public function index(Request $request, DashboardSummaryService $service)
     {
         $tenant = app('currentTenant');
-        $summary = $service->summary($tenant->id);
+        $summary = $service->summary($tenant);
 
         return response()->json([
             'today_orders' => $summary['today_orders'],
@@ -26,6 +26,10 @@ class DashboardController extends Controller
             'top_districts' => $summary['top_districts'],
             'more_districts_count' => $summary['more_districts_count'],
             'recent_orders' => OrderResource::collection($summary['recent_orders']),
+            'checklist' => $summary['checklist'],
+            'new_messages' => $summary['new_messages'],
+            'new_incomplete' => $summary['new_incomplete'],
+            'total_products' => $summary['total_products'],
         ]);
     }
 }

@@ -31,17 +31,16 @@
         </div>
         <div class="grid md:grid-cols-2 gap-4">
             <div>
-                <label class="text-sm font-medium">বিভাগ</label>
-                <select name="division_id" id="divisionSelect" onchange="calcTotal()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
+                <label class="text-sm font-medium">জেলা</label>
+                <select name="district_id" id="districtSelect" onchange="onDistrictChange()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
                     <option value="">— নেই —</option>
-                    @foreach ($divisions as $d)<option value="{{ $d->id }}">{{ $d->bn_name }}</option>@endforeach
+                    @foreach ($districts as $d)<option value="{{ $d->id }}" data-division-id="{{ $d->division_id }}">{{ $d->bn_name }}</option>@endforeach
                 </select>
             </div>
             <div>
-                <label class="text-sm font-medium">জেলা</label>
-                <select name="district_id" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
+                <label class="text-sm font-medium">থানা / উপজেলা</label>
+                <select name="upazila_id" id="upazilaSelect" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
                     <option value="">— নেই —</option>
-                    @foreach ($districts as $d)<option value="{{ $d->id }}">{{ $d->bn_name }}</option>@endforeach
                 </select>
             </div>
         </div>
@@ -92,9 +91,11 @@
         </div>
         {{-- No manual delivery-charge field — Settings → ডেলিভারি চার্জ
              configures Inside/Outside Dhaka amounts once; this order applies
-             the right one automatically from the selected বিভাগ above (see
-             DeliveryChargeService), shown live in the প্রোডাক্ট card's summary. --}}
-        <p class="text-xs text-mute">ডেলিভারি চার্জ বিভাগ অনুযায়ী স্বয়ংক্রিয়ভাবে হিসাব হয় — <a href="{{ route('tenant.settings') }}" class="text-leaf hover:underline">সেটিংসে বদলান</a>।</p>
+             the right one automatically from the selected জেলা above (its
+             division is resolved server-side, see
+             DeliveryChargeService::resolveDivisionId()), shown live in the
+             প্রোডাক্ট card's summary. --}}
+        <p class="text-xs text-mute">ডেলিভারি চার্জ জেলা অনুযায়ী স্বয়ংক্রিয়ভাবে হিসাব হয় — <a href="{{ route('tenant.settings') }}" class="text-leaf hover:underline">সেটিংসে বদলান</a>।</p>
         <div>
             <label class="text-sm font-medium">নোট</label>
             <input name="note" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
@@ -116,6 +117,22 @@
     const dhakaDivisionId = @json($dhakaDivisionId);
     const chargeInside = @json($chargeInside);
     const chargeOutside = @json($chargeOutside);
+    const upazilas = @json($upazilas);
+
+    /** District→Thana cascading — same "embed the small reference table, filter client-side" convention this page already used for district_id before this change. */
+    function onDistrictChange() {
+        const districtId = parseInt(document.getElementById('districtSelect').value, 10) || null;
+        const upazilaSelect = document.getElementById('upazilaSelect');
+        upazilaSelect.innerHTML = '<option value="">— নেই —</option>';
+        if (districtId) {
+            upazilas.filter(u => u.district_id === districtId).forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.id; opt.textContent = u.bn_name;
+                upazilaSelect.appendChild(opt);
+            });
+        }
+        calcTotal();
+    }
 
     let rowIdx = 0;
 
@@ -180,9 +197,18 @@
         renderProductOptions(idx, row.querySelector('.prodSearch').value);
     }
 
-    /** No manual delivery-charge input exists at all — this is the only place the amount is decided client-side, purely for the live summary; the server independently recomputes the same way from division_id, never trusting anything submitted for it. */
+    /**
+     * No manual delivery-charge input exists at all — this is the only place
+     * the amount is decided client-side, purely for the live summary; the
+     * server independently recomputes the same way (see
+     * DeliveryChargeService::resolveDivisionId()), never trusting anything
+     * submitted for it. Division is read off the selected district's own
+     * data-division-id — there is no separate division <select> any more.
+     */
     function currentDeliveryCharge() {
-        const divisionId = parseInt(document.getElementById('divisionSelect').value, 10) || null;
+        const districtSelect = document.getElementById('districtSelect');
+        const opt = districtSelect.options[districtSelect.selectedIndex];
+        const divisionId = opt ? parseInt(opt.dataset.divisionId, 10) || null : null;
         return divisionId === dhakaDivisionId ? chargeInside : chargeOutside;
     }
 

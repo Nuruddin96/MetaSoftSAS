@@ -25,8 +25,8 @@ class OrderController extends Controller
     {
         return view('tenant.orders.create', array_merge([
             'productsJson' => $this->productsJson(),
-            'divisions' => DB::table('bd_divisions')->orderBy('id')->get(),
             'districts' => DB::table('bd_districts')->orderBy('name')->get(),
+            'upazilas' => DB::table('bd_upazilas')->orderBy('name')->get(),
         ], $deliveryCharge->chargesForView()));
     }
 
@@ -61,6 +61,7 @@ class OrderController extends Controller
             'customer_address' => 'nullable|string|max:1000',
             'division_id' => 'nullable|integer|exists:bd_divisions,id',
             'district_id' => 'nullable|integer|exists:bd_districts,id',
+            'upazila_id' => 'nullable|integer|exists:bd_upazilas,id',
             'channel' => 'required|in:website,facebook,instagram,whatsapp,call,others',
             'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
             'order_date' => 'nullable|date|before_or_equal:today',
@@ -87,16 +88,19 @@ class OrderController extends Controller
             return back()->withErrors(['variant_ids' => 'একটি বা একাধিক প্রোডাক্ট পাওয়া যায়নি।'])->withInput();
         }
 
-        $order = DB::transaction(function () use ($data, $variants, $deliveryChargeService) {
+        $divisionId = $deliveryChargeService->resolveDivisionId($data['division_id'] ?? null, $data['district_id'] ?? null);
+
+        $order = DB::transaction(function () use ($data, $variants, $deliveryChargeService, $divisionId) {
             $customer = Customer::firstOrCreate(
                 ['phone' => $data['customer_phone']],
                 ['name' => $data['customer_name'], 'address' => $data['customer_address'] ?? null,
-                    'division_id' => $data['division_id'] ?? null, 'district_id' => $data['district_id'] ?? null]
+                    'division_id' => $divisionId, 'district_id' => $data['district_id'] ?? null,
+                    'upazila_id' => $data['upazila_id'] ?? null]
             );
 
             $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
             $discount = min((float) ($data['discount'] ?? 0), $subtotal);
-            $deliveryCharge = $deliveryChargeService->calculate($data['division_id'] ?? null);
+            $deliveryCharge = $deliveryChargeService->calculate($divisionId);
 
             $order = Order::create([
                 'source' => 'manual',
@@ -105,8 +109,9 @@ class OrderController extends Controller
                 'customer_name' => $data['customer_name'],
                 'customer_phone' => $data['customer_phone'],
                 'customer_address' => $data['customer_address'] ?? null,
-                'division_id' => $data['division_id'] ?? null,
+                'division_id' => $divisionId,
                 'district_id' => $data['district_id'] ?? null,
+                'upazila_id' => $data['upazila_id'] ?? null,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
                 'delivery_charge' => $deliveryCharge,
@@ -162,6 +167,7 @@ class OrderController extends Controller
             'customer_address' => 'nullable|string|max:1000',
             'division_id' => 'nullable|integer|exists:bd_divisions,id',
             'district_id' => 'nullable|integer|exists:bd_districts,id',
+            'upazila_id' => 'nullable|integer|exists:bd_upazilas,id',
             'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
             'order_date' => 'nullable|date|before_or_equal:today',
             // Same "no manual delivery_charge input" rule as store() — see
@@ -192,12 +198,15 @@ class OrderController extends Controller
         DB::transaction(function () use ($order, $data, $variants, $deliveryChargeService) {
             $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
             $discount = min((float) ($data['discount'] ?? 0), $subtotal);
-            // Effective division: whatever was just submitted, falling back
-            // to whatever the order already had (e.g. from a Messenger
-            // conversation's extracted address) — so confirming without
-            // touching the division field still charges correctly rather
-            // than silently reverting to the "outside Dhaka" default.
-            $effectiveDivisionId = $data['division_id'] ?? $order->division_id;
+            // Effective division: resolved from whatever was just submitted
+            // (division_id directly, or derived from district_id — see
+            // resolveDivisionId()), falling back to whatever the order
+            // already had (e.g. from a Messenger conversation's extracted
+            // address) — so confirming without touching the address fields
+            // still charges correctly rather than silently reverting to the
+            // "outside Dhaka" default.
+            $resolvedDivisionId = $deliveryChargeService->resolveDivisionId($data['division_id'] ?? null, $data['district_id'] ?? null);
+            $effectiveDivisionId = $resolvedDivisionId ?? $order->division_id;
             $deliveryCharge = $deliveryChargeService->calculate($effectiveDivisionId);
 
             $order->update(array_filter([
@@ -208,8 +217,9 @@ class OrderController extends Controller
                 // these before — the confirm form only ever collected name/
                 // phone/address text. Nullable/optional, same as the three
                 // fields above: staff fills in whatever was missing.
-                'division_id' => $data['division_id'] ?? null,
+                'division_id' => $resolvedDivisionId,
                 'district_id' => $data['district_id'] ?? null,
+                'upazila_id' => $data['upazila_id'] ?? null,
             ]) + [
                 'subtotal' => $subtotal,
                 'discount' => $discount,
@@ -321,8 +331,8 @@ class OrderController extends Controller
             // show.blade.php's @else branch) but harmless/unused otherwise —
             // cheaper to always pass than to conditionally build two
             // different view-data shapes for one controller action.
-            'divisions' => DB::table('bd_divisions')->orderBy('id')->get(),
             'districts' => DB::table('bd_districts')->orderBy('name')->get(),
+            'upazilas' => DB::table('bd_upazilas')->orderBy('name')->get(),
         ], $deliveryCharge->chargesForView()));
     }
 
