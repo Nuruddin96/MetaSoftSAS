@@ -71,6 +71,8 @@ Route::prefix('mobile/v1')->group(function () {
         // connect, AI-agent toggles, marketing pixel) isn't mirrored here.
         Route::get('settings', [SettingController::class, 'index']);
         Route::post('settings', [SettingController::class, 'store']);
+        Route::get('settings/brand', [SettingController::class, 'brand']);
+        Route::post('settings/brand', [SettingController::class, 'updateBrand']);
 
         // Tenant Onboarding Wizard — mobile counterpart of the web wizard
         // (routes/web.php's tenant.onboarding.* group), same
