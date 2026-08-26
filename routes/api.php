@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\Mobile\ProductCatalogController;
 use App\Http\Controllers\Api\Mobile\ProductController;
 use App\Http\Controllers\Api\Mobile\ProductSourceController;
 use App\Http\Controllers\Api\Mobile\ReferenceDataController;
+use App\Http\Controllers\Api\Mobile\ReviewController;
 use App\Http\Controllers\Api\Mobile\SettingController;
 use App\Http\Controllers\Api\Mobile\ReportController;
 use App\Http\Controllers\Api\Mobile\SignalController;
@@ -87,11 +88,23 @@ Route::prefix('mobile/v1')->group(function () {
 
         // Storefront banners only — mirrors Tenant\WebsiteController's
         // banner slice (storeBanner/destroyBanner). The rest of that
-        // controller's surface (reviews, homepage/footer text) isn't
-        // mirrored here, see BannerController's docblock.
+        // controller's surface (homepage/footer text) isn't mirrored
+        // here, see BannerController's docblock.
         Route::get('settings/banners', [BannerController::class, 'index']);
         Route::post('settings/banners', [BannerController::class, 'store']);
         Route::delete('settings/banners/{banner}', [BannerController::class, 'destroy'])->whereNumber('banner');
+
+        // Storefront reviews (merchant-curated testimonials) only — mirrors
+        // Tenant\WebsiteController's review slice, see ReviewController's
+        // docblock. update is POST, not PUT/PATCH: PHP only populates
+        // $_FILES for multipart bodies on a literal POST request — Blade's
+        // own @method('PUT') spoofing works because the wire method stays
+        // POST, but a mobile client's real PUT/PATCH would not (same
+        // reasoning as ProductCatalogController::update()'s docblock).
+        Route::get('settings/reviews', [ReviewController::class, 'index']);
+        Route::post('settings/reviews', [ReviewController::class, 'store']);
+        Route::post('settings/reviews/{review}', [ReviewController::class, 'update'])->whereNumber('review');
+        Route::delete('settings/reviews/{review}', [ReviewController::class, 'destroy'])->whereNumber('review');
 
         // Storefront custom pages only — mirrors Tenant\WebsiteController's
         // page slice (storePage/updatePage/destroyPage), see PageController's
