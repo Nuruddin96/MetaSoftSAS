@@ -124,6 +124,11 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('product-catalog/{product}/variants', [ProductCatalogController::class, 'storeVariant'])->whereNumber('product');
         Route::patch('product-catalog/{product}/variants/{variant}', [ProductCatalogController::class, 'updateVariant'])->whereNumber('product')->whereNumber('variant');
         Route::delete('product-catalog/{product}/variants/{variant}', [ProductCatalogController::class, 'destroyVariant'])->whereNumber('product')->whereNumber('variant');
+        // Web/Flutter parity project — gallery images (POST accepts
+        // multipart images[], up to 8 total).
+        Route::post('product-catalog/{product}/images', [ProductCatalogController::class, 'storeImages'])->whereNumber('product');
+        Route::delete('product-catalog/{product}/images/{image}', [ProductCatalogController::class, 'destroyImage'])->whereNumber('product')->whereNumber('image');
+        Route::post('product-catalog/{product}/images/reorder', [ProductCatalogController::class, 'reorderImages'])->whereNumber('product');
 
         // Categories — mirrors Tenant\CategoryController's real capability
         // (list/create/update/delete, see CategoryController's docblock;
