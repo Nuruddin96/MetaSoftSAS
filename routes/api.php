@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Mobile\AdvertisingController;
 use App\Http\Controllers\Api\Mobile\AiChatController;
 use App\Http\Controllers\Api\Mobile\AuthController;
+use App\Http\Controllers\Api\Mobile\BannerController;
 use App\Http\Controllers\Api\Mobile\BillingController;
 use App\Http\Controllers\Api\Mobile\CategoryController;
 use App\Http\Controllers\Api\Mobile\CustomerController;
@@ -82,6 +83,14 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('settings', [SettingController::class, 'store']);
         Route::get('settings/brand', [SettingController::class, 'brand']);
         Route::post('settings/brand', [SettingController::class, 'updateBrand']);
+
+        // Storefront banners only — mirrors Tenant\WebsiteController's
+        // banner slice (storeBanner/destroyBanner). The rest of that
+        // controller's surface (pages, reviews, homepage/footer text)
+        // isn't mirrored here, see BannerController's docblock.
+        Route::get('settings/banners', [BannerController::class, 'index']);
+        Route::post('settings/banners', [BannerController::class, 'store']);
+        Route::delete('settings/banners/{banner}', [BannerController::class, 'destroy'])->whereNumber('banner');
 
         // Tenant Onboarding Wizard — mobile counterpart of the web wizard
         // (routes/web.php's tenant.onboarding.* group), same
