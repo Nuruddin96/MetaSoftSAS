@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Mobile\CustomerController;
 use App\Http\Controllers\Api\Mobile\DashboardController;
 use App\Http\Controllers\Api\Mobile\DeviceController;
 use App\Http\Controllers\Api\Mobile\ExpenseController;
+use App\Http\Controllers\Api\Mobile\FraudCheckController;
 use App\Http\Controllers\Api\Mobile\IncompleteOrderController;
 use App\Http\Controllers\Api\Mobile\InventoryController;
 use App\Http\Controllers\Api\Mobile\MessengerController;
@@ -51,6 +52,14 @@ Route::prefix('mobile/v1')->group(function () {
         Route::patch('orders/{order}/channel', [OrderController::class, 'updateChannel'])->whereNumber('order');
         Route::post('orders/{order}/courier', [OrderController::class, 'courier'])->whereNumber('order');
         Route::post('orders/{order}/courier/refresh', [OrderController::class, 'refreshCourierStatus'])->whereNumber('order');
+
+        // Mirrors Tenant\FraudCheckController::check() — same FraudChecker
+        // service, same "documented duplication over refactor risk"
+        // convention MessengerController/OrderCreationService already use
+        // for this API surface. Web only surfaces this on the order-details
+        // page (checked by customer_phone, not order id), so this is a
+        // phone lookup, not an order sub-resource route.
+        Route::post('fraud-check', [FraudCheckController::class, 'check']);
 
         Route::get('incomplete-orders', [IncompleteOrderController::class, 'index']);
         Route::patch('incomplete-orders/{incompleteOrder}/status', [IncompleteOrderController::class, 'updateStatus'])
