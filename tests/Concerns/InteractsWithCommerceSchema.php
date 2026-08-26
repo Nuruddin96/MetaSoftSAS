@@ -496,6 +496,7 @@ trait InteractsWithCommerceSchema
                 $table->unsignedInteger('upazila_id')->nullable();
                 $table->decimal('subtotal', 12, 2)->default(0);
                 $table->decimal('discount', 12, 2)->default(0);
+                $table->decimal('additional_amount', 12, 2)->default(0);
                 $table->decimal('delivery_charge', 10, 2)->default(0);
                 $table->decimal('total', 12, 2)->default(0);
                 $table->decimal('paid_amount', 12, 2)->default(0);

@@ -31,7 +31,7 @@ class OrderCreationService
     }
 
     /**
-     * @param  array{customer_name:string,customer_phone:string,customer_address:?string,division_id:?int,district_id:?int,upazila_id:?int,channel:string,payment_method:string,order_date:?string,discount:?float,note:?string,variant_ids:int[],quantities:int[]}  $data
+     * @param  array{customer_name:string,customer_phone:string,customer_address:?string,division_id:?int,district_id:?int,upazila_id:?int,channel:string,payment_method:string,order_date:?string,discount:?float,additional_amount:?float,note:?string,variant_ids:int[],quantities:int[]}  $data
      */
     public function createFromManualEntry(array $data, ?int $actingUserId, ?string $clientIp, ?string $userAgent): Order
     {
@@ -62,6 +62,7 @@ class OrderCreationService
 
             $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
             $discount = min((float) ($data['discount'] ?? 0), $subtotal);
+            $additionalAmount = (float) ($data['additional_amount'] ?? 0);
             $deliveryCharge = $this->deliveryChargeService->calculate($divisionId);
 
             $order = Order::create([
@@ -76,8 +77,9 @@ class OrderCreationService
                 'upazila_id' => $data['upazila_id'] ?? null,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
+                'additional_amount' => $additionalAmount,
                 'delivery_charge' => $deliveryCharge,
-                'total' => $subtotal - $discount + $deliveryCharge,
+                'total' => $subtotal - $discount + $additionalAmount + $deliveryCharge,
                 'payment_method' => $data['payment_method'],
                 'status' => 'confirmed',
                 'confirmed_at' => now(),
@@ -114,7 +116,7 @@ class OrderCreationService
      * Api\Mobile\OrderController::complete()) since that's an HTTP-shaped
      * concern (409), not a service-layer one.
      *
-     * @param  array{customer_name:?string,customer_phone:?string,customer_address:?string,division_id:?int,district_id:?int,upazila_id:?int,payment_method:string,order_date:?string,discount:?float,note:?string,variant_ids:int[],quantities:int[]}  $data
+     * @param  array{customer_name:?string,customer_phone:?string,customer_address:?string,division_id:?int,district_id:?int,upazila_id:?int,payment_method:string,order_date:?string,discount:?float,additional_amount:?float,note:?string,variant_ids:int[],quantities:int[]}  $data
      */
     public function completeFromMessenger(Order $order, array $data, ?int $actingUserId, ?string $clientIp, ?string $userAgent): Order
     {
@@ -127,6 +129,7 @@ class OrderCreationService
         DB::transaction(function () use ($order, $data, $variants, $actingUserId) {
             $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
             $discount = min((float) ($data['discount'] ?? 0), $subtotal);
+            $additionalAmount = (float) ($data['additional_amount'] ?? 0);
             $resolvedDivisionId = $this->deliveryChargeService->resolveDivisionId($data['division_id'] ?? null, $data['district_id'] ?? null);
             $effectiveDivisionId = $resolvedDivisionId ?? $order->division_id;
             $deliveryCharge = $this->deliveryChargeService->calculate($effectiveDivisionId);
@@ -141,8 +144,9 @@ class OrderCreationService
             ]) + [
                 'subtotal' => $subtotal,
                 'discount' => $discount,
+                'additional_amount' => $additionalAmount,
                 'delivery_charge' => $deliveryCharge,
-                'total' => $subtotal - $discount + $deliveryCharge,
+                'total' => $subtotal - $discount + $additionalAmount + $deliveryCharge,
                 'payment_method' => $data['payment_method'],
                 'note' => $data['note'] ?? $order->note,
                 'status' => 'confirmed',

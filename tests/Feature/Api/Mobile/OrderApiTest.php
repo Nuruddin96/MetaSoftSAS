@@ -48,6 +48,40 @@ class OrderApiTest extends TestCase
         $this->assertIsNumeric($response->json('delivery_charge'));
     }
 
+    /**
+     * additional_amount is a mobile-only surcharge field (Web's own
+     * order-create form has no equivalent) — must add on top of discount
+     * without disturbing it, and must default to 0/never go negative.
+     */
+    public function test_create_order_applies_additional_amount_on_top_of_discount(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 500]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/mobile/v1/orders', [
+            'customer_name' => 'Karim',
+            'customer_phone' => '01712345679',
+            'channel' => 'call',
+            'payment_method' => 'cod',
+            'discount' => 100,
+            'additional_amount' => 50,
+            'variant_ids' => [$variant->id],
+            'quantities' => [2],
+        ]);
+
+        $delivery = $response->json('delivery_charge');
+
+        $response->assertCreated()
+            ->assertJsonPath('subtotal', 1000)
+            ->assertJsonPath('discount', 100)
+            ->assertJsonPath('additional_amount', 50)
+            ->assertJsonPath('total', 1000 - 100 + 50 + $delivery);
+    }
+
     public function test_create_order_rejects_invalid_phone(): void
     {
         $tenant = $this->makeTenant();
@@ -127,6 +161,7 @@ class OrderApiTest extends TestCase
 
         $response = $this->postJson("/api/mobile/v1/orders/{$order->id}/complete", [
             'payment_method' => 'cod',
+            'additional_amount' => 25,
             'variant_ids' => [$variant->id],
             'quantities' => [2],
         ]);
@@ -134,6 +169,7 @@ class OrderApiTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('status', 'confirmed')
             ->assertJsonPath('subtotal', 1600)
+            ->assertJsonPath('additional_amount', 25)
             ->assertJsonCount(1, 'items');
 
         $order->refresh();
