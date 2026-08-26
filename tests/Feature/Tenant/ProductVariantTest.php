@@ -209,4 +209,90 @@ class ProductVariantTest extends TestCase
         $this->assertSame($tenantA->id, $newVariant->tenant_id);
         $this->assertNotEquals($tenantB->id, $newVariant->tenant_id);
     }
+
+    // --- 6a. Manual SKU (Variant Generator project — web form never had this field before) ---
+
+    public function test_a_manually_supplied_sku_is_saved_on_create(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeWarehouse($tenant);
+
+        $this->actingAs($user, 'tenant')->post($this->panelUrl($tenant, 'products'), [
+            'name' => 'Shirt',
+            'variants' => [
+                ['variant_name' => 'Default', 'selling_price' => 500, 'sku' => 'MY-CUSTOM-SKU'],
+            ],
+        ]);
+
+        $variant = ProductVariant::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+        $this->assertSame('MY-CUSTOM-SKU', $variant->sku);
+    }
+
+    public function test_a_blank_sku_on_update_never_clears_an_existing_variants_sku(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeWarehouse($tenant);
+        app()->instance('currentTenant', $tenant);
+        $product = Product::create(['tenant_id' => $tenant->id, 'name' => 'Shirt', 'is_active' => 1]);
+        $variant = ProductVariant::create([
+            'tenant_id' => $tenant->id, 'product_id' => $product->id,
+            'variant_name' => 'Default', 'selling_price' => 500, 'sku' => 'ORIGINAL-SKU',
+        ]);
+
+        $this->actingAs($user, 'tenant')->put($this->panelUrl($tenant, 'products/'.$product->id), [
+            'name' => 'Shirt',
+            'variants' => [
+                ['id' => $variant->id, 'variant_name' => 'Default', 'selling_price' => 550, 'sku' => ''],
+            ],
+        ]);
+
+        $this->assertSame('ORIGINAL-SKU', $variant->fresh()->sku);
+        $this->assertEquals(550.0, (float) $variant->fresh()->selling_price);
+    }
+
+    // --- 6. Duplicate combination protection (Variant Generator project) ---
+
+    public function test_store_rejects_two_rows_with_the_identical_attribute_combination(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeWarehouse($tenant);
+
+        $response = $this->actingAs($user, 'tenant')->post($this->panelUrl($tenant, 'products'), [
+            'name' => 'Shirt',
+            'variants' => [
+                ['variant_name' => 'A', 'selling_price' => 400, 'attributes' => ['Color' => 'Black', 'Size' => 'S']],
+                ['variant_name' => 'B', 'selling_price' => 420, 'attributes' => ['Size' => 'S', 'Color' => 'Black']],
+            ],
+        ]);
+
+        $response->assertSessionHasErrors('variants');
+        $this->assertSame(0, Product::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('name', 'Shirt')->count());
+    }
+
+    public function test_update_rejects_two_rows_with_the_identical_attribute_combination(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeWarehouse($tenant);
+        app()->instance('currentTenant', $tenant);
+        $product = Product::create(['tenant_id' => $tenant->id, 'name' => 'Shirt', 'is_active' => 1]);
+        $existing = ProductVariant::create([
+            'tenant_id' => $tenant->id, 'product_id' => $product->id,
+            'variant_name' => 'Black S', 'selling_price' => 400, 'attributes' => ['Color' => 'Black', 'Size' => 'S'],
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->put($this->panelUrl($tenant, 'products/'.$product->id), [
+            'name' => 'Shirt',
+            'variants' => [
+                ['id' => $existing->id, 'variant_name' => 'Black S', 'selling_price' => 400, 'attributes' => ['Color' => 'Black', 'Size' => 'S']],
+                ['variant_name' => 'Also Black S', 'selling_price' => 420, 'attributes' => ['Size' => 'S', 'Color' => 'Black']],
+            ],
+        ]);
+
+        $response->assertSessionHasErrors('variants');
+        $this->assertSame(1, ProductVariant::withoutGlobalScopes()->where('product_id', $product->id)->count());
+    }
 }
