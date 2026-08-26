@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Mobile;
 use App\Http\Controllers\Controller;
 use App\Models\Inventory;
 use App\Models\Product;
+use App\Models\ProductImage;
 use App\Models\ProductVariant;
 use App\Models\StockMovement;
 use App\Models\Warehouse;
@@ -13,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The real Products feature (list/detail/create/edit) for the mobile app —
@@ -21,12 +23,13 @@ use Illuminate\Validation\Rule;
  * picker and must keep its existing shape (Orders depends on it; not
  * touched here).
  *
- * Field set is deliberately pared down to what the mobile app's own form
- * actually captures today (lib/features/products/data/models/product_form_data.dart):
- * one selling_price + optional variant NAMES only — no per-variant
- * price/purchase_price/compare_at_price/attribute-axis editing. Those stay
- * web-panel-only (Tenant\ProductController) until the mobile form grows to
- * support them; see update()'s single-variant guard below.
+ * Variant/Attribute Generator project: the mobile form now mirrors the web
+ * panel's attribute-driven variant workflow (see `variants[]`'s
+ * `attributes`/`compare_at_price` support in store()/storeVariant()/
+ * updateVariant() below) — the "pared down, no per-variant editing" note
+ * that used to be here is no longer accurate; kept only the genuinely
+ * still-true limitation: whole-product update() only touches a single
+ * variant's price/SKU when the product has exactly one, see that guard.
  *
  * update() is POST, not PATCH/PUT: PHP does not populate $_FILES for
  * multipart bodies on any method other than POST, so a real multipart
@@ -102,6 +105,7 @@ class ProductCatalogController extends Controller
         }
 
         $data = $this->validateCreate($request);
+        $this->assertNoDuplicateVariantCombinations($data['variants'] ?? []);
         $uploadedPaths = [];
 
         try {
@@ -122,6 +126,7 @@ class ProductCatalogController extends Controller
                 $product = Product::create([
                     'name' => $data['name'],
                     'category_id' => $data['category_id'] ?? null,
+                    'description' => $data['description'] ?? null,
                     'is_active' => true,
                     'has_variants' => count($rows) > 1 ? 1 : 0,
                 ]);
@@ -133,7 +138,6 @@ class ProductCatalogController extends Controller
                 }
 
                 $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
-                $qty = (int) ($data['initial_stock'] ?? 0);
 
                 foreach ($rows as $row) {
                     $variant = $product->variants()->create([
@@ -141,8 +145,15 @@ class ProductCatalogController extends Controller
                         'variant_name' => ($row['name'] ?? null) ?: 'Default',
                         'selling_price' => $row['selling_price'] ?? $data['selling_price'],
                         'sku' => count($rows) === 1 ? ($row['sku'] ?? $data['sku'] ?? null) : ($row['sku'] ?? null),
+                        'purchase_price' => $row['purchase_price'] ?? 0,
+                        'compare_at_price' => $row['compare_at_price'] ?? null,
                         'attributes' => $this->attributesFromRow($row),
                     ]);
+
+                    // Per-row stock (falls back to the single top-level
+                    // initial_stock for the simple/no-attributes path,
+                    // unchanged from before).
+                    $qty = (int) ($row['stock'] ?? $data['initial_stock'] ?? 0);
 
                     if ($warehouse) {
                         Inventory::create([
@@ -194,6 +205,7 @@ class ProductCatalogController extends Controller
                 $product->update([
                     'name' => $data['name'],
                     'category_id' => $data['category_id'] ?? null,
+                    'description' => array_key_exists('description', $data) ? $data['description'] : $product->description,
                     'is_active' => $data['is_active'] ?? $product->is_active,
                 ]);
 
@@ -236,6 +248,10 @@ class ProductCatalogController extends Controller
         return $request->validate([
             'name' => 'required|string|max:255',
             'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')->where('tenant_id', $tenant->id)],
+            // Web/Flutter parity project — this was read-only on mobile
+            // before (presentDetail() returned it, but no create/update
+            // path ever wrote it).
+            'description' => 'nullable|string|max:2000',
             // Only required when the caller isn't using the new per-row
             // `variants[]` path below (each row supplies its own price).
             'selling_price' => 'required_without:variants|nullable|numeric|min:0.01',
@@ -249,6 +265,12 @@ class ProductCatalogController extends Controller
             'variants.*.name' => 'nullable|string|max:150',
             'variants.*.selling_price' => 'required_with:variants|numeric|min:0.01',
             'variants.*.sku' => 'nullable|string|max:80',
+            'variants.*.compare_at_price' => 'nullable|numeric|gt:variants.*.selling_price',
+            // Web/Flutter parity project — the web form's "কেনা দাম" (cost)
+            // field, used for profit reports (Order::profit()). Never
+            // shown to storefront customers, only to the tenant editing.
+            'variants.*.purchase_price' => 'nullable|numeric|min:0',
+            'variants.*.stock' => 'nullable|integer|min:0',
             'variants.*.attributes' => 'nullable|array',
             'variants.*.attributes.*' => 'nullable|string|max:60',
             'thumbnail' => 'nullable|image|max:4096',
@@ -266,6 +288,7 @@ class ProductCatalogController extends Controller
         return $request->validate([
             'name' => 'required|string|max:255',
             'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')->where('tenant_id', $tenant->id)],
+            'description' => 'nullable|string|max:2000',
             'selling_price' => 'nullable|numeric|min:0.01',
             'sku' => ['nullable', 'string', 'max:80', Rule::unique('product_variants', 'sku')->where('tenant_id', $tenant->id)->ignore($currentVariantId)],
             'is_active' => 'nullable|boolean',
@@ -319,6 +342,7 @@ class ProductCatalogController extends Controller
                 'sku' => $v->sku,
                 'selling_price' => (float) $v->selling_price,
                 'compare_at_price' => $v->compare_at_price !== null ? (float) $v->compare_at_price : null,
+                'purchase_price' => (float) $v->purchase_price,
                 'stock_quantity' => $v->relationLoaded('inventory') ? (int) $v->inventory->sum('quantity') : $v->totalStock(),
                 'is_active' => (bool) $v->is_active,
                 // New, additive — was never returned before (only ever
@@ -360,6 +384,31 @@ class ProductCatalogController extends Controller
     }
 
     /**
+     * Attribute/Variant Generator project — rejects a submission where two
+     * rows resolve to the identical attribute combination, regardless of
+     * insertion order within each row's map. Rows with no attributes at
+     * all are never compared against each other.
+     */
+    protected function assertNoDuplicateVariantCombinations(array $rows): void
+    {
+        $seen = [];
+        foreach ($rows as $row) {
+            $attrs = $this->attributesFromRow($row);
+            if ($attrs === null) {
+                continue;
+            }
+            ksort($attrs);
+            $key = json_encode($attrs);
+            if (isset($seen[$key])) {
+                throw ValidationException::withMessages([
+                    'variants' => ['একই অ্যাট্রিবিউট কম্বিনেশনের একাধিক ভ্যারিয়েন্ট থাকতে পারবে না।'],
+                ]);
+            }
+            $seen[$key] = true;
+        }
+    }
+
+    /**
      * New, additive — add one variant to an existing product without
      * resubmitting the whole product form. Mirrors store()'s per-row
      * shape exactly (name/selling_price/sku/attributes).
@@ -367,21 +416,41 @@ class ProductCatalogController extends Controller
     public function storeVariant(Request $request, int $product)
     {
         $tenant = app('currentTenant');
-        $product = Product::where('tenant_id', $tenant->id)->findOrFail($product);
+        $product = Product::where('tenant_id', $tenant->id)->with('variants')->findOrFail($product);
 
         $data = $request->validate([
             'name' => 'nullable|string|max:150',
             'selling_price' => 'required|numeric|min:0',
             'sku' => ['nullable', 'string', 'max:80', Rule::unique('product_variants', 'sku')->where('tenant_id', $tenant->id)],
+            'compare_at_price' => 'nullable|numeric|gt:selling_price',
+            'purchase_price' => 'nullable|numeric|min:0',
             'attributes' => 'nullable|array',
             'attributes.*' => 'nullable|string|max:60',
         ]);
+
+        $newAttrs = $this->attributesFromRow($data);
+        if ($newAttrs !== null) {
+            ksort($newAttrs);
+            foreach ($product->variants as $existing) {
+                $existingAttrs = $existing->attributes;
+                if (is_array($existingAttrs)) {
+                    ksort($existingAttrs);
+                }
+                if ($existingAttrs === $newAttrs) {
+                    throw ValidationException::withMessages([
+                        'attributes' => ['এই অ্যাট্রিবিউট কম্বিনেশনের ভ্যারিয়েন্ট আগে থেকেই আছে।'],
+                    ]);
+                }
+            }
+        }
 
         $variant = $product->variants()->create([
             'tenant_id' => $tenant->id,
             'variant_name' => $data['name'] ?: 'Default',
             'selling_price' => $data['selling_price'],
             'sku' => $data['sku'] ?? null,
+            'compare_at_price' => $data['compare_at_price'] ?? null,
+            'purchase_price' => $data['purchase_price'] ?? 0,
             'attributes' => $this->attributesFromRow($data),
         ]);
 
@@ -401,22 +470,58 @@ class ProductCatalogController extends Controller
     public function updateVariant(Request $request, int $product, int $variant)
     {
         $tenant = app('currentTenant');
-        $product = Product::where('tenant_id', $tenant->id)->findOrFail($product);
+        $product = Product::where('tenant_id', $tenant->id)->with('variants')->findOrFail($product);
         $variant = $product->variants()->findOrFail($variant);
 
         $data = $request->validate([
             'name' => 'nullable|string|max:150',
             'selling_price' => 'nullable|numeric|min:0',
             'sku' => ['nullable', 'string', 'max:80', Rule::unique('product_variants', 'sku')->where('tenant_id', $tenant->id)->ignore($variant->id)],
+            // Compares against whichever selling_price is actually in
+            // effect after this update — the just-submitted one if given,
+            // else the variant's existing one. A plain `gt:selling_price`
+            // rule only compares against a field in THIS same request, so
+            // it wrongly failed whenever compare_at_price was updated on
+            // its own without also resubmitting selling_price.
+            'compare_at_price' => ['nullable', 'numeric', function ($attribute, $value, $fail) use ($request, $variant) {
+                $effectiveSellingPrice = $request->input('selling_price', $variant->selling_price);
+                if ($value <= $effectiveSellingPrice) {
+                    $fail('আগের দাম অবশ্যই বিক্রয় মূল্যের চেয়ে বেশি হতে হবে।');
+                }
+            }],
+            'purchase_price' => 'nullable|numeric|min:0',
             'attributes' => 'nullable|array',
             'attributes.*' => 'nullable|string|max:60',
             'is_active' => 'nullable|boolean',
         ]);
 
+        if (array_key_exists('attributes', $data)) {
+            $newAttrs = $this->attributesFromRow($data);
+            if ($newAttrs !== null) {
+                ksort($newAttrs);
+                foreach ($product->variants as $existing) {
+                    if ($existing->id === $variant->id) {
+                        continue;
+                    }
+                    $existingAttrs = $existing->attributes;
+                    if (is_array($existingAttrs)) {
+                        ksort($existingAttrs);
+                    }
+                    if ($existingAttrs === $newAttrs) {
+                        throw ValidationException::withMessages([
+                            'attributes' => ['এই অ্যাট্রিবিউট কম্বিনেশনের ভ্যারিয়েন্ট আগে থেকেই আছে।'],
+                        ]);
+                    }
+                }
+            }
+        }
+
         $variant->update([
             'variant_name' => $data['name'] ?? $variant->variant_name,
             'selling_price' => $data['selling_price'] ?? $variant->selling_price,
             'sku' => $data['sku'] ?? $variant->sku,
+            'compare_at_price' => array_key_exists('compare_at_price', $data) ? $data['compare_at_price'] : $variant->compare_at_price,
+            'purchase_price' => array_key_exists('purchase_price', $data) ? $data['purchase_price'] : $variant->purchase_price,
             'attributes' => array_key_exists('attributes', $data) ? $this->attributesFromRow($data) : $variant->attributes,
             'is_active' => $data['is_active'] ?? $variant->is_active,
         ]);
@@ -458,5 +563,109 @@ class ProductCatalogController extends Controller
         $product->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Web/Flutter parity project — gallery images (distinct from the single
+     * `thumbnail`) were readable via presentDetail()'s `images` array but
+     * had no mobile write path at all before this. Mirrors the web panel's
+     * `gallery[]` upload (`Tenant\ProductController::store()`/`update()`):
+     * same 8-image cap, same `image|max:4096` validation, same storage
+     * disk/optimizer.
+     */
+    public function storeImages(Request $request, int $product)
+    {
+        $tenant = app('currentTenant');
+        $product = Product::where('tenant_id', $tenant->id)->with('images')->findOrFail($product);
+
+        $data = $request->validate([
+            'images' => 'required|array|min:1',
+            'images.*' => 'image|max:4096',
+        ]);
+
+        if ($product->images->count() + count($data['images']) > 8) {
+            return response()->json(['message' => 'সর্বোচ্চ ৮টি গ্যালারি ছবি রাখা যাবে।'], 422);
+        }
+
+        $nextSort = ((int) $product->images->max('sort_order')) + ($product->images->isEmpty() ? 0 : 1);
+        $uploadedPaths = [];
+
+        try {
+            foreach ($data['images'] as $file) {
+                $path = app(ImageOptimizer::class)->storeOptimized($file, 'public', 'products/gallery');
+                $uploadedPaths[] = $path;
+                $product->images()->create(['image_path' => $path, 'sort_order' => $nextSort++]);
+            }
+        } catch (\Throwable $e) {
+            foreach ($uploadedPaths as $path) {
+                Storage::disk('public')->delete($path);
+            }
+            report($e);
+
+            return response()->json(['message' => 'ছবি আপলোড করা যায়নি। আবার চেষ্টা করুন।'], 500);
+        }
+
+        $product->load('images');
+
+        return response()->json([
+            'images' => $product->images->map(fn ($img) => [
+                'id' => $img->id,
+                'url' => asset('storage/'.$img->image_path),
+                'sort_order' => $img->sort_order,
+            ])->values()->all(),
+        ], 201);
+    }
+
+    /** Web/Flutter parity project — mirrors `Tenant\ProductController::destroyImage()`. Featured thumbnail is untouched by this. */
+    public function destroyImage(int $product, int $image)
+    {
+        $tenant = app('currentTenant');
+        $product = Product::where('tenant_id', $tenant->id)->findOrFail($product);
+        $img = $product->images()->where('id', $image)->firstOrFail();
+
+        Storage::disk('public')->delete($img->image_path);
+        $img->delete();
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Web/Flutter parity project — mirrors `Tenant\ProductController::
+     * reorderImages()`: persist drag-reordered gallery order. Every
+     * submitted id must belong to this product (same ownership guard as
+     * the web panel's version).
+     */
+    public function reorderImages(Request $request, int $product)
+    {
+        $tenant = app('currentTenant');
+        $product = Product::where('tenant_id', $tenant->id)->with('images')->findOrFail($product);
+
+        $data = $request->validate([
+            'order' => 'required|array|min:1',
+            'order.*' => 'required|integer',
+        ]);
+
+        $ids = $data['order'];
+        $owned = $product->images->pluck('id');
+
+        if ($owned->count() !== count($ids) || $owned->sort()->values()->all() !== collect($ids)->sort()->values()->all()) {
+            return response()->json(['message' => 'অবৈধ ছবি তালিকা।'], 422);
+        }
+
+        DB::transaction(function () use ($ids) {
+            foreach ($ids as $position => $id) {
+                ProductImage::where('id', $id)->update(['sort_order' => $position]);
+            }
+        });
+
+        $product->load('images');
+
+        return response()->json([
+            'images' => $product->images->sortBy('sort_order')->map(fn ($img) => [
+                'id' => $img->id,
+                'url' => asset('storage/'.$img->image_path),
+                'sort_order' => $img->sort_order,
+            ])->values()->all(),
+        ]);
     }
 }
