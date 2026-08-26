@@ -311,6 +311,7 @@ CREATE TABLE orders (
     upazila_id INT UNSIGNED DEFAULT NULL,
     subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
     discount DECIMAL(12,2) DEFAULT 0,
+    additional_amount DECIMAL(12,2) DEFAULT 0,      -- chunk55.sql: mobile-only manual-entry surcharge, see that file
     delivery_charge DECIMAL(10,2) DEFAULT 0,
     total DECIMAL(12,2) NOT NULL DEFAULT 0,
     paid_amount DECIMAL(12,2) DEFAULT 0,
