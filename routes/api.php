@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\Mobile\MessengerController;
 use App\Http\Controllers\Api\Mobile\NotificationController;
 use App\Http\Controllers\Api\Mobile\OnboardingController;
 use App\Http\Controllers\Api\Mobile\OrderController;
+use App\Http\Controllers\Api\Mobile\PageController;
 use App\Http\Controllers\Api\Mobile\PosController;
 use App\Http\Controllers\Api\Mobile\ProductAttributeController;
 use App\Http\Controllers\Api\Mobile\ProductCatalogController;
@@ -86,11 +87,19 @@ Route::prefix('mobile/v1')->group(function () {
 
         // Storefront banners only — mirrors Tenant\WebsiteController's
         // banner slice (storeBanner/destroyBanner). The rest of that
-        // controller's surface (pages, reviews, homepage/footer text)
-        // isn't mirrored here, see BannerController's docblock.
+        // controller's surface (reviews, homepage/footer text) isn't
+        // mirrored here, see BannerController's docblock.
         Route::get('settings/banners', [BannerController::class, 'index']);
         Route::post('settings/banners', [BannerController::class, 'store']);
         Route::delete('settings/banners/{banner}', [BannerController::class, 'destroy'])->whereNumber('banner');
+
+        // Storefront custom pages only — mirrors Tenant\WebsiteController's
+        // page slice (storePage/updatePage/destroyPage), see PageController's
+        // docblock.
+        Route::get('settings/pages', [PageController::class, 'index']);
+        Route::post('settings/pages', [PageController::class, 'store']);
+        Route::patch('settings/pages/{page}', [PageController::class, 'update'])->whereNumber('page');
+        Route::delete('settings/pages/{page}', [PageController::class, 'destroy'])->whereNumber('page');
 
         // Tenant Onboarding Wizard — mobile counterpart of the web wizard
         // (routes/web.php's tenant.onboarding.* group), same
