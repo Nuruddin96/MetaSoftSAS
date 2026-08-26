@@ -196,6 +196,12 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('notifications', [NotificationController::class, 'index']);
         Route::post('notifications/seen', [NotificationController::class, 'markSeen']);
 
+        // Per-category notification on/off — mirrors
+        // Tenant\NotificationPreferenceController exactly (edit/update),
+        // see NotificationController::preferences()'s docblock.
+        Route::get('notifications/preferences', [NotificationController::class, 'preferences']);
+        Route::post('notifications/preferences', [NotificationController::class, 'updatePreferences']);
+
         // Messenger — mirrors Tenant\MessengerInboxController's real
         // capability (list via the same UnifiedInboxService the web
         // unified inbox uses, show, reply [text/image/audio, see
