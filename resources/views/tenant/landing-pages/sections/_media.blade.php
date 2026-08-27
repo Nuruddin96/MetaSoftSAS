@@ -8,10 +8,15 @@
         @endif
         <input type="file" name="data[image]" accept="image/*" class="flex-1 text-sm">
     </div>
+    @if (!empty($data['image_path']))
+        <label class="mt-2 flex items-center gap-1.5 text-sm text-mute">
+            <input type="checkbox" name="data[remove_image]" value="1"> ছবি সরান
+        </label>
+    @endif
 </div>
 
 <div>
-    <label class="text-sm font-medium">অথবা ভিডিও লিংক</label>
+    <label class="text-sm font-medium">ভিডিও লিংক (ঐচ্ছিক)</label>
     <input name="data[video_url]" value="{{ $data['video_url'] ?? '' }}" placeholder="https://..." class="{{ $input }}">
-    <p class="text-xs text-mute mt-1">ভিডিও লিংক দিলে সেটাই দেখাবে, ছবি না</p>
+    <p class="text-xs text-mute mt-1">ছবি ও ভিডিও দুটোই একসাথে দেখাতে পারবেন — একটি দিলে অন্যটি লুকানো হয় না</p>
 </div>

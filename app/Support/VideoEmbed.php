@@ -18,7 +18,10 @@ class VideoEmbed
             return null;
         }
 
-        if (preg_match('~youtu(?:be\.com/watch\?v=|\.be/)([\w-]+)~', $url, $m)) {
+        // watch?v=, youtu.be/, and shorts/ — a Shorts link previously fell
+        // through to null (no branch matched it at all), silently hiding
+        // the video section for exactly that URL shape.
+        if (preg_match('~youtu(?:be\.com/(?:watch\?v=|shorts/)|\.be/)([\w-]+)~', $url, $m)) {
             return 'https://www.youtube.com/embed/'.$m[1];
         }
 
