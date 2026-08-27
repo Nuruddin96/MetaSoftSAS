@@ -213,10 +213,31 @@
         label.textContent = outOfStock ? 'স্টক নেই' : 'অর্ডার করুন';
     }
 
+    function applyUnavailable() {
+        document.getElementById('variantIdInput').value = '';
+        document.getElementById('priceShow').textContent = '—';
+        document.getElementById('compareShow').classList.add('hidden');
+        document.getElementById('savingsShow').classList.add('hidden');
+
+        const stockEl = document.getElementById('stockShow');
+        stockEl.textContent = 'এই কম্বিনেশনটি এভেইলেবল নেই';
+        stockEl.className = 'text-sm text-red-600 font-semibold';
+
+        const btn = document.getElementById('buyBtn');
+        const label = document.getElementById('buyBtnLabel');
+        btn.disabled = true;
+        label.textContent = 'এভেইলেবল নেই';
+    }
+
+    // A combination the customer can pick from the axis buttons may not
+    // correspond to any real variant row (sparse matrix — e.g. Black+50ML
+    // and White+100ML exist but Black+100ML was never created). Falling
+    // through here would leave the previously selected variant's id in the
+    // hidden input, letting the customer submit the wrong variant.
     function updateFromAxes() {
         const key = axes.map(a => selected[a] ?? '').join('||');
         const d = variantMap[key];
-        if (d) applyVariantData(d);
+        if (d) applyVariantData(d); else applyUnavailable();
     }
 
     document.querySelectorAll('.axis-btn').forEach(btn => {
