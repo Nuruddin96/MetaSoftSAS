@@ -10,6 +10,7 @@ use App\Services\AI\AiConversationStyleService;
 use App\Services\AI\AiHandoffService;
 use App\Services\Inbox\UnifiedConversation;
 use App\Services\Inbox\UnifiedInboxService;
+use App\Services\WhatsApp\WhatsAppMediaService;
 use App\Services\WhatsApp\WhatsAppSendService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
@@ -88,12 +89,54 @@ class WhatsAppController extends Controller
                 'id' => $m->id,
                 'text' => $m->message_text,
                 'attachment_url' => $m->attachment_url,
+                // Live-proxied inbound media URL — same field/computation as
+                // Tenant\WhatsAppInboxController's 'inbound_media_url'
+                // (updates() and _attachment.blade.php), null unless this is
+                // an inbound message with a resolvable Meta media id. Points
+                // at media() below, which is itself Sanctum-authenticated
+                // like every other route in this group — the client must
+                // attach its bearer token when fetching this URL directly
+                // (a plain <img>/browser request with no Authorization
+                // header will 401).
+                'inbound_media_url' => $m->inboundMediaId() ? url('/api/mobile/v1/whatsapp/media/'.$m->id) : null,
                 'attachment_type' => $m->attachment_type,
+                'attachment_name' => $m->attachment_name,
                 'direction' => $m->direction,
                 'sent_by' => $m->sent_by,
                 'created_at' => $m->created_at?->toIso8601String(),
             ])->values(),
         ]);
+    }
+
+    /**
+     * Streams an inbound media attachment through the Cloud API on demand —
+     * exact mirror of Tenant\WhatsAppInboxController::media() (same
+     * WhatsAppMediaService, same two-step Graph API proxy, same "no stored
+     * copy" reasoning, see that service's docblock). Not a generic URL
+     * proxy: [id] only ever resolves a Meta media id already recorded on
+     * this tenant's own WhatsAppMessage row (via inboundMediaId(), which
+     * itself only returns non-null for an inbound row with a real
+     * attachment_type) — a caller cannot pass an arbitrary URL or fetch
+     * another tenant's media, since BelongsToTenant's global scope applies
+     * to the findOrFail() lookup the same way it does on every other
+     * WhatsAppMessage query in this controller.
+     */
+    public function media(int $id, WhatsAppMediaService $service)
+    {
+        $message = WhatsAppMessage::with('phoneNumber.businessAccount')->findOrFail($id);
+
+        $mediaId = $message->inboundMediaId();
+        $token = $message->phoneNumber?->businessAccount?->user_access_token;
+
+        abort_if(! $mediaId || ! $token, 404);
+
+        $result = $service->fetch($mediaId, $token);
+
+        abort_if(! $result, 404);
+
+        return response($result['body'], 200)
+            ->header('Content-Type', $result['mimeType'])
+            ->header('Cache-Control', 'private, max-age=300');
     }
 
     public function reply(Request $request, string $waId, WhatsAppSendService $service, AiConversationStyleService $style)
