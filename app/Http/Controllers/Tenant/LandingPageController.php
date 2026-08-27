@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\LandingPage;
 use App\Models\Product;
+use App\Services\LandingPage\SectionDataService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -18,6 +19,8 @@ use Illuminate\Support\Str;
  */
 class LandingPageController extends Controller
 {
+    public function __construct(protected SectionDataService $sectionData) {}
+
     public function index()
     {
         return view('tenant.landing-pages.index', [
@@ -86,7 +89,7 @@ class LandingPageController extends Controller
     public function destroy(LandingPage $landingPage)
     {
         foreach ($landingPage->sections ?? [] as $section) {
-            foreach ($this->imagePathsIn($section['data'] ?? []) as $path) {
+            foreach ($this->sectionData->imagePathsIn($section['data'] ?? []) as $path) {
                 Storage::disk('public')->delete($path);
             }
         }
@@ -116,7 +119,7 @@ class LandingPageController extends Controller
         abort_if($index === false, 404);
 
         $section = $sections[$index];
-        $section['data'] = $this->parseSectionData($request, $section['type'], $section['data'] ?? []);
+        $section['data'] = $this->sectionData->parse($request, $section['type'], $section['data'] ?? []);
         $sections[$index] = $section;
 
         $landingPage->update(['sections' => $sections->values()->all()]);
@@ -129,7 +132,7 @@ class LandingPageController extends Controller
         $sections = collect($landingPage->sections ?? []);
         $section = $sections->firstWhere('id', $sectionId);
 
-        foreach ($this->imagePathsIn($section['data'] ?? []) as $path) {
+        foreach ($this->sectionData->imagePathsIn($section['data'] ?? []) as $path) {
             Storage::disk('public')->delete($path);
         }
 
@@ -171,129 +174,5 @@ class LandingPageController extends Controller
         $landingPage->update(['sections' => $sections->values()->all()]);
 
         return back()->with('success', 'সেকশন কপি হয়েছে।');
-    }
-
-    /* ---------------- Section data parsing ---------------- */
-
-    protected function parseSectionData(Request $request, string $type, array $current): array
-    {
-        $folder = 'landing-pages/'.app('currentTenant')->id;
-        $in = $request->input('data', []);
-        $files = $request->file('data', []);
-
-        $image = fn (string $field, ?string $existing) => isset($files[$field]) && $files[$field]->isValid()
-            ? tap($files[$field]->store($folder, 'public'), fn () => $existing && Storage::disk('public')->delete($existing))
-            : $existing;
-
-        return match ($type) {
-            'hero' => [
-                'headline' => (string) ($in['headline'] ?? ''),
-                'subheadline' => (string) ($in['subheadline'] ?? ''),
-                'image_path' => $image('image', $current['image_path'] ?? null),
-                'video_url' => (string) ($in['video_url'] ?? ''),
-                'cta_text' => (string) ($in['cta_text'] ?? 'এখনই অর্ডার করুন'),
-            ],
-            'media' => [
-                'image_path' => $image('image', $current['image_path'] ?? null),
-                'video_url' => (string) ($in['video_url'] ?? ''),
-            ],
-            'benefits' => [
-                'heading' => (string) ($in['heading'] ?? ''),
-                'items' => collect($in['items'] ?? [])
-                    ->filter(fn ($i) => trim($i['title'] ?? '') !== '')
-                    ->map(fn ($i) => [
-                        'icon' => (string) ($i['icon'] ?? '✅'),
-                        'title' => (string) $i['title'],
-                        'description' => (string) ($i['description'] ?? ''),
-                    ])->values()->all(),
-            ],
-            'image_text' => [
-                'image_path' => $image('image', $current['image_path'] ?? null),
-                'heading' => (string) ($in['heading'] ?? ''),
-                'description' => (string) ($in['description'] ?? ''),
-                'layout' => in_array($in['layout'] ?? '', ['image-left', 'image-right']) ? $in['layout'] : 'image-left',
-            ],
-            'features' => [
-                'heading' => (string) ($in['heading'] ?? ''),
-                'description' => (string) ($in['description'] ?? ''),
-            ],
-            'gallery' => [
-                'images' => collect($current['images'] ?? [])
-                    ->reject(fn ($path, $i) => $request->boolean("data.remove_image_$i"))
-                    ->values()
-                    ->concat(
-                        collect($request->file('gallery_images', []))
-                            ->filter(fn ($f) => $f && $f->isValid())
-                            ->map(fn ($f) => $f->store($folder, 'public'))
-                    )
-                    ->take(8)
-                    ->values()
-                    ->all(),
-            ],
-            'reviews' => [
-                'heading' => (string) ($in['heading'] ?? ''),
-                // filter() keeps original keys — map() runs BEFORE values(),
-                // so $idx below still lines up with the form's original
-                // slot index (files/current are keyed the same way the form
-                // rendered each slot, 0..5), unlike a post-filter reindex.
-                'items' => collect($in['items'] ?? [])
-                    ->filter(fn ($i) => trim($i['customer_name'] ?? '') !== '')
-                    ->map(function ($i, $idx) use ($files, $folder, $current) {
-                        $existingPhoto = $current['items'][$idx]['photo_path'] ?? null;
-                        $file = $files['items'][$idx]['photo'] ?? null;
-
-                        return [
-                            'customer_name' => (string) $i['customer_name'],
-                            'review_text' => (string) ($i['review_text'] ?? ''),
-                            'rating' => max(1, min(5, (int) ($i['rating'] ?? 5))),
-                            'photo_path' => ($file && $file->isValid()) ? $file->store($folder, 'public') : $existingPhoto,
-                        ];
-                    })->values()->all(),
-            ],
-            'video_reviews' => [
-                'heading' => (string) ($in['heading'] ?? ''),
-                'items' => collect($in['items'] ?? [])
-                    ->filter(fn ($i) => trim($i['video_url'] ?? '') !== '')
-                    ->map(fn ($i) => [
-                        'customer_name' => (string) ($i['customer_name'] ?? ''),
-                        'video_url' => (string) $i['video_url'],
-                    ])->values()->all(),
-            ],
-            'cta' => [
-                'heading' => (string) ($in['heading'] ?? ''),
-                'button_text' => (string) ($in['button_text'] ?? 'এখনই অর্ডার করুন'),
-            ],
-            'faq' => [
-                'heading' => (string) ($in['heading'] ?? ''),
-                'items' => collect($in['items'] ?? [])
-                    ->filter(fn ($i) => trim($i['question'] ?? '') !== '')
-                    ->map(fn ($i) => [
-                        'question' => (string) $i['question'],
-                        'answer' => (string) ($i['answer'] ?? ''),
-                    ])->values()->all(),
-            ],
-            'checkout' => [
-                'heading' => (string) ($in['heading'] ?? 'অর্ডার করুন'),
-            ],
-            default => $current,
-        };
-    }
-
-    /** Every stored image path in a section's data — used to clean up files on delete. */
-    protected function imagePathsIn(array $data): array
-    {
-        $paths = array_filter([$data['image_path'] ?? null]);
-
-        foreach ($data['images'] ?? [] as $p) {
-            $paths[] = $p;
-        }
-
-        foreach ($data['items'] ?? [] as $item) {
-            if (! empty($item['photo_path'])) {
-                $paths[] = $item['photo_path'];
-            }
-        }
-
-        return $paths;
     }
 }
