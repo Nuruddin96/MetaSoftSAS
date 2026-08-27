@@ -142,6 +142,7 @@
                         ['tenant.reports.sales', 'রিপোর্ট', 'bar-chart-3'],
                         ['tenant.product-source.index', 'প্রোডাক্ট সোর্স', 'search'],
                         ['tenant.website', 'ওয়েবসাইট সেটিংস', 'palette'],
+                        ['tenant.landing-pages.index', 'ল্যান্ডিং পেজ', 'rocket'],
                         $adEnabled ? ['tenant.advertising.overview', 'অ্যাডভার্টাইজিং', 'megaphone'] : null,
                     ]),
                     'অন্যান্য' => [
