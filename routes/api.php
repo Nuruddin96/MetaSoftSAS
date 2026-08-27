@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\Mobile\FacebookConnectController;
 use App\Http\Controllers\Api\Mobile\FraudCheckController;
 use App\Http\Controllers\Api\Mobile\IncompleteOrderController;
 use App\Http\Controllers\Api\Mobile\InventoryController;
+use App\Http\Controllers\Api\Mobile\LandingPageController;
 use App\Http\Controllers\Api\Mobile\MessengerController;
 use App\Http\Controllers\Api\Mobile\NotificationController;
 use App\Http\Controllers\Api\Mobile\OnboardingController;
@@ -166,6 +167,24 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('settings/pages', [PageController::class, 'store']);
         Route::patch('settings/pages/{page}', [PageController::class, 'update'])->whereNumber('page');
         Route::delete('settings/pages/{page}', [PageController::class, 'destroy'])->whereNumber('page');
+
+        // Single Product Landing Page Builder — mobile counterpart of the
+        // web panel's Tenant\LandingPageController (Phase 2, already live),
+        // same LandingPage model/SectionDataService underneath. Ordering
+        // itself stays web-only (see LandingPageController's docblock).
+        Route::get('landing-pages', [LandingPageController::class, 'index']);
+        Route::post('landing-pages', [LandingPageController::class, 'store']);
+        Route::get('landing-pages/{landingPage}', [LandingPageController::class, 'show'])->whereNumber('landingPage');
+        Route::patch('landing-pages/{landingPage}', [LandingPageController::class, 'update'])->whereNumber('landingPage');
+        Route::delete('landing-pages/{landingPage}', [LandingPageController::class, 'destroy'])->whereNumber('landingPage');
+        Route::post('landing-pages/{landingPage}/publish', [LandingPageController::class, 'publish'])->whereNumber('landingPage');
+        Route::post('landing-pages/{landingPage}/unpublish', [LandingPageController::class, 'unpublish'])->whereNumber('landingPage');
+
+        Route::post('landing-pages/{landingPage}/sections', [LandingPageController::class, 'addSection'])->whereNumber('landingPage');
+        Route::post('landing-pages/{landingPage}/sections/reorder', [LandingPageController::class, 'reorderSections'])->whereNumber('landingPage');
+        Route::post('landing-pages/{landingPage}/sections/{sectionId}', [LandingPageController::class, 'updateSection'])->whereNumber('landingPage');
+        Route::delete('landing-pages/{landingPage}/sections/{sectionId}', [LandingPageController::class, 'destroySection'])->whereNumber('landingPage');
+        Route::post('landing-pages/{landingPage}/sections/{sectionId}/duplicate', [LandingPageController::class, 'duplicateSection'])->whereNumber('landingPage');
 
         // Tenant Onboarding Wizard — mobile counterpart of the web wizard
         // (routes/web.php's tenant.onboarding.* group), same
