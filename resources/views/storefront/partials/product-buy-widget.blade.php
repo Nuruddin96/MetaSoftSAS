@@ -7,13 +7,25 @@
     including page is expected to define around it (form + submit button).
 --}}
 @php
+    // Storefront\ProductController::show() already scopes its `variants`
+    // eager load to is_active=1, but this partial is also reused by the
+    // landing page checkout section (Storefront\LandingPageController),
+    // which loaded the raw, unfiltered relation — an inactive variant's
+    // attribute value showed up as a selectable button there and could
+    // resolve to a purchasable id. Filtering here too means no caller can
+    // reintroduce that leak by forgetting to scope its own eager load.
+    // ->values() re-indexes from 0 — Collection::where() keeps the parent's
+    // original keys, and the flat picker below relies on index 0 being the
+    // first SURVIVING (active) variant to default-check it, not whichever
+    // key an inactive variant happened to occupy before filtering.
+    $activeVariants = $product->variants->where('is_active', 1)->values();
     $axes = $product->optionAxes();
-    $firstVariant = $product->variants->first();
+    $firstVariant = $activeVariants->first();
     $savings = $firstVariant?->savingsAmount();
     $stock = $firstVariant?->stockCount();
     $outOfStock = $firstVariant && $stock !== null && $stock <= 0;
 
-    $variantMap = $product->variants->mapWithKeys(fn ($v) => [
+    $variantMap = $activeVariants->mapWithKeys(fn ($v) => [
         collect($axes)->map(fn ($axis) => $v->attributes[$axis] ?? '')->implode('||') => [
             'id' => $v->id,
             'price' => number_format($v->selling_price),
@@ -24,13 +36,13 @@
         ],
     ]);
     $axisValues = collect($axes)->mapWithKeys(fn ($axis) => [
-        $axis => $product->variants->pluck("attributes.$axis")->filter()->unique()->values(),
+        $axis => $activeVariants->pluck("attributes.$axis")->filter()->unique()->values(),
     ]);
 @endphp
 
 <input type="hidden" name="variant_id" id="variantIdInput" value="{{ $firstVariant?->id }}">
 
-@if ($axes || $product->variants->count() > 1)
+@if ($axes || $activeVariants->count() > 1)
     <div class="space-y-4 pb-4 border-b border-ink/10">
         @if ($axes)
             @foreach ($axes as $axis)
@@ -49,7 +61,7 @@
             <div>
                 <label class="text-sm font-medium">ভ্যারিয়েন্ট বাছাই করুন</label>
                 <div class="mt-2 flex flex-wrap gap-2" id="variantPick">
-                    @foreach ($product->variants as $i => $v)
+                    @foreach ($activeVariants as $i => $v)
                         <label class="cursor-pointer">
                             <input type="radio" name="variant_id_flat" value="{{ $v->id }}" class="peer sr-only"
                                    data-price="{{ number_format($v->selling_price) }}"

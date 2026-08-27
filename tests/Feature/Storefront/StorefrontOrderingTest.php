@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Storefront;
 
-use App\Models\FacebookPage;
+use App\Models\Category;
 use App\Models\Inventory;
 use App\Models\MessengerSetting;
 use App\Models\Order;
@@ -153,6 +153,85 @@ class StorefrontOrderingTest extends TestCase
         $response->assertSessionHas('error');
         $cart = $this->app['session']->get('cart_'.$tenant->id, []);
         $this->assertArrayNotHasKey($variantB->id, $cart);
+    }
+
+    /**
+     * An inactive variant's own attribute value must never be a selectable
+     * option, and its old id must never resolve to a purchasable id via the
+     * JS variantMap. Three variants (not two) so at least two stay active —
+     * with only one active variant left, optionAxes() correctly collapses
+     * to no picker at all (a separate, already-correct behavior), which
+     * would make "Blue never appears" trivially true for the wrong reason.
+     */
+    public function test_an_inactive_variants_attribute_value_is_not_offered_as_a_selectable_option(): void
+    {
+        $tenant = $this->makeTenant();
+        app()->instance('currentTenant', $tenant);
+        $product = Product::create(['tenant_id' => $tenant->id, 'name' => 'Premium Shirt', 'is_active' => 1]);
+        $warehouse = Warehouse::create(['tenant_id' => $tenant->id, 'name' => 'Main', 'is_default' => 1]);
+
+        $variantRed = ProductVariant::create([
+            'tenant_id' => $tenant->id, 'product_id' => $product->id,
+            'variant_name' => 'Red / M', 'attributes' => ['color' => 'Red', 'size' => 'M'], 'selling_price' => 800,
+        ]);
+        Inventory::create(['tenant_id' => $tenant->id, 'variant_id' => $variantRed->id, 'warehouse_id' => $warehouse->id, 'quantity' => 10]);
+
+        $variantGreen = ProductVariant::create([
+            'tenant_id' => $tenant->id, 'product_id' => $product->id,
+            'variant_name' => 'Green / M', 'attributes' => ['color' => 'Green', 'size' => 'M'], 'selling_price' => 800,
+        ]);
+        Inventory::create(['tenant_id' => $tenant->id, 'variant_id' => $variantGreen->id, 'warehouse_id' => $warehouse->id, 'quantity' => 10]);
+
+        $variantBlue = ProductVariant::create([
+            'tenant_id' => $tenant->id, 'product_id' => $product->id,
+            'variant_name' => 'Blue / M', 'attributes' => ['color' => 'Blue', 'size' => 'M'],
+            'selling_price' => 800, 'is_active' => 0,
+        ]);
+        Inventory::create(['tenant_id' => $tenant->id, 'variant_id' => $variantBlue->id, 'warehouse_id' => $warehouse->id, 'quantity' => 10]);
+
+        $response = $this->get($this->storeUrl($tenant, 'product/'.$product->slug));
+
+        $response->assertOk();
+        $response->assertSee('data-value="Red"', false);
+        $response->assertSee('data-value="Green"', false);
+        // variantBlue's own "Blue" value must not appear as a selectable option at all.
+        $response->assertDontSee('data-value="Blue"', false);
+    }
+
+    public function test_the_backend_refuses_to_add_an_inactive_variant_to_the_cart(): void
+    {
+        $tenant = $this->makeTenant();
+        [$product, $variantA, $variantB] = $this->makeTwoVariantProduct($tenant, [], ['is_active' => 0]);
+
+        $response = $this->post($this->storeUrl($tenant, 'cart/add'), ['variant_id' => $variantB->id, 'qty' => 1]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+        $cart = $this->app['session']->get('cart_'.$tenant->id, []);
+        $this->assertArrayNotHasKey($variantB->id, $cart);
+    }
+
+    /** Even if a variant slipped into the cart while still active and was deactivated afterwards, checkout must still refuse it — same defense-in-depth OrderPlacementService applies for stock. */
+    public function test_checkout_refuses_to_place_an_order_for_a_variant_deactivated_after_it_was_cart(): void
+    {
+        $tenant = $this->makeTenant();
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 500]);
+
+        $this->post($this->storeUrl($tenant, 'cart/add'), ['variant_id' => $variant->id, 'qty' => 1])
+            ->assertRedirect($this->storeUrl($tenant, 'cart'));
+
+        $variant->update(['is_active' => 0]);
+
+        $response = $this->post($this->storeUrl($tenant, 'checkout'), [
+            'customer_name' => 'Karim',
+            'customer_phone' => '01711112222',
+            'customer_address' => 'House 1, Road 2, Dhaka',
+            'division_id' => 3,
+            'district_id' => 1,
+        ]);
+
+        $response->assertSessionHas('error');
+        $this->assertSame(0, Order::count());
     }
 
     public function test_requesting_more_than_available_stock_is_clamped_not_rejected_outright(): void
@@ -365,7 +444,7 @@ class StorefrontOrderingTest extends TestCase
     {
         $tenant = $this->makeTenant();
         app()->instance('currentTenant', $tenant);
-        $category = \App\Models\Category::create(['tenant_id' => $tenant->id, 'name' => 'Skincare', 'slug' => 'skincare', 'is_active' => 1]);
+        $category = Category::create(['tenant_id' => $tenant->id, 'name' => 'Skincare', 'slug' => 'skincare', 'is_active' => 1]);
         $this->makeSellableVariant($tenant->id);
 
         $response = $this->get($this->storeUrl($tenant));
@@ -382,7 +461,7 @@ class StorefrontOrderingTest extends TestCase
     {
         $tenant = $this->makeTenant();
         app()->instance('currentTenant', $tenant);
-        $category = \App\Models\Category::create(['tenant_id' => $tenant->id, 'name' => 'Skincare', 'slug' => 'skincare', 'is_active' => 1]);
+        $category = Category::create(['tenant_id' => $tenant->id, 'name' => 'Skincare', 'slug' => 'skincare', 'is_active' => 1]);
 
         $response = $this->get($this->storeUrl($tenant, 'products'));
 

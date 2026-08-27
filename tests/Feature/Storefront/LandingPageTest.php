@@ -113,6 +113,62 @@ class LandingPageTest extends TestCase
         $this->get($this->storeUrl($tenantB, 'l/'.$lp->slug))->assertNotFound();
     }
 
+    /**
+     * Storefront\LandingPageController::findVisible() eager-loads
+     * `product.variants` — must be scoped to is_active=1 the same way
+     * Storefront\ProductController::show() already scopes its own, or an
+     * inactive variant's attribute value leaks into the checkout widget as
+     * a selectable option (product-buy-widget.blade.php regression guard).
+     */
+    public function test_an_inactive_variants_attribute_value_never_appears_on_the_landing_page(): void
+    {
+        $tenant = $this->makeTenant();
+        $lp = $this->makeLandingPage($tenant, ['status' => 'published', 'published_at' => now()]);
+
+        app()->instance('currentTenant', $tenant);
+        $activeSecond = ProductVariant::create([
+            'tenant_id' => $tenant->id, 'product_id' => $lp->product_id,
+            'variant_name' => 'Small', 'attributes' => ['size' => 'Small'], 'selling_price' => 900,
+        ]);
+        $inactive = ProductVariant::create([
+            'tenant_id' => $tenant->id, 'product_id' => $lp->product_id,
+            'variant_name' => 'Large', 'attributes' => ['size' => 'Large'],
+            'selling_price' => 1500, 'is_active' => 0,
+        ]);
+        // The bound product's default (first, un-attributed) variant also
+        // needs the same attribute key so optionAxes() treats these three
+        // as one consistent axis instead of bailing out to no picker.
+        $lp->product->variants->first()->update(['attributes' => ['size' => 'Regular']]);
+
+        $response = $this->get($this->storeUrl($tenant, 'l/'.$lp->slug));
+
+        $response->assertOk();
+        $response->assertSee('data-value="Small"', false);
+        $response->assertDontSee('data-value="Large"', false);
+        $this->assertNotNull($activeSecond);
+        $this->assertNotNull($inactive);
+    }
+
+    public function test_a_crafted_order_for_an_inactive_variant_is_refused(): void
+    {
+        $tenant = $this->makeTenant();
+        $lp = $this->makeLandingPage($tenant, ['status' => 'published', 'published_at' => now()]);
+        $variant = $lp->product->variants->first();
+        $variant->update(['is_active' => 0]);
+
+        $response = $this->post($this->storeUrl($tenant, 'l/'.$lp->slug.'/order'), [
+            'variant_id' => $variant->id,
+            'customer_name' => 'Karim',
+            'customer_phone' => '01711112222',
+            'customer_address' => 'House 1, Road 2, Dhaka',
+            'division_id' => 3,
+            'district_id' => 1,
+        ]);
+
+        $response->assertSessionHas('error');
+        $this->assertSame(0, Order::count());
+    }
+
     // --- Ordering ------------------------------------------------------------
 
     public function test_placing_an_order_from_a_published_landing_page_creates_the_exact_order(): void
