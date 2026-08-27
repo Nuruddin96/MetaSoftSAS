@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Mobile\AdvertisingController;
 use App\Http\Controllers\Api\Mobile\AiChatController;
+use App\Http\Controllers\Api\Mobile\AiMemoryController;
 use App\Http\Controllers\Api\Mobile\AuthController;
 use App\Http\Controllers\Api\Mobile\BannerController;
 use App\Http\Controllers\Api\Mobile\BillingController;
@@ -105,6 +106,15 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('settings/reviews', [ReviewController::class, 'store']);
         Route::post('settings/reviews/{review}', [ReviewController::class, 'update'])->whereNumber('review');
         Route::delete('settings/reviews/{review}', [ReviewController::class, 'destroy'])->whereNumber('review');
+
+        // "AI মেমোরী" (Teach Your AI Agent) Q&A CRUD — mirrors
+        // Tenant\AiMemoryController exactly, see AiMemoryController's
+        // docblock. update is POST, not PUT/PATCH, same multipart/$_FILES
+        // reasoning as the reviews routes above.
+        Route::get('ai-memory', [AiMemoryController::class, 'index']);
+        Route::post('ai-memory', [AiMemoryController::class, 'store']);
+        Route::post('ai-memory/{aiMemory}', [AiMemoryController::class, 'update'])->whereNumber('aiMemory');
+        Route::delete('ai-memory/{aiMemory}', [AiMemoryController::class, 'destroy'])->whereNumber('aiMemory');
 
         // Storefront custom pages only — mirrors Tenant\WebsiteController's
         // page slice (storePage/updatePage/destroyPage), see PageController's
