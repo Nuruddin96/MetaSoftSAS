@@ -95,6 +95,15 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('settings/courier', [SettingController::class, 'courier']);
         Route::post('settings/courier', [SettingController::class, 'updateCourier']);
 
+        // Marketing Pixel/CAPI/GTM — mirrors Tenant\SettingController::
+        // marketing()/testCapiConnection() exactly, only the 5 real fields
+        // (see SettingController::marketing()'s docblock for the 4 unused
+        // fields deliberately omitted). GET is masked (never returns a
+        // decrypted fb_capi_token).
+        Route::get('settings/marketing', [SettingController::class, 'marketing']);
+        Route::post('settings/marketing', [SettingController::class, 'updateMarketing']);
+        Route::post('settings/marketing/test-capi', [SettingController::class, 'testMarketingCapi']);
+
         // Facebook Connect (OAuth) — mirrors Tenant\FacebookConnectController
         // exactly, see Api\Mobile\FacebookConnectController's docblock for
         // why this returns JSON instead of redirecting. The actual OAuth
