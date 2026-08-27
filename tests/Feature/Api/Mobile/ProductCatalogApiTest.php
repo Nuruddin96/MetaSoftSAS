@@ -6,8 +6,10 @@ use App\Models\Category;
 use App\Models\Inventory;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Tenant;
 use App\Models\Warehouse;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\Sanctum;
 use Tests\Concerns\InteractsWithApiSchema;
@@ -42,7 +44,7 @@ class ProductCatalogApiTest extends TestCase
 
     protected function makeProductWithStock(int $tenantId, array $productAttrs = [], array $variantAttrs = [], int $stock = 10): Product
     {
-        app()->instance('currentTenant', \App\Models\Tenant::find($tenantId));
+        app()->instance('currentTenant', Tenant::find($tenantId));
 
         $product = Product::create(array_merge([
             'tenant_id' => $tenantId,
@@ -188,6 +190,93 @@ class ProductCatalogApiTest extends TestCase
 
         $response->assertCreated()->assertJsonCount(2, 'variants')->assertJsonPath('has_variants', true);
         $this->assertSame(['Small', 'Large'], collect($response->json('variants'))->pluck('name')->all());
+    }
+
+    /**
+     * The exact scenario reported broken: Size 50ML/150ML, each variant
+     * with its own independent price and stock, created via the real
+     * `variants[]` attribute-aware path (not a direct DB fixture) — never
+     * actually exercised end-to-end before this test. Production data
+     * audit (2026-08-27) found 266 real variants across every tenant and
+     * only 1 with `attributes` set, which is what motivated writing this:
+     * the backend/Flutter wiring for this path had no test proving it
+     * actually works through the real HTTP boundary.
+     */
+    public function test_create_product_with_attribute_aware_variants_persists_independent_price_and_stock_per_row(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        Warehouse::create(['tenant_id' => $tenant->id, 'name' => 'Main', 'is_default' => 1]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/mobile/v1/product-catalog', [
+            'name' => 'Brilliant Skin Rejuvenating Set',
+            'variants' => [
+                ['name' => '50 ML', 'selling_price' => 500, 'stock' => 10, 'attributes' => ['Size' => '50 ML']],
+                ['name' => '150 ML', 'selling_price' => 900, 'stock' => 5, 'attributes' => ['Size' => '150 ML']],
+            ],
+        ]);
+
+        $response->assertCreated()->assertJsonCount(2, 'variants')->assertJsonPath('has_variants', true);
+
+        $variants = collect($response->json('variants'))->keyBy('name');
+        $this->assertEquals(500, $variants['50 ML']['selling_price']);
+        $this->assertEquals(900, $variants['150 ML']['selling_price']);
+        $this->assertSame(['Size' => '50 ML'], $variants['50 ML']['attributes']);
+        $this->assertSame(['Size' => '150 ML'], $variants['150 ML']['attributes']);
+
+        // stock_quantity isn't in the create response's per-variant shape
+        // (presentDetail() doesn't include it there) — verify from the DB
+        // directly, same as the price/attributes checks above are really
+        // verifying "did this reach the database", not just "did the API
+        // echo back what I sent".
+        $this->assertSame(10, (int) Inventory::where('variant_id', $variants['50 ML']['id'])->sum('quantity'));
+        $this->assertSame(5, (int) Inventory::where('variant_id', $variants['150 ML']['id'])->sum('quantity'));
+    }
+
+    /**
+     * The full pipeline the storefront depends on: a product created
+     * through the real API with attribute-aware variants must render as a
+     * Size selector on the public product page, with each option's price
+     * coming from ITS OWN variant, not the product's default/lowest price.
+     */
+    public function test_a_freshly_created_attribute_variant_product_shows_selectable_options_on_the_storefront(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        Warehouse::create(['tenant_id' => $tenant->id, 'name' => 'Main', 'is_default' => 1]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+        $create = $this->postJson('/api/mobile/v1/product-catalog', [
+            'name' => 'Brilliant Skin Rejuvenating Set',
+            'variants' => [
+                ['name' => '50 ML', 'selling_price' => 500, 'stock' => 10, 'attributes' => ['Size' => '50 ML']],
+                ['name' => '150 ML', 'selling_price' => 900, 'stock' => 5, 'attributes' => ['Size' => '150 ML']],
+            ],
+        ])->assertCreated();
+
+        $slug = Product::find($create->json('id'))->slug;
+
+        $response = $this->withoutMiddleware(ValidateCsrfToken::class)
+            ->get('/shop/'.$tenant->subdomain.'/product/'.$slug);
+
+        $response->assertOk();
+        // The attribute KEY is echoed verbatim (case preserved) — the axis
+        // name here is "Size" because that's exactly what was sent, not a
+        // normalized/lowercased form.
+        $response->assertSee('data-axis="Size"', false);
+        $response->assertSee('data-value="50 ML"', false);
+        $response->assertSee('data-value="150 ML"', false);
+        // The embedded variantMap JSON is what the client-side JS reads on
+        // selection — each option's own price must be in there, not just
+        // the page's initial (first-variant) price display.
+        $response->assertSee('"price":"500"', false);
+        $response->assertSee('"price":"900"', false);
     }
 
     public function test_create_product_rejects_missing_name_and_price(): void
