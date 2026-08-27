@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\Mobile\CustomerController;
 use App\Http\Controllers\Api\Mobile\DashboardController;
 use App\Http\Controllers\Api\Mobile\DeviceController;
 use App\Http\Controllers\Api\Mobile\ExpenseController;
+use App\Http\Controllers\Api\Mobile\FacebookConnectController;
 use App\Http\Controllers\Api\Mobile\FraudCheckController;
 use App\Http\Controllers\Api\Mobile\IncompleteOrderController;
 use App\Http\Controllers\Api\Mobile\InventoryController;
@@ -93,6 +94,18 @@ Route::prefix('mobile/v1')->group(function () {
         // courier() docblock.
         Route::get('settings/courier', [SettingController::class, 'courier']);
         Route::post('settings/courier', [SettingController::class, 'updateCourier']);
+
+        // Facebook Connect (OAuth) — mirrors Tenant\FacebookConnectController
+        // exactly, see Api\Mobile\FacebookConnectController's docblock for
+        // why this returns JSON instead of redirecting. The actual OAuth
+        // code exchange still happens at the existing, unchanged central
+        // callback route (routes/web.php's facebook.callback) — never
+        // duplicated here.
+        Route::get('settings/facebook/connect-url', [FacebookConnectController::class, 'connectUrl']);
+        Route::get('settings/facebook/status', [FacebookConnectController::class, 'status']);
+        Route::get('settings/facebook/pages', [FacebookConnectController::class, 'pages']);
+        Route::post('settings/facebook/pages/{pageId}/connect', [FacebookConnectController::class, 'connect']);
+        Route::post('settings/facebook/pages/{page}/disconnect', [FacebookConnectController::class, 'disconnect'])->whereNumber('page');
 
         // Storefront banners only — mirrors Tenant\WebsiteController's
         // banner slice (storeBanner/destroyBanner). The rest of that
