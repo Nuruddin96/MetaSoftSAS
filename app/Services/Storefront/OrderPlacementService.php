@@ -43,6 +43,17 @@ class OrderPlacementService
             // selection time, but that can go stale by order time.
             $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
 
+            foreach ($lines as $line) {
+                // A deactivated variant must never be purchasable even via
+                // a crafted request with its real id — the storefront UI
+                // already hides it (product-buy-widget.blade.php scopes to
+                // is_active=1), but that's a frontend courtesy only, same
+                // as the stock check below; this is the actual enforcement.
+                if (! $line['variant']->is_active) {
+                    throw new \RuntimeException("inactive_variant:{$line['variant']->product->name}");
+                }
+            }
+
             if ($warehouse) {
                 foreach ($lines as $line) {
                     $available = Inventory::where('variant_id', $line['variant']->id)

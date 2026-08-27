@@ -23,7 +23,10 @@ class LandingPageController extends Controller
      */
     protected function findVisible(string $slug): LandingPage
     {
-        $landingPage = LandingPage::with('product.variants', 'product.images')
+        // Scoped the same way Storefront\ProductController::show() already
+        // scopes its own `variants` eager load — an inactive variant must
+        // never reach the checkout widget as a selectable option.
+        $landingPage = LandingPage::with(['product.variants' => fn ($q) => $q->where('is_active', 1), 'product.images'])
             ->where('slug', $slug)->firstOrFail();
 
         if (! $landingPage->isPublished() && ! Auth::guard('tenant')->check()) {
@@ -78,6 +81,10 @@ class LandingPageController extends Controller
         } catch (\RuntimeException $e) {
             if (str_starts_with($e->getMessage(), 'insufficient_stock:')) {
                 return back()->withInput()->with('error', 'দুঃখিত, এই প্রোডাক্টটি এখন পর্যাপ্ত স্টকে নেই।');
+            }
+
+            if (str_starts_with($e->getMessage(), 'inactive_variant:')) {
+                return back()->withInput()->with('error', 'দুঃখিত, এই ভ্যারিয়েন্টটি এখন পাওয়া যাচ্ছে না।');
             }
 
             throw $e;

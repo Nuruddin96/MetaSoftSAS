@@ -116,6 +116,12 @@ class CheckoutController extends Controller
                 return back()->withInput()->with('error', "দুঃখিত, \"{$productName}\" এখন পর্যাপ্ত স্টকে নেই। কার্ট চেক করুন।");
             }
 
+            if (str_starts_with($e->getMessage(), 'inactive_variant:')) {
+                $productName = substr($e->getMessage(), strlen('inactive_variant:'));
+
+                return back()->withInput()->with('error', "দুঃখিত, \"{$productName}\" এখন পাওয়া যাচ্ছে না। কার্ট চেক করুন।");
+            }
+
             throw $e;
         }
 

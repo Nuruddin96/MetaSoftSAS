@@ -50,6 +50,14 @@ class CartController extends Controller
         ]);
 
         $variant = ProductVariant::findOrFail($data['variant_id']);
+
+        // Same enforcement OrderPlacementService::place() applies at actual
+        // checkout time — rejecting here too means a deactivated variant
+        // never even reaches the cart, not just never reaches an order.
+        if (! $variant->is_active) {
+            return back()->with('error', 'দুঃখিত, এই প্রোডাক্টটি এখন পাওয়া যাচ্ছে না।');
+        }
+
         $stock = $variant->totalStock();
 
         if ($stock <= 0) {
