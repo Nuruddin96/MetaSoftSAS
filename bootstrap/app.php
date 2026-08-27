@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\BindTenantFromSanctumUser;
+use App\Http\Middleware\CheckMobileSubscription;
 use App\Http\Middleware\CheckSubscription;
 use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\RequireOnboarding;
@@ -30,6 +31,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // Mobile API only — see that middleware's docblock for why
             // resolve.tenant (URL-driven) doesn't apply to API requests.
             'bind.tenant.token' => BindTenantFromSanctumUser::class,
+            // Mobile API's equivalent of check.subscription — see
+            // CheckMobileSubscription's docblock for why that one can't be
+            // reused directly here.
+            'check.subscription.mobile' => CheckMobileSubscription::class,
             // Remote Support device-credential routes (heartbeat/signal) —
             // gates by Sanctum token ability so a device credential can
             // never be used to call ordinary Business App endpoints and
