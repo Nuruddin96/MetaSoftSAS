@@ -3,19 +3,20 @@
 namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
+use App\Models\CourierSetting;
 use App\Models\StoreSetting;
 use App\Services\DeliveryChargeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Delivery-charge + brand settings — the smallest, highest-value slice of
+ * Delivery-charge + brand + courier settings — the highest-value slice of
  * Tenant\SettingController/WebsiteController's real surface (Priority 3
- * parity pass). This mobile controller deliberately does NOT mirror
- * courier-credential connect/marketing-pixel/AI-agent-toggle/domain-request
- * or the wider website builder (homepage/footer/banners/pages/reviews) —
- * courier/pixel are OAuth- or credential-heavy flows out of scope for a
- * small parity slice, the AI-agent toggles share `store_settings` keys
+ * parity pass, courier connect added later). This mobile controller
+ * deliberately does NOT mirror marketing-pixel/AI-agent-toggle/
+ * domain-request or the wider website builder (homepage/footer) —
+ * marketing pixel is an advanced/rarely-touched tracking config, the
+ * AI-agent toggles share `store_settings` keys
  * (messenger_ai_auto_reply_enabled/whatsapp_ai_auto_reply_enabled) with the
  * separate, currently in-progress WhatsApp/AI-agent work elsewhere in this
  * codebase (left untouched per explicit instruction), and the rest of the
@@ -25,6 +26,12 @@ use Illuminate\Support\Facades\Storage;
  */
 class SettingController extends Controller
 {
+    /** Credential field names per provider — matches Courier\CourierManager::make() exactly. */
+    private const COURIER_FIELDS = [
+        'steadfast' => ['api_key', 'secret_key'],
+        'pathao' => ['client_id', 'client_secret', 'username', 'password', 'store_id'],
+    ];
+
     public function index(DeliveryChargeService $deliveryCharge)
     {
         // Re-shaped to snake_case, round-trippable field names (matching
@@ -101,6 +108,52 @@ class SettingController extends Controller
 
         StoreSetting::updateOrCreate(['key' => 'announcement'], ['value' => $data['announcement'] ?? null]);
         StoreSetting::updateOrCreate(['key' => 'announcement_style'], ['value' => $data['announcement_style'] ?? 'static']);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Read-only, masked courier connection status for both providers —
+     * mirrors the settings blade's per-field "(সেভ করা আছে — বদলাতে চাইলে
+     * লিখুন)" placeholder logic (`! empty($creds['x'])`) so Flutter can show
+     * the same "already saved, blank to keep" hint per field, without this
+     * endpoint ever returning a decrypted credential value itself.
+     */
+    public function courier()
+    {
+        $settings = CourierSetting::get()->keyBy('provider');
+
+        $result = [];
+        foreach (self::COURIER_FIELDS as $provider => $fields) {
+            $setting = $settings->get($provider);
+            $creds = $setting->credentials ?? [];
+
+            $result[$provider] = [
+                'is_active' => (bool) ($setting->is_active ?? false),
+                'fields' => collect($fields)->mapWithKeys(
+                    fn ($field) => [$field => ! empty($creds[$field])]
+                ),
+            ];
+        }
+
+        return response()->json($result);
+    }
+
+    /** Mirrors Tenant\SettingController::courier() exactly (blank fields keep the saved secret). */
+    public function updateCourier(Request $request)
+    {
+        $data = $request->validate([
+            'provider' => 'required|in:steadfast,pathao',
+            'credentials' => 'required|array',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $credentials = array_filter($data['credentials'], fn ($v) => $v !== null && $v !== '');
+
+        $setting = CourierSetting::firstOrNew(['provider' => $data['provider']]);
+        $setting->credentials = array_merge($setting->credentials ?? [], $credentials);
+        $setting->is_active = $request->boolean('is_active');
+        $setting->save();
 
         return response()->json(['ok' => true]);
     }
