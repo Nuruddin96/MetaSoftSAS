@@ -558,6 +558,21 @@ trait InteractsWithCommerceSchema
             });
         }
 
+        // Single Product Landing Page Builder — database/sql/chunk56.sql.
+        if (! Schema::hasTable('landing_pages')) {
+            Schema::create('landing_pages', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('product_id');
+                $table->string('title', 150);
+                $table->string('slug', 180);
+                $table->string('status', 20)->default('draft');
+                $table->json('sections')->nullable();
+                $table->timestamp('published_at')->nullable();
+                $table->timestamps();
+            });
+        }
+
         // DeliveryChargeService (order calculation fix) queries this on
         // every order create/show/complete render.
         if (! Schema::hasTable('store_settings')) {

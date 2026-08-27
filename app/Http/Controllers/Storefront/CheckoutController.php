@@ -3,19 +3,13 @@
 namespace App\Http\Controllers\Storefront;
 
 use App\Http\Controllers\Controller;
-use App\Models\Customer;
 use App\Models\IncompleteOrder;
-use App\Models\Inventory;
-use App\Models\MarketingSetting;
 use App\Models\Order;
 use App\Models\ProductVariant;
-use App\Models\StockMovement;
-use App\Models\Warehouse;
 use App\Services\DeliveryChargeService;
-use App\Services\Marketing\MetaCapiService;
+use App\Services\Storefront\OrderPlacementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class CheckoutController extends Controller
 {
@@ -84,7 +78,7 @@ class CheckoutController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    public function place(Request $request, DeliveryChargeService $deliveryChargeService)
+    public function place(Request $request, OrderPlacementService $placement)
     {
         $data = $request->validate([
             'customer_name' => 'required|string|max:150',
@@ -111,91 +105,10 @@ class CheckoutController extends Controller
             return back()->with('error', 'কার্টের কিছু প্রোডাক্ট আর পাওয়া যাচ্ছে না। কার্ট চেক করুন।');
         }
 
-        $deliveryCharge = $deliveryChargeService->calculate((int) $data['division_id']);
+        $lines = $variants->map(fn ($v) => ['variant' => $v, 'qty' => $cart[$v->id]]);
 
         try {
-            $order = DB::transaction(function () use ($data, $cart, $variants, $deliveryCharge) {
-            // Re-verify stock at the actual moment of decrementing it, row-
-            // locked so two simultaneous checkouts for the last unit can't
-            // both succeed — the cart page and the buy button already show
-            // stock at add-to-cart time, but that can go stale by the time
-            // someone actually places the order.
-            $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
-
-            if ($warehouse) {
-                foreach ($variants as $v) {
-                    $available = Inventory::where('variant_id', $v->id)
-                        ->where('warehouse_id', $warehouse->id)
-                        ->lockForUpdate()
-                        ->sum('quantity');
-
-                    if ($available < $cart[$v->id]) {
-                        throw new \RuntimeException("insufficient_stock:{$v->product->name}");
-                    }
-                }
-            }
-
-            $customer = Customer::firstOrCreate(
-                ['phone' => $data['customer_phone']],
-                ['name' => $data['customer_name'], 'address' => $data['customer_address'],
-                    'division_id' => $data['division_id'], 'district_id' => $data['district_id']]
-            );
-
-            $subtotal = $variants->sum(fn ($v) => $v->selling_price * $cart[$v->id]);
-
-            $order = Order::create([
-                'source' => 'web',
-                'customer_id' => $customer->id,
-                'customer_name' => $data['customer_name'],
-                'customer_phone' => $data['customer_phone'],
-                'customer_address' => $data['customer_address'],
-                'division_id' => $data['division_id'],
-                'district_id' => $data['district_id'],
-                'subtotal' => $subtotal,
-                'delivery_charge' => $deliveryCharge,
-                'total' => $subtotal + $deliveryCharge,
-                'payment_method' => 'cod',
-                'status' => 'pending',
-                'note' => $data['note'] ?? null,
-                'fb_event_id' => (string) Str::uuid(),
-            ]);
-
-            foreach ($variants as $v) {
-                $qty = $cart[$v->id];
-
-                $order->items()->create([
-                    'tenant_id' => $order->tenant_id,
-                    'variant_id' => $v->id,
-                    'product_name' => $v->product->name,
-                    'variant_name' => $v->variant_name,
-                    'sku' => $v->sku,
-                    'unit_price' => $v->selling_price,
-                    'purchase_price' => $v->purchase_price,
-                    'quantity' => $qty,
-                    'line_total' => $v->selling_price * $qty,
-                ]);
-
-                if ($warehouse) {
-                    Inventory::where('variant_id', $v->id)
-                        ->where('warehouse_id', $warehouse->id)
-                        ->decrement('quantity', $qty);
-
-                    StockMovement::create([
-                        'variant_id' => $v->id,
-                        'warehouse_id' => $warehouse->id,
-                        'type' => 'sale',
-                        'quantity' => -$qty,
-                        'reference_type' => 'order',
-                        'reference_id' => $order->id,
-                    ]);
-                }
-            }
-
-            $customer->increment('total_orders');
-            $customer->increment('total_spent', $order->total);
-
-            return $order;
-            });
+            $order = $placement->place($lines, $data, 'web');
         } catch (\RuntimeException $e) {
             if (str_starts_with($e->getMessage(), 'insufficient_stock:')) {
                 $productName = substr($e->getMessage(), strlen('insufficient_stock:'));
@@ -211,47 +124,9 @@ class CheckoutController extends Controller
         IncompleteOrder::where('session_key', session()->getId())
             ->update(['status' => 'recovered', 'recovered_order_id' => $order->id]);
 
-        $this->sendCapiPurchase($order, $request);
+        $placement->sendCapiPurchase($order, $request);
 
         return redirect()->route('storefront.order.success', $order->order_number);
-    }
-
-    /** Server-side Purchase event (deduplicated with the browser pixel via fb_event_id). */
-    protected function sendCapiPurchase(Order $order, Request $request): void
-    {
-        $mk = MarketingSetting::first();
-
-        if (! $mk || ! $mk->fb_pixel_id || ! $mk->fb_capi_token) {
-            return;
-        }
-
-        try {
-            $order->load('items');
-
-            // Test Event Code only ever leaves the server when the tenant has
-            // explicitly switched Test Mode on — otherwise a leftover test
-            // code must never tag a real production Purchase.
-            $testEventCode = $mk->capi_test_mode ? $mk->fb_test_event_code : null;
-
-            $result = (new MetaCapiService($mk->fb_pixel_id, $mk->fb_capi_token, $testEventCode))
-                ->sendPurchase(
-                    $order,
-                    $request->ip(),
-                    $request->userAgent(),
-                    $request->cookie('_fbp'),
-                    $request->cookie('_fbc'),
-                );
-
-            $mk->forceFill([
-                'capi_last_status' => $result['success'] ? 'success' : 'failed',
-                'capi_last_http_status' => $result['http_status'],
-                'capi_last_error' => $result['success'] ? null : $result['error_message'],
-                'capi_last_event_at' => now(),
-            ])->save();
-        } catch (\Throwable $e) {
-            // never break checkout because of an ad-tracking failure
-            report($e);
-        }
     }
 
     public function success(string $orderNumber)

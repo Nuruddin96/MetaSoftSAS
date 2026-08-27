@@ -12,6 +12,7 @@ use App\Http\Controllers\ServicesController;
 use App\Http\Controllers\Storefront\CartController;
 use App\Http\Controllers\Storefront\CheckoutController;
 use App\Http\Controllers\Storefront\HomeController as StorefrontHome;
+use App\Http\Controllers\Storefront\LandingPageController as StorefrontLandingPage;
 use App\Http\Controllers\Storefront\PageController as StorefrontPage;
 use App\Http\Controllers\Storefront\ProductController as StorefrontProduct;
 use App\Http\Controllers\SuperAdmin\AdvertisingController as SuperAdvertisingController;
@@ -45,6 +46,7 @@ use App\Http\Controllers\Tenant\FraudCheckController;
 use App\Http\Controllers\Tenant\InboxController;
 use App\Http\Controllers\Tenant\IncompleteOrderController;
 use App\Http\Controllers\Tenant\InventoryController;
+use App\Http\Controllers\Tenant\LandingPageController;
 use App\Http\Controllers\Tenant\MessengerInboxController;
 use App\Http\Controllers\Tenant\NotificationController;
 use App\Http\Controllers\Tenant\NotificationPreferenceController;
@@ -417,6 +419,26 @@ $tenantRoutes = function () {
             Route::put('website/review/{review}', [WebsiteController::class, 'updateReview'])->name('website.review.update');
             Route::delete('website/review/{review}', [WebsiteController::class, 'destroyReview'])->name('website.review.destroy');
 
+            // Single Product Landing Page Builder (Phase 2) — each section is
+            // its own independent save/delete/move action, see
+            // LandingPageController's class docblock for why.
+            Route::prefix('landing-pages')->name('landing-pages.')->group(function () {
+                Route::get('/', [LandingPageController::class, 'index'])->name('index');
+                Route::get('create', [LandingPageController::class, 'create'])->name('create');
+                Route::post('/', [LandingPageController::class, 'store'])->name('store');
+                Route::get('{landingPage}/edit', [LandingPageController::class, 'edit'])->name('edit');
+                Route::put('{landingPage}', [LandingPageController::class, 'update'])->name('update');
+                Route::post('{landingPage}/publish', [LandingPageController::class, 'publish'])->name('publish');
+                Route::post('{landingPage}/unpublish', [LandingPageController::class, 'unpublish'])->name('unpublish');
+                Route::delete('{landingPage}', [LandingPageController::class, 'destroy'])->name('destroy');
+
+                Route::post('{landingPage}/sections', [LandingPageController::class, 'addSection'])->name('sections.add');
+                Route::put('{landingPage}/sections/{sectionId}', [LandingPageController::class, 'updateSection'])->name('sections.update');
+                Route::delete('{landingPage}/sections/{sectionId}', [LandingPageController::class, 'destroySection'])->name('sections.destroy');
+                Route::post('{landingPage}/sections/{sectionId}/move', [LandingPageController::class, 'moveSection'])->name('sections.move');
+                Route::post('{landingPage}/sections/{sectionId}/duplicate', [LandingPageController::class, 'duplicateSection'])->name('sections.duplicate');
+            });
+
             // Product Source
             Route::get('product-source', [ProductSourceController::class, 'index'])->name('product-source.index');
             Route::get('product-source/my-orders', [ProductSourceController::class, 'myOrders'])->name('product-source.orders');
@@ -526,6 +548,8 @@ $tenantRoutes = function () {
         Route::get('/products', [StorefrontProduct::class, 'index'])->name('products');
         Route::get('/product/{slug}', [StorefrontProduct::class, 'show'])->name('product');
         Route::get('/page/{slug}', [StorefrontPage::class, 'show'])->name('page');
+        Route::get('/l/{slug}', [StorefrontLandingPage::class, 'show'])->name('landing');
+        Route::post('/l/{slug}/order', [StorefrontLandingPage::class, 'order'])->name('landing.order');
 
         Route::get('/cart', [CartController::class, 'index'])->name('cart');
         Route::post('/cart/add', [CartController::class, 'add'])->name('cart.add');
