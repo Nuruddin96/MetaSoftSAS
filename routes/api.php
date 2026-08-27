@@ -26,9 +26,9 @@ use App\Http\Controllers\Api\Mobile\ProductCatalogController;
 use App\Http\Controllers\Api\Mobile\ProductController;
 use App\Http\Controllers\Api\Mobile\ProductSourceController;
 use App\Http\Controllers\Api\Mobile\ReferenceDataController;
+use App\Http\Controllers\Api\Mobile\ReportController;
 use App\Http\Controllers\Api\Mobile\ReviewController;
 use App\Http\Controllers\Api\Mobile\SettingController;
-use App\Http\Controllers\Api\Mobile\ReportController;
 use App\Http\Controllers\Api\Mobile\SignalController;
 use App\Http\Controllers\Api\Mobile\WhatsAppController;
 use Illuminate\Support\Facades\Route;
@@ -103,6 +103,20 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('settings/marketing', [SettingController::class, 'marketing']);
         Route::post('settings/marketing', [SettingController::class, 'updateMarketing']);
         Route::post('settings/marketing/test-capi', [SettingController::class, 'testMarketingCapi']);
+
+        // Website builder remainder — homepage/footer/domain — mirrors
+        // Tenant\WebsiteController::homepage()/footer() and
+        // Tenant\SettingController::requestDomain()/cancelDomainRequest()
+        // exactly. Banners/pages/reviews/brand already have their own
+        // dedicated routes above/below; theme is deliberately not mirrored
+        // (see SettingController's class docblock).
+        Route::get('settings/homepage', [SettingController::class, 'homepage']);
+        Route::post('settings/homepage', [SettingController::class, 'updateHomepage']);
+        Route::get('settings/footer', [SettingController::class, 'footer']);
+        Route::post('settings/footer', [SettingController::class, 'updateFooter']);
+        Route::get('settings/domain', [SettingController::class, 'domain']);
+        Route::post('settings/domain', [SettingController::class, 'requestDomain']);
+        Route::delete('settings/domain', [SettingController::class, 'cancelDomain']);
 
         // Facebook Connect (OAuth) — mirrors Tenant\FacebookConnectController
         // exactly, see Api\Mobile\FacebookConnectController's docblock for

@@ -6,24 +6,29 @@ use App\Http\Controllers\Controller;
 use App\Models\CourierSetting;
 use App\Models\MarketingSetting;
 use App\Models\StoreSetting;
+use App\Models\Tenant;
 use App\Services\DeliveryChargeService;
+use App\Services\Domain\CloudflareDomainService;
+use App\Services\Domain\DomainManager;
 use App\Services\Marketing\MetaCapiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Delivery-charge + brand + courier + marketing-pixel settings — the
- * highest-value slice of Tenant\SettingController/WebsiteController's real
- * surface (Priority 3 parity pass, courier/marketing-pixel added later).
- * This mobile controller deliberately does NOT mirror AI-agent-toggle/
- * domain-request or the wider website builder (homepage/footer) — the
- * AI-agent toggles share `store_settings` keys
+ * Delivery-charge + brand + courier + marketing-pixel + website-builder
+ * (homepage/footer/domain) settings — the real surface of
+ * Tenant\SettingController/WebsiteController mirrored to mobile (Priority 3
+ * parity pass; homepage/footer/domain added in the Website Builder parity
+ * task). This mobile controller deliberately does NOT mirror the
+ * AI-agent-toggle fields — they share `store_settings` keys
  * (messenger_ai_auto_reply_enabled/whatsapp_ai_auto_reply_enabled) with the
  * separate, currently in-progress WhatsApp/AI-agent work elsewhere in this
- * codebase (left untouched per explicit instruction), and the rest of the
- * website builder has no practical mobile UI — brand (logo/colors/
- * announcement) is the one piece Dashboard's own onboarding checklist
- * already links to from mobile.
+ * codebase (left untouched per explicit instruction) — nor the tenant
+ * `theme` column, which Web itself has no settings screen for (it's only
+ * ever set once, automatically, from the onboarding wizard's business-type
+ * selection — see TenantOnboardingService — so there's no web behavior to
+ * mirror). Banners/pages/reviews live in their own dedicated
+ * BannerController/PageController/ReviewController.
  */
 class SettingController extends Controller
 {
@@ -236,5 +241,156 @@ class SettingController extends Controller
             'success' => $result['success'],
             'message' => $result['message'],
         ]);
+    }
+
+    /** Mirrors the fields Tenant\WebsiteController::index() feeds its homepage card. */
+    public function homepage()
+    {
+        $set = StoreSetting::pluck('value', 'key');
+
+        return response()->json([
+            'hero_style' => $set['hero_style'] ?? 'slider',
+            'show_categories' => ($set['show_categories'] ?? '1') === '1',
+            'show_featured' => ($set['show_featured'] ?? '1') === '1',
+            'featured_title' => $set['featured_title'] ?? 'আমাদের প্রোডাক্ট',
+        ]);
+    }
+
+    /** Mirrors Tenant\WebsiteController::homepage() exactly. */
+    public function updateHomepage(Request $request)
+    {
+        $data = $request->validate([
+            'featured_title' => 'nullable|string|max:100',
+            'hero_style' => 'nullable|in:slider,simple,none',
+        ]);
+
+        StoreSetting::updateOrCreate(['key' => 'featured_title'], ['value' => $data['featured_title'] ?? null]);
+        StoreSetting::updateOrCreate(['key' => 'hero_style'], ['value' => $data['hero_style'] ?? 'slider']);
+        StoreSetting::updateOrCreate(['key' => 'show_featured'], ['value' => $request->boolean('show_featured') ? '1' : '0']);
+        StoreSetting::updateOrCreate(['key' => 'show_categories'], ['value' => $request->boolean('show_categories') ? '1' : '0']);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Mirrors the fields Tenant\WebsiteController::index() feeds its footer card. */
+    public function footer()
+    {
+        $tenant = app('currentTenant');
+        $set = StoreSetting::pluck('value', 'key');
+
+        return response()->json([
+            'footer_about' => $set['footer_about'] ?? null,
+            'footer_phone' => $set['footer_phone'] ?? $tenant->owner_phone,
+            'footer_email' => $set['footer_email'] ?? null,
+            'footer_address' => $set['footer_address'] ?? null,
+            'footer_note' => $set['footer_note'] ?? null,
+            'social_facebook' => $set['social_facebook'] ?? null,
+            'social_instagram' => $set['social_instagram'] ?? null,
+            'social_youtube' => $set['social_youtube'] ?? null,
+            'social_tiktok' => $set['social_tiktok'] ?? null,
+            'whatsapp_number' => $set['whatsapp_number'] ?? null,
+            'show_whatsapp_float' => ($set['show_whatsapp_float'] ?? '0') === '1',
+        ]);
+    }
+
+    /** Mirrors Tenant\WebsiteController::footer() exactly. */
+    public function updateFooter(Request $request)
+    {
+        $data = $request->validate([
+            'footer_about' => 'nullable|string|max:500',
+            'footer_phone' => 'nullable|string|max:50',
+            'footer_email' => 'nullable|string|max:100',
+            'footer_address' => 'nullable|string|max:255',
+            'footer_note' => 'nullable|string|max:255',
+            'social_facebook' => 'nullable|url|max:255',
+            'social_instagram' => 'nullable|url|max:255',
+            'social_youtube' => 'nullable|url|max:255',
+            'social_tiktok' => 'nullable|url|max:255',
+            'whatsapp_number' => 'nullable|string|max:20',
+        ]);
+
+        foreach ($data as $key => $value) {
+            StoreSetting::updateOrCreate(['key' => $key], ['value' => $value]);
+        }
+
+        StoreSetting::updateOrCreate(['key' => 'show_whatsapp_float'], ['value' => $request->boolean('show_whatsapp_float') ? '1' : '0']);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Read-only domain status — mirrors Tenant\SettingController::index()'s
+     * domain card, via Tenant::customDomainConnectionStatus() (the granular,
+     * Cloudflare-aware superset of the 5-state customDomainDisplayStatus()
+     * the web card itself uses). dns_record is always returned (same 3
+     * fields the web card's DNS-required box shows) so Flutter doesn't need
+     * to know the Cloudflare/CNAME details, only render them when
+     * dns_required is true.
+     */
+    public function domain()
+    {
+        $tenant = app('currentTenant');
+
+        return response()->json([
+            'allow_custom_domain' => (bool) $tenant->plan?->allow_custom_domain,
+            'status' => $tenant->customDomainConnectionStatus(),
+            'custom_domain' => $tenant->custom_domain,
+            'custom_domain_requested' => $tenant->custom_domain_requested,
+            'dns_required' => Tenant::cloudflareDomainColumnsReady()
+                && $tenant->custom_domain_connect_status === 'dns_required',
+            'dns_record' => [
+                'type' => 'CNAME',
+                'host' => '@ (অথবা www)',
+                'target' => app(CloudflareDomainService::class)->fallbackOriginTarget(),
+            ],
+        ]);
+    }
+
+    /** Mirrors Tenant\SettingController::requestDomain() exactly. */
+    public function requestDomain(Request $request)
+    {
+        $tenant = app('currentTenant');
+
+        if (! $tenant->plan?->allow_custom_domain) {
+            return response()->json(['message' => 'কাস্টম ডোমেইন ফিচারটি আপনার প্ল্যানে নেই। Pro প্ল্যানে আপগ্রেড করুন।'], 422);
+        }
+
+        if ($tenant->custom_domain_verified && $tenant->custom_domain) {
+            return response()->json(['message' => 'আপনার একটি সক্রিয় কাস্টম ডোমেইন আছে। পরিবর্তনের প্রয়োজন হলে অ্যাডমিনের সাথে যোগাযোগ করুন।'], 422);
+        }
+
+        $data = $request->validate([
+            'custom_domain_requested' => ['required', 'string', 'max:255', 'regex:/^[a-z0-9.-]+\.[a-z]{2,}$/i'],
+        ], [
+            'custom_domain_requested.regex' => 'সঠিক ডোমেইন দিন, যেমন: myshop.com',
+        ]);
+
+        $tenant->update([
+            'custom_domain_requested' => strtolower($data['custom_domain_requested']),
+            'custom_domain_request_status' => 'pending',
+            'custom_domain_verification_token' => DomainManager::generateVerificationToken(),
+            'custom_domain_dns_verified_at' => null,
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Mirrors Tenant\SettingController::cancelDomainRequest() exactly. */
+    public function cancelDomain()
+    {
+        $tenant = app('currentTenant');
+
+        if (! in_array($tenant->custom_domain_request_status, ['pending', 'dns_verified', 'approved'], true)) {
+            return response()->json(['message' => 'বাতিল করার মতো কোনো পেন্ডিং ডোমেইন রিকোয়েস্ট নেই।'], 422);
+        }
+
+        $tenant->update([
+            'custom_domain_requested' => null,
+            'custom_domain_request_status' => 'none',
+            'custom_domain_verification_token' => null,
+            'custom_domain_dns_verified_at' => null,
+        ]);
+
+        return response()->json(['ok' => true]);
     }
 }
