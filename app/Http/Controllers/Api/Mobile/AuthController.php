@@ -113,6 +113,12 @@ class AuthController extends Controller
                 'business_name' => $tenant->store_name,
                 'plan_name' => $tenant->plan?->name,
                 'plan_expires_at' => optional($tenant->subscription_ends_at)->toIso8601String(),
+                // Subscription Expiry Enforcement project — same fields
+                // CheckMobileSubscription itself checks, so the app can
+                // react (route-level redirect) without waiting for the
+                // first 402. A brand new registration is always 'trial'.
+                'status' => $tenant->status,
+                'trial_ends_at' => optional($tenant->trial_ends_at)->toIso8601String(),
                 'needs_onboarding' => $tenant->needsOnboarding(),
                 'onboarding_step' => $tenant->needsOnboarding() ? ($tenant->onboarding_step ?: 'business_type') : null,
             ],
@@ -163,6 +169,12 @@ class AuthController extends Controller
                 'business_name' => $tenant->store_name,
                 'plan_name' => $tenant->plan?->name,
                 'plan_expires_at' => optional($tenant->subscription_ends_at)->toIso8601String(),
+                // Subscription Expiry Enforcement project — same fields
+                // CheckMobileSubscription itself checks, so the app can
+                // react (route-level redirect) without waiting for the
+                // first 402.
+                'status' => $tenant->status,
+                'trial_ends_at' => optional($tenant->trial_ends_at)->toIso8601String(),
                 // Tenant Onboarding Wizard — see Api\Mobile\OnboardingController
                 // and App\Services\Tenant\TenantOnboardingService. false/null
                 // for every tenant that existed before this feature shipped
@@ -190,6 +202,12 @@ class AuthController extends Controller
                 'business_name' => $tenant->store_name,
                 'plan_name' => $tenant->plan?->name,
                 'plan_expires_at' => optional($tenant->subscription_ends_at)->toIso8601String(),
+                // Subscription Expiry Enforcement project — same fields
+                // CheckMobileSubscription itself checks, so the app can
+                // react (route-level redirect) without waiting for the
+                // first 402.
+                'status' => $tenant->status,
+                'trial_ends_at' => optional($tenant->trial_ends_at)->toIso8601String(),
                 // Tenant Onboarding Wizard — see Api\Mobile\OnboardingController
                 // and App\Services\Tenant\TenantOnboardingService. false/null
                 // for every tenant that existed before this feature shipped
