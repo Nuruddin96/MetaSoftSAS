@@ -8,6 +8,11 @@
         @endif
         <input type="file" name="data[image]" accept="image/*" class="flex-1 text-sm">
     </div>
+    @if (!empty($data['image_path']))
+        <label class="mt-2 flex items-center gap-1.5 text-sm text-mute">
+            <input type="checkbox" name="data[remove_image]" value="1"> ছবি সরান
+        </label>
+    @endif
 </div>
 
 <div>

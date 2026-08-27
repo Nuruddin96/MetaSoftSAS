@@ -10,7 +10,9 @@ use App\Models\ProductVariant;
 use App\Models\Tenant;
 use App\Models\Warehouse;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\Concerns\InteractsWithCommerceSchema;
 use Tests\TestCase;
 
@@ -301,5 +303,112 @@ class LandingPageTest extends TestCase
         $this->assertTrue($lp->isPublished());
 
         $this->get($this->storeUrl($tenant, 'l/'.$lp->slug))->assertOk()->assertSee('ডেলিভারি কতদিনে?');
+    }
+
+    /**
+     * Regression guard: previously there was no way to express "explicitly
+     * cleared" for a section image — only ever replace-via-new-upload — so
+     * a hero section's auto-populated product thumbnail could never be
+     * removed, and a plain re-save (no remove flag, no new file) must not
+     * silently bring a removed image back either.
+     */
+    public function test_a_hero_sections_image_can_be_removed_and_stays_removed(): void
+    {
+        Storage::fake('public');
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $lp = $this->makeLandingPage($tenant);
+        $heroId = collect($lp->sections)->firstWhere('type', 'hero')['id'];
+
+        $this->actingAs($user, 'tenant')->put($this->panelUrl($tenant, "landing-pages/{$lp->id}/sections/{$heroId}"), [
+            'data' => ['headline' => 'X', 'image' => UploadedFile::fake()->image('hero.jpg')],
+        ]);
+        $lp->refresh();
+        $storedPath = collect($lp->sections)->firstWhere('id', $heroId)['data']['image_path'];
+        $this->assertNotEmpty($storedPath);
+        Storage::disk('public')->assertExists($storedPath);
+
+        $this->actingAs($user, 'tenant')->put($this->panelUrl($tenant, "landing-pages/{$lp->id}/sections/{$heroId}"), [
+            'data' => ['headline' => 'X', 'remove_image' => '1'],
+        ]);
+        $lp->refresh();
+        $this->assertNull(collect($lp->sections)->firstWhere('id', $heroId)['data']['image_path']);
+        Storage::disk('public')->assertMissing($storedPath);
+
+        // A plain re-save with no remove flag and no new file must not resurrect it.
+        $this->actingAs($user, 'tenant')->put($this->panelUrl($tenant, "landing-pages/{$lp->id}/sections/{$heroId}"), [
+            'data' => ['headline' => 'Y'],
+        ]);
+        $lp->refresh();
+        $this->assertNull(collect($lp->sections)->firstWhere('id', $heroId)['data']['image_path']);
+    }
+
+    /** Image and video must render as two independent slots, not one @if/@elseif choosing whichever comes first. */
+    public function test_hero_section_shows_image_and_video_independently_on_the_published_page(): void
+    {
+        Storage::fake('public');
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $lp = $this->makeLandingPage($tenant, ['status' => 'published', 'published_at' => now()]);
+        $heroId = collect($lp->sections)->firstWhere('type', 'hero')['id'];
+
+        $this->actingAs($user, 'tenant')->put($this->panelUrl($tenant, "landing-pages/{$lp->id}/sections/{$heroId}"), [
+            'data' => [
+                'headline' => 'X',
+                'video_url' => 'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+                'image' => UploadedFile::fake()->image('hero.jpg'),
+            ],
+        ]);
+
+        $response = $this->get($this->storeUrl($tenant, 'l/'.$lp->slug));
+
+        $response->assertOk();
+        $response->assertSee('youtube.com/embed/dQw4w9WgXcQ', false);
+        $response->assertSee('<img', false);
+    }
+
+    /**
+     * The exact scenario reported as broken: a hero section starts with
+     * the product's auto-copied thumbnail, the tenant removes it, and adds
+     * a YouTube video instead — the video must show and the image must
+     * not, on the published page.
+     */
+    public function test_removing_the_default_product_image_and_adding_a_video_shows_only_the_video(): void
+    {
+        Storage::fake('public');
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        $product = Product::create([
+            'tenant_id' => $tenant->id, 'name' => 'Brilliant Skin Set', 'is_active' => 1,
+            'thumbnail_path' => UploadedFile::fake()->image('thumb.jpg')->store('products/'.$tenant->id, 'public'),
+        ]);
+        $variant = ProductVariant::create(['tenant_id' => $tenant->id, 'product_id' => $product->id, 'variant_name' => 'Default', 'selling_price' => 1200]);
+        Inventory::create([
+            'tenant_id' => $tenant->id, 'variant_id' => $variant->id,
+            'warehouse_id' => Warehouse::create(['tenant_id' => $tenant->id, 'name' => 'Main', 'is_default' => 1])->id,
+            'quantity' => 10,
+        ]);
+        $lp = LandingPage::create([
+            'tenant_id' => $tenant->id, 'product_id' => $product->id, 'title' => 'Offer',
+            'status' => 'published', 'published_at' => now(),
+            'sections' => LandingPage::defaultSections($product),
+        ]);
+        $heroId = collect($lp->sections)->firstWhere('type', 'hero')['id'];
+        $this->assertNotEmpty(collect($lp->sections)->firstWhere('id', $heroId)['data']['image_path']);
+
+        $this->actingAs($user, 'tenant')->put($this->panelUrl($tenant, "landing-pages/{$lp->id}/sections/{$heroId}"), [
+            'data' => [
+                'headline' => 'X',
+                'video_url' => 'https://youtu.be/dQw4w9WgXcQ',
+                'remove_image' => '1',
+            ],
+        ]);
+
+        $response = $this->get($this->storeUrl($tenant, 'l/'.$lp->slug));
+
+        $response->assertOk();
+        $response->assertSee('youtube.com/embed/dQw4w9WgXcQ', false);
+        $response->assertDontSee('<img', false);
     }
 }

@@ -22,9 +22,29 @@ class SectionDataService
         $in = $request->input('data', []);
         $files = $request->file('data', []);
 
-        $image = fn (string $field, ?string $existing) => isset($files[$field]) && $files[$field]->isValid()
-            ? tap($files[$field]->store($folder, 'public'), fn () => $existing && Storage::disk('public')->delete($existing))
-            : $existing;
+        // A new upload always wins. Otherwise, an explicit `remove_image`
+        // flag (checkbox on web, a "ছবি সরান" button on mobile) clears the
+        // field — previously there was no way to express "explicitly
+        // cleared" at all, so an existing image (e.g. the product
+        // thumbnail auto-copied into a fresh hero section) could never be
+        // removed, only ever replaced by a new upload.
+        $image = function (string $field, ?string $existing) use ($files, $folder, $request) {
+            if (isset($files[$field]) && $files[$field]->isValid()) {
+                if ($existing) {
+                    Storage::disk('public')->delete($existing);
+                }
+
+                return $files[$field]->store($folder, 'public');
+            }
+
+            if ($existing && $request->boolean('data.remove_image')) {
+                Storage::disk('public')->delete($existing);
+
+                return null;
+            }
+
+            return $existing;
+        };
 
         return match ($type) {
             'hero' => [
