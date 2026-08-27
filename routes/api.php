@@ -79,13 +79,20 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('reference/districts', [ReferenceDataController::class, 'districts']);
         Route::get('reference/upazilas', [ReferenceDataController::class, 'upazilas']);
 
-        // Delivery-charge settings only — see SettingController's docblock
-        // for why the rest of Tenant\SettingController's surface (courier
-        // connect, AI-agent toggles, marketing pixel) isn't mirrored here.
+        // Delivery-charge + brand settings — see SettingController's
+        // docblock for why the rest of Tenant\SettingController's surface
+        // (AI-agent toggles, marketing pixel) isn't mirrored here.
         Route::get('settings', [SettingController::class, 'index']);
         Route::post('settings', [SettingController::class, 'store']);
         Route::get('settings/brand', [SettingController::class, 'brand']);
         Route::post('settings/brand', [SettingController::class, 'updateBrand']);
+
+        // Courier (Steadfast/Pathao) credential connect — mirrors
+        // Tenant\SettingController::courier() exactly. GET is masked
+        // (never returns a decrypted secret), see SettingController's
+        // courier() docblock.
+        Route::get('settings/courier', [SettingController::class, 'courier']);
+        Route::post('settings/courier', [SettingController::class, 'updateCourier']);
 
         // Storefront banners only — mirrors Tenant\WebsiteController's
         // banner slice (storeBanner/destroyBanner). The rest of that
