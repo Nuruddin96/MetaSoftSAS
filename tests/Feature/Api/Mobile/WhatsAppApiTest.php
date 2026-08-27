@@ -84,6 +84,8 @@ class WhatsAppApiTest extends TestCase
                 $table->text('message_text')->nullable();
                 $table->string('attachment_url', 500)->nullable();
                 $table->string('attachment_type', 20)->nullable();
+                $table->string('attachment_name', 255)->nullable();
+                $table->json('raw_payload')->nullable();
                 $table->string('direction', 10)->default('in');
                 $table->string('sent_by', 10)->default('human');
                 $table->string('status', 20)->default('new');
@@ -118,7 +120,7 @@ class WhatsAppApiTest extends TestCase
             'user_access_token' => 'secret-token-'.$tenant->id,
         ]);
 
-        WhatsAppPhoneNumber::withoutGlobalScopes()->create([
+        $phone = WhatsAppPhoneNumber::withoutGlobalScopes()->create([
             'tenant_id' => $tenant->id,
             'whatsapp_business_account_id' => $account->id,
             'phone_number_id' => 'pnid-'.$tenant->id,
@@ -126,7 +128,32 @@ class WhatsAppApiTest extends TestCase
             'status' => 'active',
         ]);
 
-        return [$tenant, $user];
+        return [$tenant, $user, $phone];
+    }
+
+    /** Mirrors WhatsAppMediaProxyTest::makeInboundImage(), generalized to any media type. */
+    protected function makeInboundMedia(
+        int $tenantId,
+        WhatsAppPhoneNumber $phone,
+        string $waId,
+        string $mediaId,
+        string $type = 'image',
+    ): WhatsAppMessage {
+        app()->instance('currentTenant', \App\Models\Tenant::find($tenantId));
+        $message = WhatsAppMessage::create([
+            'tenant_id' => $tenantId,
+            'whatsapp_phone_number_id' => $phone->id,
+            'wa_id' => $waId,
+            'wamid' => 'wamid-'.$mediaId,
+            'message_type' => $type,
+            'attachment_type' => $type,
+            'raw_payload' => [$type => ['id' => $mediaId, 'mime_type' => $type === 'audio' ? 'audio/ogg' : 'image/jpeg']],
+            'direction' => 'in',
+            'status' => 'new',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        return $message;
     }
 
     protected function makeConversation(int $tenantId, string $waId, array $attrs = []): WhatsAppMessage
@@ -249,5 +276,151 @@ class WhatsAppApiTest extends TestCase
     public function test_unauthenticated_request_is_rejected(): void
     {
         $this->getJson('/api/mobile/v1/whatsapp/conversations')->assertUnauthorized();
+    }
+
+    // --- WhatsAppController::media() — mirrors WhatsAppMediaProxyTest's
+    // cases (Tenant\WhatsAppInboxController::media()) adapted for Sanctum. ---
+
+    public function test_show_exposes_a_masked_inbound_media_url_only_when_resolvable(): void
+    {
+        [$tenant, $user, $phone] = $this->connectTenant();
+        $message = $this->makeInboundMedia($tenant->id, $phone, '8801700000001', 'media-1');
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/mobile/v1/whatsapp/8801700000001')->assertOk();
+        $this->assertStringContainsString(
+            '/api/mobile/v1/whatsapp/media/'.$message->id,
+            $response->json('messages.0.inbound_media_url'),
+        );
+        // The proxy URL never embeds the Meta media id or any token.
+        $this->assertStringNotContainsString('media-1', $response->json('messages.0.inbound_media_url'));
+    }
+
+    public function test_media_streams_an_inbound_image_through_the_two_step_graph_proxy(): void
+    {
+        [$tenant, $user, $phone] = $this->connectTenant();
+        $message = $this->makeInboundMedia($tenant->id, $phone, '8801700000001', 'media-1');
+
+        Http::fake([
+            'https://graph.facebook.com/*/media-1' => Http::response(['url' => 'https://lookaside.fbsbx.com/whatsapp_business/media-1', 'mime_type' => 'image/jpeg']),
+            'https://lookaside.fbsbx.com/*' => Http::response('binary-image-bytes'),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/mobile/v1/whatsapp/media/'.$message->id);
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'image/jpeg');
+        $this->assertSame('binary-image-bytes', $response->getContent());
+    }
+
+    public function test_media_streams_an_inbound_audio_note(): void
+    {
+        [$tenant, $user, $phone] = $this->connectTenant();
+        $message = $this->makeInboundMedia($tenant->id, $phone, '8801700000001', 'media-audio', 'audio');
+
+        Http::fake([
+            'https://graph.facebook.com/*/media-audio' => Http::response(['url' => 'https://lookaside.fbsbx.com/media-audio', 'mime_type' => 'audio/ogg']),
+            'https://lookaside.fbsbx.com/*' => Http::response('binary-audio-bytes'),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/mobile/v1/whatsapp/media/'.$message->id);
+
+        $response->assertOk();
+        $response->assertHeader('Content-Type', 'audio/ogg');
+        $this->assertSame('binary-audio-bytes', $response->getContent());
+    }
+
+    public function test_media_is_rejected_without_authentication(): void
+    {
+        [$tenant, , $phone] = $this->connectTenant();
+        $message = $this->makeInboundMedia($tenant->id, $phone, '8801700000001', 'media-1');
+
+        $this->getJson('/api/mobile/v1/whatsapp/media/'.$message->id)->assertUnauthorized();
+    }
+
+    public function test_tenant_a_cannot_fetch_tenant_bs_media(): void
+    {
+        [, $userA] = $this->connectTenant();
+        [$tenantB, , $phoneB] = $this->connectTenant();
+        $messageB = $this->makeInboundMedia($tenantB->id, $phoneB, '8801700000002', 'media-b');
+
+        Http::fake(['https://graph.facebook.com/*' => Http::response(['url' => 'https://lookaside.fbsbx.com/x', 'mime_type' => 'image/jpeg'])]);
+
+        Sanctum::actingAs($userA);
+
+        $this->getJson('/api/mobile/v1/whatsapp/media/'.$messageB->id)->assertNotFound();
+    }
+
+    public function test_outbound_message_has_no_proxyable_media_and_404s(): void
+    {
+        [$tenant, $user, $phone] = $this->connectTenant();
+        app()->instance('currentTenant', $tenant);
+        $message = WhatsAppMessage::create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => $phone->id,
+            'wa_id' => '8801700000001',
+            'message_type' => 'image',
+            'attachment_type' => 'image',
+            'attachment_url' => 'https://example.com/already-hosted.jpg',
+            'direction' => 'out',
+            'status' => 'contacted',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/mobile/v1/whatsapp/media/'.$message->id)->assertNotFound();
+    }
+
+    public function test_message_with_no_resolvable_media_id_404s(): void
+    {
+        [$tenant, $user, $phone] = $this->connectTenant();
+        app()->instance('currentTenant', $tenant);
+        $message = WhatsAppMessage::create([
+            'tenant_id' => $tenant->id,
+            'whatsapp_phone_number_id' => $phone->id,
+            'wa_id' => '8801700000001',
+            'message_type' => 'location',
+            'attachment_type' => null,
+            'raw_payload' => ['location' => ['latitude' => 1, 'longitude' => 2]],
+            'direction' => 'in',
+            'status' => 'new',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/mobile/v1/whatsapp/media/'.$message->id)->assertNotFound();
+    }
+
+    public function test_graph_lookup_failure_returns_404_not_a_crash(): void
+    {
+        [$tenant, $user, $phone] = $this->connectTenant();
+        $message = $this->makeInboundMedia($tenant->id, $phone, '8801700000001', 'media-expired');
+
+        Http::fake([
+            'https://graph.facebook.com/*/media-expired' => Http::response(['error' => ['code' => 190, 'message' => 'expired']], 401),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/mobile/v1/whatsapp/media/'.$message->id)->assertNotFound();
+    }
+
+    public function test_a_nonnumeric_media_id_never_reaches_the_controller(): void
+    {
+        [, $user] = $this->connectTenant();
+
+        Sanctum::actingAs($user);
+
+        // The route's ->whereNumber('id') constraint means this is a 404
+        // from routing itself (no match), not from the controller — proof
+        // this endpoint can't be handed an arbitrary non-numeric target.
+        $this->getJson('/api/mobile/v1/whatsapp/media/not-a-number')->assertNotFound();
     }
 }

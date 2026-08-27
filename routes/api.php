@@ -232,6 +232,10 @@ Route::prefix('mobile/v1')->group(function () {
         // WhatsApp — mirrors Tenant\WhatsAppInboxController's real
         // capability, same shape as Messenger above.
         Route::get('whatsapp/conversations', [WhatsAppController::class, 'index']);
+        // Two segments ('whatsapp/media/{id}'), so this never collides with
+        // 'whatsapp/{waId}' below — same reasoning as the web route's own
+        // comment (routes/web.php).
+        Route::get('whatsapp/media/{id}', [WhatsAppController::class, 'media'])->whereNumber('id');
         Route::get('whatsapp/{waId}', [WhatsAppController::class, 'show']);
         Route::post('whatsapp/{waId}/reply', [WhatsAppController::class, 'reply']);
         Route::patch('whatsapp/{waId}/status', [WhatsAppController::class, 'updateStatus']);
