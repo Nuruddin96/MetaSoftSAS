@@ -215,4 +215,63 @@ class OrderController extends Controller
 
         return response()->json((new OrderResource($order->load('items')))->toArray($request));
     }
+
+    /**
+     * Mirrors Tenant\OrderController::bulkStatus() — mobile's multi-select
+     * equivalent of the web checkbox table's bulk-action bar. Tenant
+     * scoping happens via the update query itself (not a raw `exists:`
+     * validation rule, which would be unscoped — see this file's class
+     * docblock) so a foreign-tenant id in the array is silently excluded
+     * rather than 404ing the whole request.
+     */
+    public function bulkStatus(Request $request)
+    {
+        $tenant = app('currentTenant');
+        $data = $request->validate([
+            'order_ids' => 'required|array|min:1',
+            'order_ids.*' => 'integer',
+            'status' => 'required|in:pending,confirmed,processing,shipped,delivered,cancelled,returned',
+        ]);
+
+        $count = Order::where('tenant_id', $tenant->id)
+            ->whereIn('id', $data['order_ids'])
+            ->update(['status' => $data['status']]);
+
+        return response()->json(['updated' => $count]);
+    }
+
+    /**
+     * Mirrors Tenant\OrderController::bulkCourier() — same multi-select
+     * bulk-action shape, but reuses CourierDispatchService::dispatch() per
+     * order (the same guarded, friendly-error path courier() already uses)
+     * instead of duplicating CourierManager's raw call + guard checks web's
+     * own bulkCourier() inlines.
+     */
+    public function bulkCourier(Request $request, CourierDispatchService $service)
+    {
+        $tenant = app('currentTenant');
+        $data = $request->validate([
+            'order_ids' => 'required|array|min:1',
+            'order_ids.*' => 'integer',
+            'provider' => 'required|in:steadfast,pathao',
+        ]);
+
+        $orders = Order::where('tenant_id', $tenant->id)->whereIn('id', $data['order_ids'])->get();
+
+        $sent = 0;
+        $failed = 0;
+        $errors = [];
+
+        foreach ($orders as $order) {
+            try {
+                $service->dispatch($order, $data['provider']);
+                $sent++;
+            } catch (\RuntimeException $e) {
+                $failed++;
+                $errors[] = $e->getMessage();
+            }
+        }
+
+        return response()->json(['sent' => $sent, 'failed' => $failed, 'errors' => $errors]);
+    }
 }

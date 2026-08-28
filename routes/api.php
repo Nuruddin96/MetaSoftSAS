@@ -58,6 +58,9 @@ Route::prefix('mobile/v1')->group(function () {
         Route::patch('orders/{order}/channel', [OrderController::class, 'updateChannel'])->whereNumber('order');
         Route::post('orders/{order}/courier', [OrderController::class, 'courier'])->whereNumber('order');
         Route::post('orders/{order}/courier/refresh', [OrderController::class, 'refreshCourierStatus'])->whereNumber('order');
+        // Mirrors Tenant\OrderController::bulkStatus()/bulkCourier() — mobile's multi-select bulk actions.
+        Route::post('orders/bulk-status', [OrderController::class, 'bulkStatus']);
+        Route::post('orders/bulk-courier', [OrderController::class, 'bulkCourier']);
 
         // Mirrors Tenant\FraudCheckController::check() — same FraudChecker
         // service, same "documented duplication over refactor risk"
