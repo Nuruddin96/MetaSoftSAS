@@ -402,4 +402,114 @@ class OrderApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('status', 'shipped');
     }
+
+    /** Mirrors Tenant\OrderController::bulkStatus() — mobile's multi-select equivalent. */
+    public function test_bulk_status_updates_only_the_selected_and_tenant_owned_orders(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userA = $this->makeUser($tenantA->id);
+        app()->instance('currentTenant', $tenantA);
+        $orderA1 = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'A1', 'customer_phone' => '01712345678',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'pending',
+        ]);
+        $orderA2 = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'A2', 'customer_phone' => '01712345679',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'pending',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        app()->instance('currentTenant', $tenantB);
+        $orderB = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'B', 'customer_phone' => '01712345680',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'pending',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($userA);
+
+        $response = $this->postJson('/api/mobile/v1/orders/bulk-status', [
+            'order_ids' => [$orderA1->id, $orderA2->id, $orderB->id],
+            'status' => 'confirmed',
+        ])->assertOk();
+
+        // Only the 2 orders actually owned by userA's tenant are counted/updated —
+        // tenantB's order id in the array is silently excluded, not a validation error.
+        $this->assertSame(2, $response->json('updated'));
+        $this->assertSame('confirmed', $orderA1->fresh()->status);
+        $this->assertSame('confirmed', $orderA2->fresh()->status);
+        $this->assertSame('pending', $orderB->fresh()->status);
+    }
+
+    /** Mirrors Tenant\OrderController::bulkCourier() — mobile's multi-select equivalent, reusing CourierDispatchService per order. */
+    public function test_bulk_courier_reports_failures_when_no_courier_credentials_are_configured(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        $order1 = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'One', 'customer_phone' => '01712345678',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'confirmed',
+        ]);
+        $order2 = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'Two', 'customer_phone' => '01712345679',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'confirmed',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/mobile/v1/orders/bulk-courier', [
+            'order_ids' => [$order1->id, $order2->id],
+            'provider' => 'steadfast',
+        ])->assertOk();
+
+        $this->assertSame(0, $response->json('sent'));
+        $this->assertSame(2, $response->json('failed'));
+        $this->assertCount(2, $response->json('errors'));
+        $this->assertNull($order1->fresh()->courier_consignment_id);
+    }
+
+    public function test_bulk_courier_skips_orders_already_sent_and_only_dispatches_tenant_owned_ones(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userA = $this->makeUser($tenantA->id);
+        app()->instance('currentTenant', $tenantA);
+        $alreadySent = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'AlreadySent', 'customer_phone' => '01712345678',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'processing',
+            'courier_provider' => 'steadfast', 'courier_consignment_id' => 'CONS-1',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        app()->instance('currentTenant', $tenantB);
+        $orderB = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'B', 'customer_phone' => '01712345680',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'confirmed',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($userA);
+
+        $response = $this->postJson('/api/mobile/v1/orders/bulk-courier', [
+            'order_ids' => [$alreadySent->id, $orderB->id],
+            'provider' => 'steadfast',
+        ])->assertOk();
+
+        // tenantB's order is excluded by the tenant-scoped query entirely (0 orders
+        // fetched for it), and the already-sent order fails its dispatch() guard —
+        // so nothing is sent and exactly 1 failure (not 2) is reported.
+        $this->assertSame(0, $response->json('sent'));
+        $this->assertSame(1, $response->json('failed'));
+        $this->assertSame('confirmed', $orderB->fresh()->status, 'tenantB order must be untouched — excluded entirely by the tenant-scoped fetch');
+    }
 }
