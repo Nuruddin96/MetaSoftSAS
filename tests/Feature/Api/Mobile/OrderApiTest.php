@@ -170,6 +170,7 @@ class OrderApiTest extends TestCase
             ->assertJsonPath('status', 'confirmed')
             ->assertJsonPath('subtotal', 1600)
             ->assertJsonPath('additional_amount', 25)
+            ->assertJsonPath('messenger_psid', 'psid-1')
             ->assertJsonCount(1, 'items');
 
         $order->refresh();
@@ -294,6 +295,38 @@ class OrderApiTest extends TestCase
         $filtered = $this->getJson('/api/mobile/v1/orders?channel=facebook')->assertOk();
         $this->assertCount(1, $filtered->json('data'));
         $this->assertSame('A', $filtered->json('data.0.customer_name'));
+    }
+
+    /** Mirrors Tenant\OrderController::index()'s `?courier=pending` filter — dispatched but not yet in a terminal state. */
+    public function test_index_supports_courier_pending_filter(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'Dispatched', 'customer_phone' => '01712345678',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'processing',
+            'courier_provider' => 'steadfast', 'courier_consignment_id' => 'CS-1',
+        ]);
+        \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'Delivered', 'customer_phone' => '01712345679',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'delivered',
+            'courier_provider' => 'steadfast', 'courier_consignment_id' => 'CS-2',
+        ]);
+        \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'NeverSent', 'customer_phone' => '01712345680',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'pending',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $filtered = $this->getJson('/api/mobile/v1/orders?courier=pending')->assertOk();
+        $this->assertCount(1, $filtered->json('data'));
+        $this->assertSame('Dispatched', $filtered->json('data.0.customer_name'));
     }
 
     public function test_refresh_courier_status_rejects_an_order_never_sent_to_a_courier(): void

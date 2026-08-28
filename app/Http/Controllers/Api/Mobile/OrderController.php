@@ -29,6 +29,8 @@ class OrderController extends Controller
             ->with('items')
             ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->when($request->channel, fn ($q) => $q->where('channel', $request->channel))
+            ->when($request->courier === 'pending', fn ($q) => $q->whereNotNull('courier_consignment_id')
+                ->whereNotIn('status', ['delivered', 'cancelled', 'returned']))
             ->when($request->q, function ($q) use ($request) {
                 $q->where(fn ($qq) => $qq
                     ->where('order_number', 'like', '%'.$request->q.'%')
