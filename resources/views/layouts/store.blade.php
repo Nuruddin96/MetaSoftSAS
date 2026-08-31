@@ -81,6 +81,16 @@
     <noscript><img height="1" width="1" style="display:none"
         src="https://www.facebook.com/tr?id={{ $mk->fb_pixel_id }}&ev=PageView&noscript=1"/></noscript>
     @endif
+
+    @if ($mk?->clarity_project_id)
+    <script type="text/javascript">
+        (function(c,l,a,r,i,t,y){
+            c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+            t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+            y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+        })(window, document, "clarity", "script", "{{ $mk->clarity_project_id }}");
+    </script>
+    @endif
 </head>
 <body class="font-body bg-paper text-ink antialiased">
 @if ($mk?->gtm_container_id)

@@ -168,6 +168,7 @@ class SettingController extends Controller
             'fb_capi_token' => 'nullable|string',
             'fb_test_event_code' => 'nullable|string|max:50',
             'gtm_container_id' => 'nullable|string|max:20',
+            'clarity_project_id' => 'nullable|string|max:20',
             'meta_app_id' => 'nullable|string|max:50',
             'meta_app_secret' => 'nullable|string',
             'meta_access_token' => 'nullable|string',

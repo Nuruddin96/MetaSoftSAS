@@ -247,6 +247,12 @@
                 <input name="gtm_container_id" value="{{ $marketing->gtm_container_id }}" placeholder="GTM-XXXXXXX"
                        class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
             </div>
+            <div>
+                <label class="text-xs text-mute">Microsoft Clarity Project ID</label>
+                <input name="clarity_project_id" value="{{ $marketing->clarity_project_id }}" maxlength="20" placeholder="abcdefghij"
+                       class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                <p class="text-xs text-mute mt-1">Project ID দিলে Clarity সেশন রেকর্ডিং চালু হয়ে যাবে — খালি রাখলে বন্ধ থাকবে।</p>
+            </div>
             <div class="md:col-span-2">
                 <label class="text-xs text-mute">Conversion API Access Token {{ $marketing->fb_capi_token ? '(সেভ করা আছে — বদলাতে চাইলে নতুন টোকেন দিন)' : '' }}</label>
                 <input name="fb_capi_token" type="password" placeholder="EAAG..."

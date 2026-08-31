@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Inventory;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\InteractsWithCommerceSchema;
 use Tests\TestCase;
 
@@ -212,5 +213,53 @@ class StorefrontRenderTest extends TestCase
         $response->assertOk();
         $response->assertSee('222৳', false);
         $response->assertDontSee('777৳', false);
+    }
+
+    // --- Microsoft Clarity (tenant-scoped, marketing_settings.clarity_project_id) --------------
+
+    public function test_storefront_head_includes_clarity_script_when_project_id_is_set(): void
+    {
+        $tenant = $this->makeTenant();
+        DB::table('marketing_settings')->insert([
+            'tenant_id' => $tenant->id,
+            'clarity_project_id' => 'abc123xyz9',
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->get($this->storeUrl($tenant));
+
+        $response->assertOk();
+        // The official snippet builds the request URL via JS concatenation
+        // (t.src=".../tag/"+i), so the literal id only ever appears as its
+        // own quoted argument in the static markup, never joined with the URL.
+        $response->assertSee('clarity.ms/tag/', false);
+        $response->assertSee('"clarity", "script", "abc123xyz9"', false);
+    }
+
+    public function test_storefront_head_omits_clarity_script_when_project_id_is_null(): void
+    {
+        $tenant = $this->makeTenant();
+
+        $response = $this->get($this->storeUrl($tenant));
+
+        $response->assertOk();
+        $response->assertDontSee('clarity.ms/tag', false);
+    }
+
+    /** Tenant isolation: tenant A's Clarity Project ID must never render on tenant B's storefront. */
+    public function test_storefront_never_leaks_another_tenants_clarity_project_id(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        DB::table('marketing_settings')->insert([
+            'tenant_id' => $tenantA->id,
+            'clarity_project_id' => 'tenant-a-id',
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->get($this->storeUrl($tenantB));
+
+        $response->assertOk();
+        $response->assertDontSee('tenant-a-id', false);
     }
 }
