@@ -32,3 +32,5 @@
         <option value="image-right" @selected(($data['layout'] ?? '') === 'image-right')>ডানে</option>
     </select>
 </div>
+
+@include('tenant.landing-pages.partials._design-fields', ['data' => $data])

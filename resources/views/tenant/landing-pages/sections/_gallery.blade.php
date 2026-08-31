@@ -19,3 +19,5 @@
     <input type="file" name="gallery_images[]" accept="image/*" multiple class="mt-1 w-full text-sm">
     <p class="text-xs text-mute mt-1">সর্বোচ্চ ৮টি ছবি রাখা যাবে</p>
 </div>
+
+@include('tenant.landing-pages.partials._design-fields', ['data' => $data])

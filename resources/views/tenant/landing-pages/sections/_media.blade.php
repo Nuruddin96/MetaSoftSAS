@@ -20,3 +20,5 @@
     <input name="data[video_url]" value="{{ $data['video_url'] ?? '' }}" placeholder="https://..." class="{{ $input }}">
     <p class="text-xs text-mute mt-1">ছবি ও ভিডিও দুটোই একসাথে দেখাতে পারবেন — একটি দিলে অন্যটি লুকানো হয় না</p>
 </div>
+
+@include('tenant.landing-pages.partials._design-fields', ['data' => $data])

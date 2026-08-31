@@ -187,6 +187,7 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('landing-pages/{landingPage}/sections/reorder', [LandingPageController::class, 'reorderSections'])->whereNumber('landingPage');
         Route::post('landing-pages/{landingPage}/sections/{sectionId}', [LandingPageController::class, 'updateSection'])->whereNumber('landingPage');
         Route::delete('landing-pages/{landingPage}/sections/{sectionId}', [LandingPageController::class, 'destroySection'])->whereNumber('landingPage');
+        Route::post('landing-pages/{landingPage}/sections/{sectionId}/toggle', [LandingPageController::class, 'toggleSection'])->whereNumber('landingPage');
         Route::post('landing-pages/{landingPage}/sections/{sectionId}/duplicate', [LandingPageController::class, 'duplicateSection'])->whereNumber('landingPage');
 
         // Tenant Onboarding Wizard — mobile counterpart of the web wizard

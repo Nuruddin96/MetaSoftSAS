@@ -31,6 +31,16 @@
             <p class="text-xs text-mute mt-1">এই পেজের চেকআউট সবসময় এই প্রোডাক্টের জন্যই কাজ করবে। পরে চাইলেও প্রোডাক্ট বদলানো যাবে না — ভুল হলে নতুন পেজ বানান।</p>
         </div>
 
+        <div>
+            <label class="text-sm font-medium">টেমপ্লেট বেছে নিন</label>
+            <select name="template" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
+                @foreach ($templates as $key => $tpl)
+                    <option value="{{ $key }}" @selected(old('template', 'default') === $key)>{{ $tpl['name'] }}</option>
+                @endforeach
+            </select>
+            <p class="text-xs text-mute mt-1">টেমপ্লেট শুধু শুরুর সেকশন ও ডিজাইন সেট করে দেয় — পরে যেকোনো কিছু পরিবর্তন করতে পারবেন।</p>
+        </div>
+
         <x-ui.button type="submit" variant="accent" size="sm">পরবর্তী ধাপ — সেকশন সাজান</x-ui.button>
     </form>
 </x-ui.card>

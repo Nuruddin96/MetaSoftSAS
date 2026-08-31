@@ -10,3 +10,5 @@
     <input name="data[button_text]" value="{{ $data['button_text'] ?? 'এখনই অর্ডার করুন' }}" maxlength="40" class="{{ $input }}">
     <p class="text-xs text-mute mt-1">ক্লিক করলে পেজের চেকআউট সেকশনে স্ক্রল হয়ে যাবে</p>
 </div>
+
+@include('tenant.landing-pages.partials._design-fields', ['data' => $data])

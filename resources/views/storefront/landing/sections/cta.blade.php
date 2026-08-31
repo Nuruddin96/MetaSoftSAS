@@ -1,8 +1,12 @@
-<section class="max-w-2xl mx-auto text-center bg-brand/5 rounded-card p-8">
+@php
+    $resolver = app(\App\Services\LandingPage\DesignResolver::class);
+    $sd = $resolver->resolveSection($global, $data['design'] ?? null);
+@endphp
+<x-landing.section :global="$global" :design="$data['design'] ?? null" class="bg-brand/5">
     @if ($data['heading'] ?? null)
-        <h2 class="font-disp font-bold text-2xl">{{ $data['heading'] }}</h2>
+        <h2 class="{{ $resolver->headingFontClass($global) }} font-bold {{ $resolver->headingClasses($sd) }}">{{ $data['heading'] }}</h2>
     @endif
-    <a href="#checkout-section" class="inline-block mt-4 px-10 py-3.5 rounded-btn bg-brand text-white font-bold hover:opacity-90">
+    <a href="#checkout-section" class="mt-4 {{ $resolver->buttonClasses($global) }}">
         🛒 {{ $data['button_text'] ?? 'এখনই অর্ডার করুন' }}
     </a>
-</section>
+</x-landing.section>

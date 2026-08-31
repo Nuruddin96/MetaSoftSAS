@@ -68,6 +68,26 @@
     box-shadow: 0 8px 20px -6px rgba(19, 42, 33, 0.12);
 }
 
+/*
+ * Landing page builder (tenant/landing-pages/{edit,design}.blade.php):
+ * drag handle cursor + active state for the desktop/tablet/mobile preview
+ * width buttons, and a smooth width transition on the preview iframe
+ * itself so switching between them doesn't just snap.
+ */
+.drag-handle {
+    cursor: grab;
+}
+.drag-handle:active {
+    cursor: grabbing;
+}
+#previewFrame {
+    transition: width .2s ease;
+}
+[data-preview-width].is-active {
+    background: var(--color-leaf);
+    color: white;
+}
+
 .btn-loading {
     position: relative;
     pointer-events: none;

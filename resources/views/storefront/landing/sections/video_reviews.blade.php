@@ -1,9 +1,13 @@
+@php
+    $resolver = app(\App\Services\LandingPage\DesignResolver::class);
+    $sd = $resolver->resolveSection($global, $data['design'] ?? null);
+@endphp
 @if (!empty($data['items']))
-    <section class="max-w-2xl mx-auto">
+    <x-landing.section :global="$global" :design="$data['design'] ?? null">
         @if ($data['heading'] ?? null)
-            <h2 class="font-disp font-bold text-2xl text-center mb-6">{{ $data['heading'] }}</h2>
+            <h2 class="{{ $resolver->headingFontClass($global) }} font-bold {{ $resolver->headingClasses($sd) }} mb-6">{{ $data['heading'] }}</h2>
         @endif
-        <div class="grid sm:grid-cols-2 gap-4">
+        <div class="grid sm:grid-cols-2 gap-4 text-left">
             @foreach ($data['items'] as $item)
                 @php $embed = \App\Support\VideoEmbed::url($item['video_url']); @endphp
                 <div class="rounded-card overflow-hidden bg-white border border-ink/5">
@@ -20,5 +24,5 @@
                 </div>
             @endforeach
         </div>
-    </section>
+    </x-landing.section>
 @endif

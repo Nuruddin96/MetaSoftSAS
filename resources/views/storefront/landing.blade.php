@@ -3,13 +3,19 @@
 @section('title', $landingPage->title . ' — ' . $tenant->store_name)
 @section('meta_description', \Illuminate\Support\Str::limit(strip_tags((string) $product->description), 155) ?: $landingPage->title)
 
+@php
+    $globalDesign = app(\App\Services\LandingPage\DesignResolver::class)->resolveGlobal($landingPage->design, $tenant);
+@endphp
+
 @section('content')
-<div class="space-y-10 pb-24 md:pb-10">
+<div class="pb-24 md:pb-10">
     @foreach ($landingPage->sections ?? [] as $section)
+        @continue($section['hidden'] ?? false)
         @includeIf('storefront.landing.sections.' . $section['type'], [
             'data' => $section['data'] ?? [],
             'product' => $product,
             'landingPage' => $landingPage,
+            'global' => $globalDesign,
             'divisions' => $divisions,
             'districts' => $districts,
             'chargeInside' => $chargeInside,

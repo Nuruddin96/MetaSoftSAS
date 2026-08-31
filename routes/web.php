@@ -432,10 +432,15 @@ $tenantRoutes = function () {
                 Route::post('{landingPage}/unpublish', [LandingPageController::class, 'unpublish'])->name('unpublish');
                 Route::delete('{landingPage}', [LandingPageController::class, 'destroy'])->name('destroy');
 
+                Route::get('{landingPage}/design', [LandingPageController::class, 'design'])->name('design');
+                Route::put('{landingPage}/design', [LandingPageController::class, 'updateDesign'])->name('design.update');
+
                 Route::post('{landingPage}/sections', [LandingPageController::class, 'addSection'])->name('sections.add');
                 Route::put('{landingPage}/sections/{sectionId}', [LandingPageController::class, 'updateSection'])->name('sections.update');
                 Route::delete('{landingPage}/sections/{sectionId}', [LandingPageController::class, 'destroySection'])->name('sections.destroy');
                 Route::post('{landingPage}/sections/{sectionId}/move', [LandingPageController::class, 'moveSection'])->name('sections.move');
+                Route::post('{landingPage}/sections/reorder', [LandingPageController::class, 'reorderSections'])->name('sections.reorder');
+                Route::post('{landingPage}/sections/{sectionId}/toggle', [LandingPageController::class, 'toggleSection'])->name('sections.toggle');
                 Route::post('{landingPage}/sections/{sectionId}/duplicate', [LandingPageController::class, 'duplicateSection'])->name('sections.duplicate');
             });
 

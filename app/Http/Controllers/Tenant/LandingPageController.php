@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\LandingPage;
 use App\Models\Product;
+use App\Services\LandingPage\DesignResolver;
 use App\Services\LandingPage\SectionDataService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -19,7 +20,7 @@ use Illuminate\Support\Str;
  */
 class LandingPageController extends Controller
 {
-    public function __construct(protected SectionDataService $sectionData) {}
+    public function __construct(protected SectionDataService $sectionData, protected DesignResolver $design) {}
 
     public function index()
     {
@@ -33,6 +34,7 @@ class LandingPageController extends Controller
     {
         return view('tenant.landing-pages.create', [
             'products' => Product::where('is_active', 1)->orderBy('name')->get(),
+            'templates' => config('landing_templates'),
         ]);
     }
 
@@ -41,15 +43,18 @@ class LandingPageController extends Controller
         $data = $request->validate([
             'title' => 'required|string|max:150',
             'product_id' => 'required|integer|exists:products,id',
+            'template' => ['nullable', 'string', 'in:'.implode(',', array_keys(config('landing_templates')))],
         ]);
 
         $product = Product::with('variants')->findOrFail($data['product_id']);
+        $templateKey = $data['template'] ?? 'default';
 
         $landingPage = LandingPage::create([
             'title' => $data['title'],
             'product_id' => $product->id,
             'status' => 'draft',
-            'sections' => LandingPage::defaultSections($product),
+            'sections' => LandingPage::defaultSections($product, $templateKey),
+            'design' => config("landing_templates.{$templateKey}.design"),
         ]);
 
         return redirect()->route('tenant.landing-pages.edit', $landingPage)->with('success', 'ল্যান্ডিং পেজ তৈরি হয়েছে। এখন সেকশনগুলো সাজান।');
@@ -70,6 +75,52 @@ class LandingPageController extends Controller
         $landingPage->update(['title' => $data['title']]);
 
         return back()->with('success', 'শিরোনাম আপডেট হয়েছে।');
+    }
+
+    /** Global "Design" tab — brand/typography/buttons/global tokens (Phase 1). */
+    public function design(LandingPage $landingPage)
+    {
+        return view('tenant.landing-pages.design', [
+            'tenant' => app('currentTenant'),
+            'landingPage' => $landingPage,
+            'resolved' => $this->design->resolveGlobal($landingPage->design, app('currentTenant')),
+        ]);
+    }
+
+    public function updateDesign(Request $request, LandingPage $landingPage)
+    {
+        $hex = fn (?string $v) => ($v && preg_match('/^#[0-9a-fA-F]{6}$/', $v)) ? $v : null;
+        $in = $request->input('design', []);
+        $enum = fn ($v, array $allowed, string $default) => in_array($v, $allowed, true) ? $v : $default;
+
+        $landingPage->update(['design' => [
+            'brand' => [
+                'primary_color' => $request->boolean('design.brand.primary_color_enabled') ? $hex($in['brand']['primary_color'] ?? null) : null,
+                'secondary_color' => $request->boolean('design.brand.secondary_color_enabled') ? $hex($in['brand']['secondary_color'] ?? null) : null,
+                'background_color' => $request->boolean('design.brand.background_color_enabled') ? $hex($in['brand']['background_color'] ?? null) : null,
+                'text_color' => $request->boolean('design.brand.text_color_enabled') ? $hex($in['brand']['text_color'] ?? null) : null,
+            ],
+            'typography' => [
+                'heading_font' => $enum($in['typography']['heading_font'] ?? null, ['display', 'body', 'modern'], 'display'),
+                'body_font' => $enum($in['typography']['body_font'] ?? null, ['display', 'body', 'modern'], 'body'),
+                'font_size' => $enum($in['typography']['font_size'] ?? null, ['sm', 'base', 'lg'], 'base'),
+                'font_weight' => $enum($in['typography']['font_weight'] ?? null, ['normal', 'semibold', 'bold'], 'normal'),
+                'line_height' => $enum($in['typography']['line_height'] ?? null, ['tight', 'normal', 'relaxed'], 'normal'),
+            ],
+            'buttons' => [
+                'style' => $enum($in['buttons']['style'] ?? null, ['solid', 'outline', 'ghost'], 'solid'),
+                'radius' => $enum($in['buttons']['radius'] ?? null, ['none', 'md', 'full'], 'md'),
+                'size' => $enum($in['buttons']['size'] ?? null, ['sm', 'md', 'lg'], 'md'),
+            ],
+            'global' => [
+                'container_width' => $enum($in['global']['container_width'] ?? null, ['narrow', 'normal', 'wide'], 'normal'),
+                'section_spacing' => $enum($in['global']['section_spacing'] ?? null, ['compact', 'normal', 'spacious'], 'normal'),
+                'border_radius' => $enum($in['global']['border_radius'] ?? null, ['none', 'md', 'lg'], 'md'),
+                'shadow' => $enum($in['global']['shadow'] ?? null, ['none', 'sm', 'md', 'lg'], 'none'),
+            ],
+        ]]);
+
+        return back()->with('success', 'ডিজাইন সেভ হয়েছে।');
     }
 
     public function publish(LandingPage $landingPage)
@@ -106,7 +157,7 @@ class LandingPageController extends Controller
         $data = $request->validate(['type' => 'required|string|in:'.implode(',', array_keys(LandingPage::sectionTypes()))]);
 
         $sections = $landingPage->sections ?? [];
-        $sections[] = ['id' => Str::random(10), 'type' => $data['type'], 'data' => LandingPage::blankSectionData($data['type'])];
+        $sections[] = ['id' => Str::random(10), 'type' => $data['type'], 'hidden' => false, 'data' => LandingPage::blankSectionData($data['type'])];
         $landingPage->update(['sections' => $sections]);
 
         return back()->with('success', 'সেকশন যোগ হয়েছে।');
@@ -159,6 +210,42 @@ class LandingPageController extends Controller
         }
 
         return back();
+    }
+
+    /** Drag-and-drop reorder (Phase 8) — the up/down arrow buttons (moveSection) stay as a no-JS fallback. */
+    public function reorderSections(Request $request, LandingPage $landingPage)
+    {
+        $order = $request->validate(['order' => 'required|array'])['order'];
+
+        $sections = collect($landingPage->sections ?? []);
+        $bySortedId = collect($order)->map(fn ($id) => $sections->firstWhere('id', $id))->filter()->values();
+
+        // Defends against a stale client submitting an order that doesn't
+        // name every current section (e.g. someone else deleted one in
+        // another tab) — falls back to leaving the order untouched rather
+        // than silently dropping a section from the page.
+        if ($bySortedId->count() !== $sections->count()) {
+            return response()->json(['ok' => false], 422);
+        }
+
+        $landingPage->update(['sections' => $bySortedId->values()->all()]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function toggleSection(LandingPage $landingPage, string $sectionId)
+    {
+        $sections = collect($landingPage->sections ?? []);
+        $index = $sections->search(fn ($s) => $s['id'] === $sectionId);
+        abort_if($index === false, 404);
+
+        $section = $sections[$index];
+        $section['hidden'] = ! ($section['hidden'] ?? false);
+        $sections[$index] = $section;
+
+        $landingPage->update(['sections' => $sections->values()->all()]);
+
+        return back()->with('success', ($section['hidden'] ?? false) ? 'সেকশনটি লুকানো হয়েছে।' : 'সেকশনটি আবার দেখানো হচ্ছে।');
     }
 
     public function duplicateSection(LandingPage $landingPage, string $sectionId)
