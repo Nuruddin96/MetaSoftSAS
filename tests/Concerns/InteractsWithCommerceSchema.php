@@ -286,6 +286,8 @@ trait InteractsWithCommerceSchema
                 $table->string('capi_last_error', 255)->nullable();
                 $table->timestamp('capi_last_event_at')->nullable();
                 $table->string('gtm_container_id', 20)->nullable();
+                // Microsoft Clarity — database/sql/chunk58.sql.
+                $table->string('clarity_project_id', 20)->nullable();
                 $table->string('meta_app_id', 50)->nullable();
                 $table->text('meta_app_secret')->nullable();
                 $table->text('meta_access_token')->nullable();
