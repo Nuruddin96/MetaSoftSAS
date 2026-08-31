@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS landing_pages (
     slug VARCHAR(180) NOT NULL,
     status ENUM('draft','published') NOT NULL DEFAULT 'draft',
     sections JSON DEFAULT NULL,
+    design JSON DEFAULT NULL,
     published_at TIMESTAMP NULL,
     created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,

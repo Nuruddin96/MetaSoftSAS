@@ -560,7 +560,8 @@ trait InteractsWithCommerceSchema
             });
         }
 
-        // Single Product Landing Page Builder — database/sql/chunk56.sql.
+        // Single Product Landing Page Builder — database/sql/chunk56.sql,
+        // design column added by chunk57.sql (Landing Page Design System).
         if (! Schema::hasTable('landing_pages')) {
             Schema::create('landing_pages', function (Blueprint $table) {
                 $table->id();
@@ -570,6 +571,7 @@ trait InteractsWithCommerceSchema
                 $table->string('slug', 180);
                 $table->string('status', 20)->default('draft');
                 $table->json('sections')->nullable();
+                $table->json('design')->nullable();
                 $table->timestamp('published_at')->nullable();
                 $table->timestamps();
             });

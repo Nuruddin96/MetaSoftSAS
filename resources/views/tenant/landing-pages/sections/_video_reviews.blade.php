@@ -13,3 +13,5 @@
         <input name="data[items][{{ $i }}][video_url]" value="{{ $items[$i]['video_url'] ?? '' }}" placeholder="ভিডিও লিংক (YouTube/Facebook)" class="{{ $input }} flex-1">
     </div>
 @endfor
+
+@include('tenant.landing-pages.partials._design-fields', ['data' => $data])

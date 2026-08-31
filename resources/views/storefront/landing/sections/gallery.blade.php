@@ -1,5 +1,5 @@
 @if (!empty($data['images']))
-    <section class="max-w-2xl mx-auto">
+    <x-landing.section :global="$global" :design="$data['design'] ?? null">
         <div class="grid grid-cols-3 gap-2">
             @foreach ($data['images'] as $path)
                 <div class="aspect-square rounded-card overflow-hidden bg-white border border-ink/5">
@@ -7,5 +7,5 @@
                 </div>
             @endforeach
         </div>
-    </section>
+    </x-landing.section>
 @endif

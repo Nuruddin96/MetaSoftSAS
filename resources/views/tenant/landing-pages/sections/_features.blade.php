@@ -9,3 +9,5 @@
     <label class="text-sm font-medium">প্রোডাক্টের বিস্তারিত বিবরণ</label>
     <textarea name="data[description]" rows="6" class="{{ $input }}">{{ $data['description'] ?? '' }}</textarea>
 </div>
+
+@include('tenant.landing-pages.partials._design-fields', ['data' => $data])

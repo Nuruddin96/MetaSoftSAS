@@ -13,3 +13,5 @@
         <input name="data[items][{{ $i }}][answer]" value="{{ $items[$i]['answer'] ?? '' }}" maxlength="500" placeholder="উত্তর" class="{{ $input }}">
     </div>
 @endfor
+
+@include('tenant.landing-pages.partials._design-fields', ['data' => $data])

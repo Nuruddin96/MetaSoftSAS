@@ -1,8 +1,12 @@
-@php $firstVariant = $product->variants->first(); @endphp
-<section id="checkout-section" class="max-w-2xl mx-auto scroll-mt-4">
-    <div class="bg-white rounded-card border border-ink/5 p-5">
+@php
+    $firstVariant = $product->variants->first();
+    $resolver = app(\App\Services\LandingPage\DesignResolver::class);
+    $sd = $resolver->resolveSection($global, $data['design'] ?? null);
+@endphp
+<x-landing.section :global="$global" :design="$data['design'] ?? null" id="checkout-section" class="scroll-mt-4">
+    <div class="bg-white rounded-card border border-ink/5 p-5 text-left">
         @if ($data['heading'] ?? null)
-            <h2 class="font-disp font-bold text-2xl mb-4">{{ $data['heading'] }}</h2>
+            <h2 class="{{ $resolver->headingFontClass($global) }} font-bold {{ $resolver->headingClasses($sd) }} mb-4">{{ $data['heading'] }}</h2>
         @endif
 
         <form method="POST" action="{{ route('storefront.landing.order', $landingPage->slug) }}" id="landingCheckoutForm" class="space-y-4">
@@ -54,13 +58,13 @@
                     <div class="flex justify-between font-bold text-base"><span>মোট</span><span id="totalShow">{{ number_format($firstVariant?->selling_price ?? 0) }}৳</span></div>
                 </div>
 
-                <button id="buyBtn" class="w-full py-4 rounded-xl bg-brand text-white font-bold text-lg hover:opacity-90 disabled:opacity-50" @disabled(!$firstVariant || $firstVariant->stockCount() <= 0)>
+                <button id="buyBtn" class="w-full text-center {{ $resolver->buttonClasses($global) }} disabled:opacity-50" @disabled(!$firstVariant || $firstVariant->stockCount() <= 0)>
                     🛒 <span id="buyBtnLabel">অর্ডার কনফার্ম করুন (ক্যাশ অন ডেলিভারি)</span>
                 </button>
             </div>
         </form>
     </div>
-</section>
+</x-landing.section>
 
 @push('scripts')
 <script>

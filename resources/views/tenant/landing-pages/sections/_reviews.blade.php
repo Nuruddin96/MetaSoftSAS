@@ -26,3 +26,5 @@
         </div>
     </div>
 @endfor
+
+@include('tenant.landing-pages.partials._design-fields', ['data' => $data])

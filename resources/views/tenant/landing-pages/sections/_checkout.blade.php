@@ -6,3 +6,5 @@
 </div>
 
 <p class="text-xs text-mute">প্রোডাক্ট, ভ্যারিয়েন্ট বাছাই, পরিমাণ, নাম, ফোন, ঠিকানা ও অর্ডার বাটন — এই সব স্বয়ংক্রিয়ভাবে যোগ হবে, আলাদা করে সেট করার দরকার নেই।</p>
+
+@include('tenant.landing-pages.partials._design-fields', ['data' => $data])

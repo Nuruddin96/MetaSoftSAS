@@ -1,9 +1,13 @@
+@php
+    $resolver = app(\App\Services\LandingPage\DesignResolver::class);
+    $sd = $resolver->resolveSection($global, $data['design'] ?? null);
+@endphp
 @if (!empty($data['items']))
-    <section class="max-w-2xl mx-auto">
+    <x-landing.section :global="$global" :design="$data['design'] ?? null">
         @if ($data['heading'] ?? null)
-            <h2 class="font-disp font-bold text-2xl text-center mb-6">{{ $data['heading'] }}</h2>
+            <h2 class="{{ $resolver->headingFontClass($global) }} font-bold {{ $resolver->headingClasses($sd) }} mb-6">{{ $data['heading'] }}</h2>
         @endif
-        <div class="grid sm:grid-cols-2 gap-4">
+        <div class="grid sm:grid-cols-2 gap-4 text-left">
             @foreach ($data['items'] as $item)
                 <div class="bg-white rounded-card border border-ink/5 p-4">
                     <div class="flex items-center gap-3">
@@ -18,10 +22,10 @@
                         </div>
                     </div>
                     @if ($item['review_text'] ?? null)
-                        <p class="text-sm text-mute mt-3">{{ $item['review_text'] }}</p>
+                        <p class="{{ $resolver->bodyClasses($sd) }} text-mute mt-3">{{ $item['review_text'] }}</p>
                     @endif
                 </div>
             @endforeach
         </div>
-    </section>
+    </x-landing.section>
 @endif

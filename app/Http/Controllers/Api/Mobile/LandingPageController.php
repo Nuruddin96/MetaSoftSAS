@@ -119,7 +119,7 @@ class LandingPageController extends Controller
         $data = $request->validate(['type' => 'required|string|in:'.implode(',', array_keys(LandingPage::sectionTypes()))]);
 
         $sections = $landingPage->sections ?? [];
-        $section = ['id' => Str::random(10), 'type' => $data['type'], 'data' => LandingPage::blankSectionData($data['type'])];
+        $section = ['id' => Str::random(10), 'type' => $data['type'], 'hidden' => false, 'data' => LandingPage::blankSectionData($data['type'])];
         $sections[] = $section;
         $landingPage->update(['sections' => $sections]);
 
@@ -182,6 +182,19 @@ class LandingPageController extends Controller
         $landingPage->update(['sections' => $reordered]);
 
         return response()->json(['data' => $reordered]);
+    }
+
+    public function toggleSection(int $landingPage, string $sectionId)
+    {
+        [$landingPage, $sections, $index] = $this->findSection($landingPage, $sectionId);
+
+        $section = $sections[$index];
+        $section['hidden'] = ! ($section['hidden'] ?? false);
+        $sections[$index] = $section;
+
+        $landingPage->update(['sections' => $sections->values()->all()]);
+
+        return response()->json($section);
     }
 
     public function duplicateSection(int $landingPage, string $sectionId)

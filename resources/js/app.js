@@ -1,4 +1,5 @@
 import './bootstrap';
+import Sortable from 'sortablejs';
 
 // ---- sidebar nav toggle (layouts/panel.blade.php, layouts/super.blade.php) ----
 document.getElementById('navToggle')?.addEventListener('click', () => {
@@ -321,3 +322,48 @@ if ('serviceWorker' in navigator && window.__swUrl) {
         if (e.target === iosModal) closeIosModal(); // backdrop click only, not the card itself
     });
 })();
+
+// ---- Landing page builder: drag-and-drop section reorder
+// (tenant/landing-pages/edit.blade.php, #sectionsSortable) ----
+// The up/down arrow buttons (Tenant\LandingPageController::moveSection)
+// keep working unchanged as a no-JS fallback — this only upgrades them to
+// also support dragging, posting the full new order in one request
+// (Tenant\LandingPageController::reorderSections) instead of one swap per
+// move. Falls back to a no-op on failure/network error rather than
+// reloading, so a dropped card never visually snaps back mid-interaction
+// without at least a toast explaining why.
+(function () {
+    const list = document.getElementById('sectionsSortable');
+    if (!list) return;
+
+    Sortable.create(list, {
+        handle: '.drag-handle',
+        animation: 150,
+        onEnd: async () => {
+            const order = [...list.children].map((el) => el.dataset.sectionId);
+            try {
+                const res = await fetch(list.dataset.reorderUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': list.dataset.csrf },
+                    body: JSON.stringify({ order }),
+                });
+                if (!res.ok) throw new Error('reorder failed');
+                window.showToast?.('সেকশনের ক্রম আপডেট হয়েছে।', 'success');
+            } catch (e) {
+                window.showToast?.('ক্রম সেভ করা যায়নি — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।', 'error');
+            }
+        },
+    });
+})();
+
+// ---- Landing page builder: responsive preview width toggle
+// (tenant/landing-pages/edit.blade.php or design.blade.php, #previewFrame) ----
+document.querySelectorAll('[data-preview-width]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        const frame = document.getElementById('previewFrame');
+        if (!frame) return;
+        frame.style.width = btn.dataset.previewWidth;
+        document.querySelectorAll('[data-preview-width]').forEach((b) => b.classList.remove('is-active'));
+        btn.classList.add('is-active');
+    });
+});
