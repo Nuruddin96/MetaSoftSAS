@@ -7,10 +7,12 @@ use App\Models\CourierSetting;
 use App\Models\MarketingSetting;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
+use App\Models\WordPressConnection;
 use App\Services\DeliveryChargeService;
 use App\Services\Domain\CloudflareDomainService;
 use App\Services\Domain\DomainManager;
 use App\Services\Marketing\MetaCapiService;
+use App\Services\WordPress\WordPressConnectorService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -390,6 +392,92 @@ class SettingController extends Controller
             'custom_domain_verification_token' => null,
             'custom_domain_dns_verified_at' => null,
         ]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Read-only WordPress connection status — mirrors
+     * Tenant\WordPressConnectController::index()'s connection card. Never
+     * returns a Sanctum plugin token or outbound_secret — those are only
+     * ever visible once, in generateWordPressKey()'s handshake-adjacent
+     * flow (the key itself, not a credential), same as WordPressConnectorService
+     * ::completeHandshake()'s own docblock on why those two values are never
+     * re-shown after issuance.
+     */
+    public function wordpress()
+    {
+        if (! WordPressConnection::tablesReady()) {
+            return response()->json(['not_ready' => true, 'connection' => null]);
+        }
+
+        $connection = WordPressConnection::first();
+
+        return response()->json([
+            'not_ready' => false,
+            'connection' => $connection ? [
+                'status' => $connection->status,
+                'site_url' => $connection->site_url,
+                'site_name' => $connection->site_name,
+                'wp_version' => $connection->wp_version,
+                'plugin_version' => $connection->plugin_version,
+                'woocommerce_active' => $connection->woocommerce_active,
+                'woocommerce_version' => $connection->woocommerce_version,
+                'connected_at' => $connection->connected_at,
+                'last_verified_at' => $connection->last_verified_at,
+            ] : null,
+        ]);
+    }
+
+    /**
+     * Mirrors Tenant\WordPressConnectController::generateKey() exactly —
+     * feature-gated by the same 'feature:wordpress_connect' middleware on
+     * the route (see routes/api.php), matching the web route's gating.
+     */
+    public function generateWordPressKey(WordPressConnectorService $wp)
+    {
+        if (! WordPressConnection::tablesReady()) {
+            return response()->json(['message' => 'WordPress ইন্টিগ্রেশন এখনো প্রস্তুত হয়নি — একটু পর আবার চেষ্টা করুন।'], 422);
+        }
+
+        $state = $wp->createConnectionToken(app('currentTenant'), request()->user());
+
+        return response()->json([
+            'connection_key' => $state->token,
+            'expires_at' => $state->expires_at,
+        ]);
+    }
+
+    /** Mirrors Tenant\WordPressConnectController::verify() exactly. */
+    public function verifyWordPress(WordPressConnectorService $wp)
+    {
+        if (! WordPressConnection::tablesReady()) {
+            return response()->json(['message' => 'WordPress ইন্টিগ্রেশন এখনো প্রস্তুত হয়নি — একটু পর আবার চেষ্টা করুন।'], 422);
+        }
+
+        $connection = WordPressConnection::first();
+        if (! $connection) {
+            return response()->json(['message' => 'কোনো WordPress সংযোগ পাওয়া যায়নি।'], 404);
+        }
+
+        $ok = $wp->verify($connection);
+
+        return response()->json(['ok' => $ok, 'status' => $connection->fresh()->status]);
+    }
+
+    /** Mirrors Tenant\WordPressConnectController::disconnect() exactly. */
+    public function disconnectWordPress(WordPressConnectorService $wp)
+    {
+        if (! WordPressConnection::tablesReady()) {
+            return response()->json(['message' => 'WordPress ইন্টিগ্রেশন এখনো প্রস্তুত হয়নি — একটু পর আবার চেষ্টা করুন।'], 422);
+        }
+
+        $connection = WordPressConnection::first();
+        if (! $connection) {
+            return response()->json(['message' => 'কোনো WordPress সংযোগ পাওয়া যায়নি।'], 404);
+        }
+
+        $wp->disconnect($connection);
 
         return response()->json(['ok' => true]);
     }
