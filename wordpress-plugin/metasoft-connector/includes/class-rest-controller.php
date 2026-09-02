@@ -60,6 +60,16 @@ class MetaSoft_Connector_REST_Controller
                 'callback' => [$this, 'update_stock'],
                 'permission_callback' => [$this, 'verify_outbound_secret'],
             ]);
+
+            // Phase 5 — MetaSoftSAS pushing an order status change back to
+            // this site. See WordPressOrderSyncService::pushStatusUpdate()
+            // on the MetaSoftSAS side and MetaSoft_Connector_Order_Sync::
+            // apply_status_from_metasoft() here.
+            register_rest_route(self::NAMESPACE, '/orders/(?P<id>\d+)/status', [
+                'methods' => 'POST',
+                'callback' => [$this, 'update_order_status'],
+                'permission_callback' => [$this, 'verify_outbound_secret'],
+            ]);
         });
     }
 
@@ -138,6 +148,16 @@ class MetaSoft_Connector_REST_Controller
     public function update_stock(\WP_REST_Request $request)
     {
         $result = MetaSoft_Connector_WooCommerce_Sync::update_stock($request->get_json_params());
+
+        return new \WP_REST_Response($result, $result['ok'] ? 200 : 422);
+    }
+
+    public function update_order_status(\WP_REST_Request $request)
+    {
+        $status = (string) $request->get_param('status');
+        $orderId = (int) $request->get_param('id');
+
+        $result = MetaSoft_Connector_Order_Sync::apply_status_from_metasoft($orderId, $status);
 
         return new \WP_REST_Response($result, $result['ok'] ? 200 : 422);
     }

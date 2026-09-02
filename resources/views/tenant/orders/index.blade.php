@@ -19,7 +19,7 @@
     </select>
     <select name="channel" onchange="this.form.submit()" class="rounded-btn border border-ink/15 px-3 py-3 sm:py-2.5 text-sm bg-white w-full sm:w-auto">
         <option value="">সব উৎস</option>
-        @foreach (['website' => '🌐 ওয়েবসাইট', 'facebook' => '📘 ফেসবুক', 'whatsapp' => '💬 হোয়াটসঅ্যাপ', 'instagram' => '📷 ইনস্টাগ্রাম', 'call' => '📞 কল', 'others' => '📦 অন্যান্য'] as $key => $label)
+        @foreach (['website' => '🌐 ওয়েবসাইট', 'facebook' => '📘 ফেসবুক', 'whatsapp' => '💬 হোয়াটসঅ্যাপ', 'instagram' => '📷 ইনস্টাগ্রাম', 'call' => '📞 কল', 'wordpress' => '🔌 ওয়ার্ডপ্রেস', 'others' => '📦 অন্যান্য'] as $key => $label)
             <option value="{{ $key }}" @selected(request('channel') === $key)>{{ $label }}</option>
         @endforeach
     </select>
@@ -63,8 +63,8 @@
         'cancelled'  => ['বাতিল', 'bg-red-50 text-red-700'],
         'returned'   => ['ফেরত', 'bg-red-50 text-red-700'],
     ];
-    $channelLabels = ['website' => 'ওয়েবসাইট', 'facebook' => 'ফেসবুক', 'whatsapp' => 'হোয়াটসঅ্যাপ', 'instagram' => 'ইনস্টাগ্রাম', 'call' => 'কল', 'others' => 'অন্যান্য'];
-    $channelColors = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'others' => 'text-mute'];
+    $channelLabels = ['website' => 'ওয়েবসাইট', 'facebook' => 'ফেসবুক', 'whatsapp' => 'হোয়াটসঅ্যাপ', 'instagram' => 'ইনস্টাগ্রাম', 'call' => 'কল', 'wordpress' => 'ওয়ার্ডপ্রেস', 'others' => 'অন্যান্য'];
+    $channelColors = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'wordpress' => 'text-[#21759B]', 'others' => 'text-mute'];
 @endphp
 
 {{-- mobile: order cards --}}

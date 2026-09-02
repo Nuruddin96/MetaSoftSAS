@@ -4,7 +4,7 @@ Tags: metasoft, woocommerce, integration, connector
 Requires at least: 6.0
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -28,6 +28,9 @@ This plugin is deliberately lightweight — it does not duplicate MetaSoftSAS's 
 4. In WordPress, go to Settings → MetaSoft Connector, paste the key, and click "Connect to MetaSoftSAS".
 
 == Changelog ==
+
+= 0.3.0 =
+* WooCommerce orders now flow into MetaSoftSAS's existing order pipeline on creation and every status change, matched idempotently by WooCommerce order id. MetaSoftSAS validates stock/pricing itself — this plugin only forwards what WooCommerce reports. MetaSoftSAS can also push a status change back (e.g. after courier dispatch) without creating a webhook loop.
 
 = 0.2.0 =
 * Product, category and stock sync receiver (requires WooCommerce). MetaSoftSAS remains the source of truth — this plugin only upserts WooCommerce products/variations/terms/stock from what it's sent.

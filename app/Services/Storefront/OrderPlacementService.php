@@ -37,35 +37,7 @@ class OrderPlacementService
         $deliveryCharge = $this->deliveryCharge->calculate((int) $customerData['division_id']);
 
         return DB::transaction(function () use ($lines, $customerData, $deliveryCharge, $source) {
-            // Re-verify stock at the actual moment of decrementing it, row-
-            // locked so two simultaneous checkouts for the last unit can't
-            // both succeed — the buy button already shows stock at
-            // selection time, but that can go stale by order time.
-            $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
-
-            foreach ($lines as $line) {
-                // A deactivated variant must never be purchasable even via
-                // a crafted request with its real id — the storefront UI
-                // already hides it (product-buy-widget.blade.php scopes to
-                // is_active=1), but that's a frontend courtesy only, same
-                // as the stock check below; this is the actual enforcement.
-                if (! $line['variant']->is_active) {
-                    throw new \RuntimeException("inactive_variant:{$line['variant']->product->name}");
-                }
-            }
-
-            if ($warehouse) {
-                foreach ($lines as $line) {
-                    $available = Inventory::where('variant_id', $line['variant']->id)
-                        ->where('warehouse_id', $warehouse->id)
-                        ->lockForUpdate()
-                        ->sum('quantity');
-
-                    if ($available < $line['qty']) {
-                        throw new \RuntimeException("insufficient_stock:{$line['variant']->product->name}");
-                    }
-                }
-            }
+            $warehouse = $this->lockStockOrFail($lines);
 
             $customer = Customer::firstOrCreate(
                 ['phone' => $customerData['customer_phone']],
@@ -96,43 +68,179 @@ class OrderPlacementService
                 'fb_event_id' => (string) Str::uuid(),
             ]);
 
-            foreach ($lines as $line) {
-                $v = $line['variant'];
-                $qty = $line['qty'];
-
-                $order->items()->create([
-                    'tenant_id' => $order->tenant_id,
-                    'variant_id' => $v->id,
-                    'product_name' => $v->product->name,
-                    'variant_name' => $v->variant_name,
-                    'sku' => $v->sku,
-                    'unit_price' => $v->selling_price,
-                    'purchase_price' => $v->purchase_price,
-                    'quantity' => $qty,
-                    'line_total' => $v->selling_price * $qty,
-                ]);
-
-                if ($warehouse) {
-                    Inventory::where('variant_id', $v->id)
-                        ->where('warehouse_id', $warehouse->id)
-                        ->decrement('quantity', $qty);
-
-                    StockMovement::create([
-                        'variant_id' => $v->id,
-                        'warehouse_id' => $warehouse->id,
-                        'type' => 'sale',
-                        'quantity' => -$qty,
-                        'reference_type' => 'order',
-                        'reference_id' => $order->id,
-                    ]);
-                }
-            }
+            $this->attachItemsAndDecrementStock($order, $lines, $warehouse);
 
             $customer->increment('total_orders');
             $customer->increment('total_spent', $order->total);
 
             return $order;
         });
+    }
+
+    /**
+     * Phase 5 of the WordPress integration plan — an inbound order from a
+     * connected WooCommerce site. Reuses this same class's stock-locking
+     * (oversell protection, the whole reason this isn't just
+     * Api\OrderCreationService::createFromManualEntry(), which trusts a
+     * staff member already looking at current stock) and item-attach
+     * logic, but differs from place() in three ways external orders
+     * genuinely need:
+     *
+     * - customer_address/division_id/district_id are free-form/nullable —
+     *   a WooCommerce billing address has no relationship to Bangladesh's
+     *   division/district reference data, unlike the BD-only storefront
+     *   checkout place() serves.
+     * - discount/additional_amount/delivery_charge are caller-supplied
+     *   (from the WooCommerce order's own discount/fee/shipping totals)
+     *   rather than recalculated from DeliveryChargeService — but
+     *   pricing itself never trusts the caller: subtotal is always
+     *   summed from $lines' live ProductVariant::selling_price, exactly
+     *   like place() and Api\OrderCreationService::calcSubtotal(), never
+     *   from any WooCommerce-reported line total. See
+     *   Api\WordPress\WordPressOrderController for the clamping applied
+     *   to the caller-supplied amounts before they ever reach here.
+     * - source/wordpress_order_id/status are caller-supplied instead of
+     *   hardcoded 'web'/'pending' — status still only ever takes the
+     *   value WordPressOrderSyncService::mapWooStatusToMetaSoft() already
+     *   validated against a fixed status list, never an arbitrary string.
+     *
+     * @param  Collection<int, array{variant: ProductVariant, qty: int}>  $lines
+     * @param  array{customer_name:string, customer_phone:string, customer_address:?string, division_id:?int, district_id:?int, discount:float, additional_amount:float, delivery_charge:float, payment_method:string, status:string, source:string, channel:string, wordpress_order_id:?int, note?:?string}  $orderData
+     *
+     * @throws \RuntimeException message "insufficient_stock:{product name}" or "inactive_variant:{product name}" when validation fails under lock
+     */
+    public function placeExternal(Collection $lines, array $orderData): Order
+    {
+        return DB::transaction(function () use ($lines, $orderData) {
+            $warehouse = $this->lockStockOrFail($lines);
+
+            $customer = Customer::firstOrCreate(
+                ['phone' => $orderData['customer_phone']],
+                [
+                    'name' => $orderData['customer_name'],
+                    'address' => $orderData['customer_address'],
+                    'division_id' => $orderData['division_id'],
+                    'district_id' => $orderData['district_id'],
+                ]
+            );
+
+            $subtotal = $lines->sum(fn ($l) => $l['variant']->selling_price * $l['qty']);
+            $discount = min((float) $orderData['discount'], $subtotal);
+            $additionalAmount = (float) $orderData['additional_amount'];
+            $deliveryCharge = (float) $orderData['delivery_charge'];
+            $total = $subtotal - $discount + $additionalAmount + $deliveryCharge;
+
+            $order = Order::create([
+                'source' => $orderData['source'],
+                'channel' => $orderData['channel'],
+                'wordpress_order_id' => $orderData['wordpress_order_id'] ?? null,
+                'customer_id' => $customer->id,
+                'customer_name' => $orderData['customer_name'],
+                'customer_phone' => $orderData['customer_phone'],
+                'customer_address' => $orderData['customer_address'],
+                'division_id' => $orderData['division_id'],
+                'district_id' => $orderData['district_id'],
+                'subtotal' => $subtotal,
+                'discount' => $discount,
+                'additional_amount' => $additionalAmount,
+                'delivery_charge' => $deliveryCharge,
+                'total' => $total,
+                'payment_method' => $orderData['payment_method'],
+                'status' => $orderData['status'],
+                'confirmed_at' => $orderData['status'] === 'confirmed' ? now() : null,
+                'delivered_at' => $orderData['status'] === 'delivered' ? now() : null,
+                'note' => $orderData['note'] ?? null,
+                'fb_event_id' => (string) Str::uuid(),
+            ]);
+
+            $this->attachItemsAndDecrementStock($order, $lines, $warehouse);
+
+            $customer->increment('total_orders');
+            $customer->increment('total_spent', $order->total);
+
+            return $order;
+        });
+    }
+
+    /**
+     * Re-verifies stock at the actual moment of decrementing it, row-
+     * locked so two simultaneous orders for the last unit can't both
+     * succeed — a buy button (or a WooCommerce page) already shows stock
+     * at selection time, but that can go stale by order time. Shared by
+     * place() and placeExternal() so oversell protection can never drift
+     * between the two entry points.
+     *
+     * @param  Collection<int, array{variant: ProductVariant, qty: int}>  $lines
+     *
+     * @throws \RuntimeException message "inactive_variant:{product name}" or "insufficient_stock:{product name}"
+     */
+    protected function lockStockOrFail(Collection $lines): ?Warehouse
+    {
+        $warehouse = Warehouse::where('is_default', 1)->first() ?? Warehouse::first();
+
+        foreach ($lines as $line) {
+            // A deactivated variant must never be purchasable even via a
+            // crafted request with its real id — the storefront UI already
+            // hides it (product-buy-widget.blade.php scopes to
+            // is_active=1), but that's a frontend courtesy only, same as
+            // the stock check below; this is the actual enforcement.
+            if (! $line['variant']->is_active) {
+                throw new \RuntimeException("inactive_variant:{$line['variant']->product->name}");
+            }
+        }
+
+        if ($warehouse) {
+            foreach ($lines as $line) {
+                $available = Inventory::where('variant_id', $line['variant']->id)
+                    ->where('warehouse_id', $warehouse->id)
+                    ->lockForUpdate()
+                    ->sum('quantity');
+
+                if ($available < $line['qty']) {
+                    throw new \RuntimeException("insufficient_stock:{$line['variant']->product->name}");
+                }
+            }
+        }
+
+        return $warehouse;
+    }
+
+    /**
+     * @param  Collection<int, array{variant: ProductVariant, qty: int}>  $lines
+     */
+    protected function attachItemsAndDecrementStock(Order $order, Collection $lines, ?Warehouse $warehouse): void
+    {
+        foreach ($lines as $line) {
+            $v = $line['variant'];
+            $qty = $line['qty'];
+
+            $order->items()->create([
+                'tenant_id' => $order->tenant_id,
+                'variant_id' => $v->id,
+                'product_name' => $v->product->name,
+                'variant_name' => $v->variant_name,
+                'sku' => $v->sku,
+                'unit_price' => $v->selling_price,
+                'purchase_price' => $v->purchase_price,
+                'quantity' => $qty,
+                'line_total' => $v->selling_price * $qty,
+            ]);
+
+            if ($warehouse) {
+                Inventory::where('variant_id', $v->id)
+                    ->where('warehouse_id', $warehouse->id)
+                    ->decrement('quantity', $qty);
+
+                StockMovement::create([
+                    'variant_id' => $v->id,
+                    'warehouse_id' => $warehouse->id,
+                    'type' => 'sale',
+                    'quantity' => -$qty,
+                    'reference_type' => 'order',
+                    'reference_id' => $order->id,
+                ]);
+            }
+        }
     }
 
     /** Server-side Purchase event (deduplicated with the browser pixel via fb_event_id). Never throws — an ad-tracking failure must never break checkout. */

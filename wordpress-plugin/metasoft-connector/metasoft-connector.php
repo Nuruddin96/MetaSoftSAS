@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       MetaSoft Connector
  * Description:       Securely connects this WordPress site to a MetaSoftSAS store so products, orders, customers, stock and tracking can be managed from the MetaSoftSAS panel.
- * Version:           0.2.0
+ * Version:           0.3.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * WC requires at least: 7.0
@@ -10,28 +10,31 @@
  * License:           GPL-2.0-or-later
  * Text Domain:       metasoft-connector
  *
- * Phase 2 of the WordPress integration plan (see
- * docs/wordpress-integration-architecture.md in the MetaSoftSAS repo) built
- * the connection handshake + health/disconnect endpoints. Phase 4 (this
- * version) adds the receiving end of MetaSoftSAS's product/category/stock
- * push (includes/class-woocommerce-sync.php + the new REST routes below).
- * Business logic (pricing rules, stock totals, slugs, etc.) still stays in
- * MetaSoftSAS — this plugin only translates an already-decided payload
- * into WooCommerce API calls, never re-derives it. Order/customer sync
- * (the other direction) is a later phase and does not exist yet.
+ * Phase 2 built the connection handshake + health/disconnect endpoints.
+ * Phase 4 added the receiving end of MetaSoftSAS's product/category/stock
+ * push (includes/class-woocommerce-sync.php). Phase 5 (this version) adds
+ * the other direction: WooCommerce order create/status-change ->
+ * MetaSoftSAS's existing order pipeline (includes/class-order-sync.php),
+ * plus the REST route MetaSoftSAS uses to push a status change back. See
+ * docs/wordpress-integration-architecture.md in the MetaSoftSAS repo for
+ * the full phased plan. Business logic (pricing, stock validation,
+ * customer/product matching) still stays entirely in MetaSoftSAS — this
+ * plugin only reads/writes WooCommerce's own API calls from an
+ * already-decided payload, never re-derives one.
  */
 
 if (! defined('ABSPATH')) {
     exit; // No direct access.
 }
 
-define('METASOFT_CONNECTOR_VERSION', '0.2.0');
+define('METASOFT_CONNECTOR_VERSION', '0.3.0');
 define('METASOFT_CONNECTOR_FILE', __FILE__);
 define('METASOFT_CONNECTOR_DIR', plugin_dir_path(__FILE__));
 
 require_once METASOFT_CONNECTOR_DIR.'includes/class-connection.php';
 require_once METASOFT_CONNECTOR_DIR.'includes/class-admin-page.php';
 require_once METASOFT_CONNECTOR_DIR.'includes/class-woocommerce-sync.php';
+require_once METASOFT_CONNECTOR_DIR.'includes/class-order-sync.php';
 require_once METASOFT_CONNECTOR_DIR.'includes/class-rest-controller.php';
 
 /**
@@ -58,6 +61,7 @@ final class MetaSoft_Connector
 
         (new MetaSoft_Connector_Admin_Page)->register();
         (new MetaSoft_Connector_REST_Controller)->register();
+        (new MetaSoft_Connector_Order_Sync)->register();
     }
 
     public function load_textdomain(): void
