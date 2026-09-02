@@ -2,33 +2,36 @@
 /**
  * Plugin Name:       MetaSoft Connector
  * Description:       Securely connects this WordPress site to a MetaSoftSAS store so products, orders, customers, stock and tracking can be managed from the MetaSoftSAS panel.
- * Version:           0.1.0
+ * Version:           0.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
+ * WC requires at least: 7.0
  * Author:            MetaSoftSAS
  * License:           GPL-2.0-or-later
  * Text Domain:       metasoft-connector
  *
  * Phase 2 of the WordPress integration plan (see
- * docs/wordpress-integration-architecture.md in the MetaSoftSAS repo):
- * connection handshake + health/disconnect endpoints only. Business logic
- * (product/order/stock/tracking sync) stays in MetaSoftSAS itself — this
- * plugin is deliberately kept a thin, secure bridge, not a second copy of
- * MetaSoftSAS's business logic. Later phases extend the REST routes
- * registered in includes/class-rest-controller.php without changing the
- * connection/auth model established here.
+ * docs/wordpress-integration-architecture.md in the MetaSoftSAS repo) built
+ * the connection handshake + health/disconnect endpoints. Phase 4 (this
+ * version) adds the receiving end of MetaSoftSAS's product/category/stock
+ * push (includes/class-woocommerce-sync.php + the new REST routes below).
+ * Business logic (pricing rules, stock totals, slugs, etc.) still stays in
+ * MetaSoftSAS — this plugin only translates an already-decided payload
+ * into WooCommerce API calls, never re-derives it. Order/customer sync
+ * (the other direction) is a later phase and does not exist yet.
  */
 
 if (! defined('ABSPATH')) {
     exit; // No direct access.
 }
 
-define('METASOFT_CONNECTOR_VERSION', '0.1.0');
+define('METASOFT_CONNECTOR_VERSION', '0.2.0');
 define('METASOFT_CONNECTOR_FILE', __FILE__);
 define('METASOFT_CONNECTOR_DIR', plugin_dir_path(__FILE__));
 
 require_once METASOFT_CONNECTOR_DIR.'includes/class-connection.php';
 require_once METASOFT_CONNECTOR_DIR.'includes/class-admin-page.php';
+require_once METASOFT_CONNECTOR_DIR.'includes/class-woocommerce-sync.php';
 require_once METASOFT_CONNECTOR_DIR.'includes/class-rest-controller.php';
 
 /**

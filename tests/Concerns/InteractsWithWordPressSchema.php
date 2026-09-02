@@ -99,11 +99,75 @@ trait InteractsWithWordPressSchema
             });
         }
 
+        // Full shape (not just the low_stock_threshold-only stub other
+        // schema traits use for the notification badge) — the Phase 4
+        // product/stock sync tests exercise WordPressProductSyncService's
+        // real payload building, which touches every column here. Mirrors
+        // InteractsWithCommerceSchema's definition exactly.
+        if (! Schema::hasTable('categories')) {
+            Schema::create('categories', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 150);
+                $table->string('slug', 180)->nullable();
+                $table->unsignedBigInteger('parent_id')->nullable();
+                $table->string('image_path', 255)->nullable();
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('products')) {
+            Schema::create('products', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('category_id')->nullable();
+                $table->string('name');
+                $table->string('slug', 280)->nullable();
+                $table->text('description')->nullable();
+                $table->boolean('has_variants')->default(false);
+                $table->boolean('is_active')->default(true);
+                $table->boolean('is_featured')->default(false);
+                $table->string('thumbnail_path')->nullable();
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('product_images')) {
+            Schema::create('product_images', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('product_id');
+                $table->string('image_path', 255);
+                $table->integer('sort_order')->default(0);
+                $table->timestamps();
+            });
+        }
+
         if (! Schema::hasTable('product_variants')) {
             Schema::create('product_variants', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('product_id');
+                $table->string('sku', 80)->nullable();
+                $table->string('barcode', 80)->nullable();
+                $table->string('variant_name', 150)->default('Default');
+                $table->json('attributes')->nullable();
+                $table->decimal('purchase_price', 12, 2)->default(0);
+                $table->decimal('selling_price', 12, 2);
+                $table->decimal('compare_at_price', 12, 2)->nullable();
                 $table->integer('low_stock_threshold')->default(5);
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('warehouses')) {
+            Schema::create('warehouses', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 150);
+                $table->boolean('is_default')->default(false);
                 $table->timestamps();
             });
         }
@@ -113,6 +177,7 @@ trait InteractsWithWordPressSchema
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
                 $table->unsignedBigInteger('variant_id');
+                $table->unsignedBigInteger('warehouse_id');
                 $table->integer('quantity')->default(0);
                 $table->timestamp('updated_at')->nullable();
             });
