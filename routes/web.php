@@ -64,6 +64,7 @@ use App\Http\Controllers\Tenant\SettingController;
 use App\Http\Controllers\Tenant\WebsiteController;
 use App\Http\Controllers\Tenant\WhatsAppConnectController;
 use App\Http\Controllers\Tenant\WhatsAppInboxController;
+use App\Http\Controllers\Tenant\WordPressConnectController;
 use App\Http\Controllers\TenantAuth\LoginController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -543,6 +544,21 @@ $tenantRoutes = function () {
                 Route::post('whatsapp/{waId}/reply', [WhatsAppInboxController::class, 'reply'])->name('whatsapp.reply');
                 Route::post('whatsapp/{waId}/status', [WhatsAppInboxController::class, 'updateStatus'])->name('whatsapp.status');
                 Route::post('whatsapp/{waId}/resume-ai', [WhatsAppInboxController::class, 'resumeAi'])->name('whatsapp.resume-ai');
+            });
+
+            // "Connect WordPress" (Phase 2 of the WordPress integration
+            // plan). No OAuth redirect (see WordPressConnectController's
+            // docblock) — index/generate-key/verify stay open to every
+            // tenant so the status page and instructions are always
+            // reachable; only the actual key generation is plan-gated,
+            // same "index open, the connect action gated" posture as
+            // WhatsApp above.
+            Route::prefix('wordpress')->name('wordpress.')->group(function () {
+                Route::get('/', [WordPressConnectController::class, 'index'])->name('index');
+                Route::post('generate-key', [WordPressConnectController::class, 'generateKey'])->middleware('feature:wordpress_connect')->name('generate-key');
+                Route::post('verify', [WordPressConnectController::class, 'verify'])->name('verify');
+                Route::post('disconnect', [WordPressConnectController::class, 'disconnect'])->name('disconnect');
+                Route::get('plugin-download', [WordPressConnectController::class, 'downloadPlugin'])->name('plugin-download');
             });
         });
     });
