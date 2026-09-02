@@ -124,6 +124,17 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('settings/domain', [SettingController::class, 'requestDomain']);
         Route::delete('settings/domain', [SettingController::class, 'cancelDomain']);
 
+        // WordPress Connect — mirrors Tenant\WordPressConnectController
+        // exactly (generate-key/verify/disconnect; plugin-download is
+        // desktop-only, not mirrored, same reasoning as Barcode printing/
+        // CSV import). generate-key is feature-gated identically to the
+        // web route ('feature:wordpress_connect', EnsureFeatureEnabled,
+        // which already degrades to JSON 403 when expectsJson()).
+        Route::get('settings/wordpress', [SettingController::class, 'wordpress']);
+        Route::post('settings/wordpress/generate-key', [SettingController::class, 'generateWordPressKey'])->middleware('feature:wordpress_connect');
+        Route::post('settings/wordpress/verify', [SettingController::class, 'verifyWordPress']);
+        Route::delete('settings/wordpress', [SettingController::class, 'disconnectWordPress']);
+
         // Facebook Connect (OAuth) — mirrors Tenant\FacebookConnectController
         // exactly, see Api\Mobile\FacebookConnectController's docblock for
         // why this returns JSON instead of redirecting. The actual OAuth
