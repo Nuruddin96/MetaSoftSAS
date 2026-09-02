@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\Mobile\SettingController;
 use App\Http\Controllers\Api\Mobile\SignalController;
 use App\Http\Controllers\Api\Mobile\WhatsAppController;
 use App\Http\Controllers\Api\WordPress\WordPressConnectionController;
+use App\Http\Controllers\Api\WordPress\WordPressOrderController;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -381,5 +382,10 @@ Route::prefix('wordpress/v1')->group(function () {
 
     Route::middleware(['auth:sanctum', 'bind.tenant.wp'])->group(function () {
         Route::get('ping', [WordPressConnectionController::class, 'ping']);
+
+        // Phase 5 — one idempotent endpoint for both order creation and
+        // every later status-changed webhook. See
+        // WordPressOrderController::store()'s docblock.
+        Route::post('orders', [WordPressOrderController::class, 'store']);
     });
 });

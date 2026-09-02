@@ -84,18 +84,92 @@ trait InteractsWithWordPressSchema
             });
         }
 
-        // layouts/panel.blade.php (rendered by every real panel page,
-        // including this feature's index page) unconditionally queries all
-        // four for the notification-bell badge count — needed so a full
-        // HTTP-level render doesn't fail on a missing table. Same stubs
-        // InteractsWithFacebookSchema/InteractsWithWhatsAppSchema use for
-        // the same reason.
+        // Full shape (not just the status-only stub other schema traits use
+        // for the notification-bell badge count on layouts/panel.blade.php)
+        // — the Phase 5 order-webhook tests exercise OrderPlacementService::
+        // placeExternal() and WordPressOrderController's real read/write
+        // paths, which touch every column here.
         if (! Schema::hasTable('orders')) {
             Schema::create('orders', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
+                $table->string('order_number', 30)->default('');
+                $table->string('source', 20)->default('web');
+                $table->string('channel', 20)->default('website');
+                // UNIQUE(tenant_id, wordpress_order_id) — chunk60.sql's
+                // real idempotency guarantee, mirrored here so the replay/
+                // race tests genuinely exercise the same constraint
+                // production relies on (SQLite, like MySQL, treats
+                // multiple NULLs in a unique index as distinct).
+                $table->unsignedBigInteger('wordpress_order_id')->nullable();
+                $table->unsignedBigInteger('customer_id')->nullable();
+                $table->string('customer_name', 150)->default('');
+                $table->string('customer_phone', 20)->default('');
+                $table->text('customer_address')->nullable();
+                $table->unsignedInteger('division_id')->nullable();
+                $table->unsignedInteger('district_id')->nullable();
+                $table->decimal('subtotal', 12, 2)->default(0);
+                $table->decimal('discount', 12, 2)->default(0);
+                $table->decimal('additional_amount', 12, 2)->default(0);
+                $table->decimal('delivery_charge', 10, 2)->default(0);
+                $table->decimal('total', 12, 2)->default(0);
+                $table->string('payment_method', 20)->default('cod');
                 $table->string('status', 20)->default('pending');
+                $table->string('fb_event_id', 64)->nullable();
+                $table->text('note')->nullable();
+                $table->timestamp('confirmed_at')->nullable();
+                $table->timestamp('delivered_at')->nullable();
                 $table->timestamps();
+                $table->unique(['tenant_id', 'wordpress_order_id']);
+            });
+        }
+
+        if (! Schema::hasTable('order_items')) {
+            Schema::create('order_items', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('order_id');
+                $table->unsignedBigInteger('variant_id')->nullable();
+                $table->string('product_name', 255)->nullable();
+                $table->string('variant_name', 150)->nullable();
+                $table->string('sku', 80)->nullable();
+                $table->decimal('unit_price', 12, 2)->default(0);
+                $table->decimal('purchase_price', 12, 2)->default(0);
+                $table->integer('quantity')->default(1);
+                $table->decimal('line_total', 12, 2)->default(0);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('customers')) {
+            Schema::create('customers', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 150);
+                $table->string('phone', 20);
+                $table->text('address')->nullable();
+                $table->unsignedInteger('division_id')->nullable();
+                $table->unsignedInteger('district_id')->nullable();
+                $table->decimal('due_balance', 12, 2)->default(0);
+                $table->integer('total_orders')->default(0);
+                $table->decimal('total_spent', 14, 2)->default(0);
+                $table->timestamps();
+                $table->unique(['tenant_id', 'phone']);
+            });
+        }
+
+        if (! Schema::hasTable('stock_movements')) {
+            Schema::create('stock_movements', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id')->nullable();
+                $table->unsignedBigInteger('variant_id');
+                $table->unsignedBigInteger('warehouse_id');
+                $table->string('type', 20);
+                $table->integer('quantity');
+                $table->string('reference_type', 50)->nullable();
+                $table->unsignedBigInteger('reference_id')->nullable();
+                $table->unsignedBigInteger('user_id')->nullable();
+                $table->timestamp('created_at')->nullable();
             });
         }
 

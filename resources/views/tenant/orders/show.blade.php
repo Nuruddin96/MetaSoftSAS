@@ -10,6 +10,9 @@
             @if ($order->status === 'pending' && $order->source === 'messenger')
                 <span class="text-xs px-2.5 py-1 rounded-pill font-semibold bg-amber/15 text-ink">📩 মেসেঞ্জার থেকে — পেন্ডিং</span>
             @endif
+            @if ($order->source === 'wordpress')
+                <span class="text-xs px-2.5 py-1 rounded-pill font-semibold bg-[#21759B]/10 text-[#21759B]">🔌 WordPress থেকে{{ $order->wordpress_order_id ? ' — Order #'.$order->wordpress_order_id : '' }}</span>
+            @endif
         </h1>
         <p class="text-xs text-mute mt-1">{{ $order->order_date?->format('d M Y') ?? $order->created_at->format('d M Y, h:i A') }}</p>
     </div>
@@ -52,9 +55,10 @@
             'whatsapp'  => 'হোয়াটসঅ্যাপ',
             'instagram' => 'ইনস্টাগ্রাম',
             'call'      => 'কল',
+            'wordpress' => 'ওয়ার্ডপ্রেস',
             'others'    => 'অন্যান্য',
         ];
-        $channelColors = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'others' => 'text-mute'];
+        $channelColors = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'wordpress' => 'text-[#21759B]', 'others' => 'text-mute'];
     @endphp
     <div class="order-2 lg:order-none lg:col-start-3 lg:row-start-1 min-w-0">
         <x-ui.card padding="sm">

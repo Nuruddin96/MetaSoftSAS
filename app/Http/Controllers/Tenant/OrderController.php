@@ -14,6 +14,7 @@ use App\Models\Warehouse;
 use App\Services\Courier\CourierManager;
 use App\Services\DeliveryChargeService;
 use App\Services\Marketing\MetaCapiService;
+use App\Services\WordPress\WordPressOrderSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -336,7 +337,7 @@ class OrderController extends Controller
         ], $deliveryCharge->chargesForView()));
     }
 
-    public function updateStatus(Request $request, Order $order)
+    public function updateStatus(Request $request, Order $order, WordPressOrderSyncService $wpSync)
     {
         $data = $request->validate([
             'status' => 'required|in:pending,confirmed,processing,shipped,delivered,cancelled,returned',
@@ -356,13 +357,21 @@ class OrderController extends Controller
             MetaCapiService::sendPurchaseForOrder($order, $request->ip(), $request->userAgent());
         }
 
+        // Phase 5 — a genuine staff-driven status change, so this is
+        // exactly the direction WordPressOrderSyncService::pushStatusUpdate()
+        // is meant to propagate. A silent no-op for every non-WordPress
+        // order (see that method's docblock) — never gated behind a
+        // source check here, same "call unconditionally, let the service
+        // decide" shape as MetaCapiService above.
+        $wpSync->pushStatusUpdate($order);
+
         return back()->with('success', 'অর্ডার স্ট্যাটাস আপডেট হয়েছে।');
     }
 
     public function updateChannel(Request $request, Order $order)
     {
         $data = $request->validate([
-            'channel' => 'required|in:website,facebook,instagram,whatsapp,call,others',
+            'channel' => 'required|in:website,facebook,instagram,whatsapp,call,wordpress,others',
         ]);
 
         $order->update(['channel' => $data['channel']]);
@@ -371,7 +380,7 @@ class OrderController extends Controller
     }
 
     /** Bulk: change status for many orders at once */
-    public function bulkStatus(Request $request)
+    public function bulkStatus(Request $request, WordPressOrderSyncService $wpSync)
     {
         $data = $request->validate([
             'order_ids' => 'required|array|min:1',
@@ -379,7 +388,20 @@ class OrderController extends Controller
             'status' => 'required|in:pending,confirmed,processing,shipped,delivered,cancelled,returned',
         ]);
 
+        // Loaded before the mass update() below (a query builder update,
+        // not individual model saves) so any WordPress-sourced order among
+        // them can still be identified afterward without a second query —
+        // see the loop below.
+        $orders = Order::whereIn('id', $data['order_ids'])->get(['id', 'tenant_id', 'source', 'wordpress_order_id']);
+
         $count = Order::whereIn('id', $data['order_ids'])->update(['status' => $data['status']]);
+
+        foreach ($orders as $order) {
+            if ($order->source === 'wordpress') {
+                $order->status = $data['status'];
+                $wpSync->pushStatusUpdate($order);
+            }
+        }
 
         return back()->with('success', "$count টি অর্ডারের স্ট্যাটাস আপডেট হয়েছে।");
     }

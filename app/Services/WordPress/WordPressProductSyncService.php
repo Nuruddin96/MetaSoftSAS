@@ -5,12 +5,7 @@ namespace App\Services\WordPress;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
-use App\Models\WordPressConnection;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Http\Client\Response;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use App\Services\WordPress\Concerns\PushesToWordPress;
 
 /**
  * Phase 4 of the WordPress integration plan: pushes products, categories
@@ -25,40 +20,13 @@ use Illuminate\Support\Facades\Log;
  * already-computed model state into the wire payload the plugin expects,
  * same "no duplicated business logic" posture WordPressConnectorService
  * already established for the connection itself.
+ *
+ * connectionFor()/send() live in the PushesToWordPress trait, shared with
+ * WordPressOrderSyncService (Phase 5) — see that trait's docblock.
  */
 class WordPressProductSyncService
 {
-    /**
-     * Null when the tenant has no live, connected WordPress site to push
-     * to — every public method below is a silent no-op in that case
-     * (checked first, before building any payload) so call sites never
-     * need their own "is this tenant even connected" guard.
-     *
-     * Also fails closed on a plan that has since lost the wordpress_connect
-     * feature (a downgrade after connecting), matching EnsureFeatureEnabled's
-     * fail-closed posture for the connect action itself — an existing
-     * connection stays intact (see WordPressConnectController's docblock on
-     * why disconnect is never gated), but this phase's background sync
-     * traffic stops until the plan is upgraded again or the tenant
-     * reconnects.
-     */
-    public function connectionFor(int $tenantId): ?WordPressConnection
-    {
-        $connection = WordPressConnection::withoutGlobalScopes()
-            ->where('tenant_id', $tenantId)
-            ->where('status', 'connected')
-            ->first();
-
-        if (! $connection || ! $connection->wp_rest_url) {
-            return null;
-        }
-
-        if (! $connection->tenant?->plan?->hasFeature('wordpress_connect')) {
-            return null;
-        }
-
-        return $connection;
-    }
+    use PushesToWordPress;
 
     public function pushProduct(Product $product): void
     {
@@ -165,57 +133,5 @@ class WordPressProductSyncService
             'image_url' => $category->image_path ? asset('storage/'.$category->image_path) : null,
             'is_active' => (bool) $category->is_active,
         ];
-    }
-
-    /**
-     * Every outbound call funnels through here so the bearer-secret
-     * auth, timeout, and failure handling (log + flip needs_reconnect on
-     * an auth rejection) live in exactly one place — same "single choke
-     * point" shape WordPressConnectorService::verify()/disconnect() use
-     * for their own outbound calls.
-     */
-    protected function send(WordPressConnection $connection, string $method, string $path, array $payload = []): ?Response
-    {
-        $url = rtrim($connection->wp_rest_url, '/').'/metasoft/v1/'.$path;
-
-        try {
-            /** @var PendingRequest $request */
-            $request = Http::timeout(15)->withToken($connection->outbound_secret);
-            $response = $payload ? $request->{$method}($url, $payload) : $request->{$method}($url);
-        } catch (ConnectionException $e) {
-            Log::warning('WordPress sync: connection failure.', [
-                'tenant_id' => $connection->tenant_id,
-                'path' => $path,
-                'error' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
-
-        if ($response->unauthorized() || $response->forbidden()) {
-            // Same posture as FacebookOAuthService::handleGraphFailure()'s
-            // isInvalidToken() branch — the outbound_secret the plugin
-            // holds no longer matches (site reinstalled, credentials
-            // cleared locally, etc.), so mark the connection for a
-            // required reconnect rather than silently retrying forever.
-            $connection->update(['status' => 'needs_reconnect']);
-
-            Log::warning('WordPress sync: outbound secret rejected by plugin — marked needs_reconnect.', [
-                'tenant_id' => $connection->tenant_id,
-                'path' => $path,
-            ]);
-
-            return $response;
-        }
-
-        if ($response->failed()) {
-            Log::warning('WordPress sync: push failed.', [
-                'tenant_id' => $connection->tenant_id,
-                'path' => $path,
-                'status' => $response->status(),
-            ]);
-        }
-
-        return $response;
     }
 }
