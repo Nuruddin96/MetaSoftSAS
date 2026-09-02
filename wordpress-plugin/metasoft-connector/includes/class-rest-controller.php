@@ -7,10 +7,10 @@ if (! defined('ABSPATH')) {
  * REST routes MetaSoftSAS calls INTO this site (the mirror-image of the
  * handshake/ping routes this site calls into MetaSoftSAS — see
  * class-admin-page.php and routes/api.php's wordpress/v1 group on the
- * MetaSoftSAS side). Deliberately minimal for this phase: a public health
- * check (used by MetaSoftSAS's "Verify Connection" button) and an
- * authenticated disconnect notice. Product/stock push endpoints are added
- * here in a later phase without touching the connection/auth model.
+ * MetaSoftSAS side). Health check stays public (proves only reachability);
+ * every other route requires the outbound_secret bearer token — this
+ * class stays a thin request/response wrapper, all WooCommerce upsert
+ * logic lives in MetaSoft_Connector_WooCommerce_Sync (Phase 4).
  */
 class MetaSoft_Connector_REST_Controller
 {
@@ -28,6 +28,36 @@ class MetaSoft_Connector_REST_Controller
             register_rest_route(self::NAMESPACE, '/disconnect', [
                 'methods' => 'POST',
                 'callback' => [$this, 'disconnect'],
+                'permission_callback' => [$this, 'verify_outbound_secret'],
+            ]);
+
+            register_rest_route(self::NAMESPACE, '/products', [
+                'methods' => 'POST',
+                'callback' => [$this, 'upsert_product'],
+                'permission_callback' => [$this, 'verify_outbound_secret'],
+            ]);
+
+            register_rest_route(self::NAMESPACE, '/products/(?P<id>\d+)', [
+                'methods' => 'DELETE',
+                'callback' => [$this, 'delete_product'],
+                'permission_callback' => [$this, 'verify_outbound_secret'],
+            ]);
+
+            register_rest_route(self::NAMESPACE, '/categories', [
+                'methods' => 'POST',
+                'callback' => [$this, 'upsert_category'],
+                'permission_callback' => [$this, 'verify_outbound_secret'],
+            ]);
+
+            register_rest_route(self::NAMESPACE, '/categories/(?P<id>\d+)', [
+                'methods' => 'DELETE',
+                'callback' => [$this, 'delete_category'],
+                'permission_callback' => [$this, 'verify_outbound_secret'],
+            ]);
+
+            register_rest_route(self::NAMESPACE, '/stock', [
+                'methods' => 'POST',
+                'callback' => [$this, 'update_stock'],
                 'permission_callback' => [$this, 'verify_outbound_secret'],
             ]);
         });
@@ -75,5 +105,40 @@ class MetaSoft_Connector_REST_Controller
         MetaSoft_Connector_Connection::clear();
 
         return new \WP_REST_Response(['disconnected' => true], 200);
+    }
+
+    public function upsert_product(\WP_REST_Request $request)
+    {
+        $result = MetaSoft_Connector_WooCommerce_Sync::upsert_product($request->get_json_params());
+
+        return new \WP_REST_Response($result, $result['ok'] ? 200 : 422);
+    }
+
+    public function delete_product(\WP_REST_Request $request)
+    {
+        $result = MetaSoft_Connector_WooCommerce_Sync::delete_product((int) $request->get_param('id'));
+
+        return new \WP_REST_Response($result, $result['ok'] ? 200 : 422);
+    }
+
+    public function upsert_category(\WP_REST_Request $request)
+    {
+        $result = MetaSoft_Connector_WooCommerce_Sync::upsert_category($request->get_json_params());
+
+        return new \WP_REST_Response($result, $result['ok'] ? 200 : 422);
+    }
+
+    public function delete_category(\WP_REST_Request $request)
+    {
+        $result = MetaSoft_Connector_WooCommerce_Sync::delete_category((int) $request->get_param('id'));
+
+        return new \WP_REST_Response($result, $result['ok'] ? 200 : 422);
+    }
+
+    public function update_stock(\WP_REST_Request $request)
+    {
+        $result = MetaSoft_Connector_WooCommerce_Sync::update_stock($request->get_json_params());
+
+        return new \WP_REST_Response($result, $result['ok'] ? 200 : 422);
     }
 }
