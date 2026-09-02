@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\BindTenantFromSanctumUser;
+use App\Http\Middleware\BindTenantFromWordPressConnection;
 use App\Http\Middleware\CheckMobileSubscription;
 use App\Http\Middleware\CheckSubscription;
 use App\Http\Middleware\EnsureFeatureEnabled;
@@ -31,6 +32,11 @@ return Application::configure(basePath: dirname(__DIR__))
             // Mobile API only — see that middleware's docblock for why
             // resolve.tenant (URL-driven) doesn't apply to API requests.
             'bind.tenant.token' => BindTenantFromSanctumUser::class,
+            // MetaSoft Connector WordPress plugin's equivalent — see that
+            // middleware's docblock for why bind.tenant.token can't be
+            // reused directly (its tokenable is a WordPressConnection, not
+            // a User).
+            'bind.tenant.wp' => BindTenantFromWordPressConnection::class,
             // Mobile API's equivalent of check.subscription — see
             // CheckMobileSubscription's docblock for why that one can't be
             // reused directly here.

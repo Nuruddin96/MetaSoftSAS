@@ -32,6 +32,7 @@ use App\Http\Controllers\Api\Mobile\ReviewController;
 use App\Http\Controllers\Api\Mobile\SettingController;
 use App\Http\Controllers\Api\Mobile\SignalController;
 use App\Http\Controllers\Api\Mobile\WhatsAppController;
+use App\Http\Controllers\Api\WordPress\WordPressConnectionController;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -362,5 +363,23 @@ Route::prefix('mobile/v1')->group(function () {
     Route::middleware(['auth:sanctum', 'ability:device:signal'])->group(function () {
         Route::post('devices/sessions/{sessionToken}/signal', [SignalController::class, 'send']);
         Route::get('devices/sessions/{sessionToken}/signal', [SignalController::class, 'poll']);
+    });
+});
+
+/**
+ * MetaSoft Connector WordPress plugin API — entirely new surface, does not
+ * touch mobile/v1 above. Same "stateless Sanctum, tenant derived from the
+ * authenticated principal rather than the URL" shape as mobile/v1, except
+ * the principal is a WordPressConnection row, not a User — see
+ * BindTenantFromWordPressConnection's docblock.
+ */
+Route::prefix('wordpress/v1')->group(function () {
+    // No auth guard — the connection_token in the request body IS the
+    // authentication for this one call. See WordPressConnectionController::
+    // handshake()'s docblock.
+    Route::post('handshake', [WordPressConnectionController::class, 'handshake']);
+
+    Route::middleware(['auth:sanctum', 'bind.tenant.wp'])->group(function () {
+        Route::get('ping', [WordPressConnectionController::class, 'ping']);
     });
 });
