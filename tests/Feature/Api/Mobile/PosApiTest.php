@@ -104,6 +104,32 @@ class PosApiTest extends TestCase
         $this->assertDatabaseHas('stock_movements', ['variant_id' => $variant->id, 'type' => 'pos_sale', 'quantity' => -3]);
     }
 
+    /** Web/Flutter parity project — the receipt view's itemized data. */
+    public function test_sell_response_includes_receipt_fields(): void
+    {
+        [$tenant, $user] = $this->makeTenantWithPos();
+        [$variant] = $this->makeVariantWithStock($tenant->id, 10);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/mobile/v1/pos/sell', [
+            'items' => [['variant_id' => $variant->id, 'qty' => 2]],
+            'payment_method' => 'due',
+            'paid_amount' => 50,
+            'customer_name' => 'Karim',
+            'customer_phone' => '01712345678',
+        ])->assertCreated();
+
+        $response->assertJsonPath('customer_name', 'Karim')
+            ->assertJsonPath('customer_phone', '01712345678')
+            ->assertJsonPath('items.0.product_name', 'Widget')
+            ->assertJsonPath('items.0.variant_name', 'Default')
+            ->assertJsonPath('items.0.quantity', 2)
+            ->assertJsonPath('items.0.unit_price', 100)
+            ->assertJsonPath('items.0.line_total', 200);
+        $this->assertNotNull($response->json('created_at'));
+    }
+
     public function test_sell_on_due_creates_a_customer_and_due_ledger_entry(): void
     {
         [$tenant, $user] = $this->makeTenantWithPos();
