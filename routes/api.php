@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\Mobile\PosController;
 use App\Http\Controllers\Api\Mobile\ProductAttributeController;
 use App\Http\Controllers\Api\Mobile\ProductCatalogController;
 use App\Http\Controllers\Api\Mobile\ProductController;
+use App\Http\Controllers\Api\Mobile\ProductImageMemoryController;
 use App\Http\Controllers\Api\Mobile\ProductSourceController;
 use App\Http\Controllers\Api\Mobile\ReferenceDataController;
 use App\Http\Controllers\Api\Mobile\ReportController;
@@ -175,6 +176,15 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('ai-memory', [AiMemoryController::class, 'store']);
         Route::post('ai-memory/{aiMemory}', [AiMemoryController::class, 'update'])->whereNumber('aiMemory');
         Route::delete('ai-memory/{aiMemory}', [AiMemoryController::class, 'destroy'])->whereNumber('aiMemory');
+
+        // "পণ্যের ছবি" (Product Image Memory) — mirrors
+        // Tenant\ProductImageMemoryController exactly, see
+        // ProductImageMemoryController's docblock. Same POST-not-PUT/PATCH
+        // reasoning as ai-memory above.
+        Route::get('product-image-memory', [ProductImageMemoryController::class, 'index']);
+        Route::post('product-image-memory', [ProductImageMemoryController::class, 'store']);
+        Route::post('product-image-memory/{productImage}', [ProductImageMemoryController::class, 'update'])->whereNumber('productImage');
+        Route::delete('product-image-memory/{productImage}', [ProductImageMemoryController::class, 'destroy'])->whereNumber('productImage');
 
         // Storefront custom pages only — mirrors Tenant\WebsiteController's
         // page slice (storePage/updatePage/destroyPage), see PageController's
