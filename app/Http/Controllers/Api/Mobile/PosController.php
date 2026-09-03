@@ -152,15 +152,33 @@ class PosController extends Controller
             return $order;
         });
 
+        $order->load('items');
+
         return response()->json([
             'ok' => true,
             'order_id' => $order->id,
             'order_number' => $order->order_number,
+            'created_at' => $order->created_at,
+            'customer_name' => $order->customer_name,
+            'customer_phone' => $order->customer_phone,
             'subtotal' => (float) $order->subtotal,
             'discount' => (float) $order->discount,
             'total' => (float) $order->total,
             'paid_amount' => (float) $order->paid_amount,
             'due_amount' => (float) $order->due_amount,
+            // Web/Flutter parity project — mirrors tenant/pos-receipt.blade.php's
+            // itemized table (Tenant\PosController::receipt()). Physical
+            // thermal-printer output stays out of scope, same as Barcode
+            // printing elsewhere in this app — this is the same receipt
+            // *content*, rendered as a native screen instead of a printable
+            // web page.
+            'items' => $order->items->map(fn ($item) => [
+                'product_name' => $item->product_name,
+                'variant_name' => $item->variant_name,
+                'quantity' => $item->quantity,
+                'unit_price' => (float) $item->unit_price,
+                'line_total' => (float) $item->line_total,
+            ])->values()->all(),
         ], 201);
     }
 }
