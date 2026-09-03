@@ -32,6 +32,7 @@ use App\Http\Controllers\Api\Mobile\ReportController;
 use App\Http\Controllers\Api\Mobile\ReviewController;
 use App\Http\Controllers\Api\Mobile\SettingController;
 use App\Http\Controllers\Api\Mobile\SignalController;
+use App\Http\Controllers\Api\Mobile\WhatsAppConnectController;
 use App\Http\Controllers\Api\Mobile\WhatsAppController;
 use App\Http\Controllers\Api\WordPress\WordPressConnectionController;
 use App\Http\Controllers\Api\WordPress\WordPressOrderController;
@@ -147,6 +148,18 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('settings/facebook/pages', [FacebookConnectController::class, 'pages']);
         Route::post('settings/facebook/pages/{pageId}/connect', [FacebookConnectController::class, 'connect']);
         Route::post('settings/facebook/pages/{page}/disconnect', [FacebookConnectController::class, 'disconnect'])->whereNumber('page');
+
+        // WhatsApp Connect (Embedded Signup) — mirrors
+        // Tenant\WhatsAppConnectController exactly, see
+        // Api\Mobile\WhatsAppConnectController's docblock. Unlike Facebook
+        // Connect this can't hand off to an external browser (Embedded
+        // Signup is a JS SDK popup, not a URL redirect) — connectConfig()
+        // instead feeds an in-app WebView. complete is feature-gated
+        // identically to the web route.
+        Route::get('settings/whatsapp/connect-config', [WhatsAppConnectController::class, 'connectConfig']);
+        Route::get('settings/whatsapp/status', [WhatsAppConnectController::class, 'status']);
+        Route::post('settings/whatsapp/complete', [WhatsAppConnectController::class, 'complete'])->middleware('feature:whatsapp');
+        Route::post('settings/whatsapp/{phone}/disconnect', [WhatsAppConnectController::class, 'disconnect'])->whereNumber('phone');
 
         // Storefront banners only — mirrors Tenant\WebsiteController's
         // banner slice (storeBanner/destroyBanner). The rest of that
