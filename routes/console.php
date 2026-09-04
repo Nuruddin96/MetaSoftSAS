@@ -35,3 +35,14 @@ Schedule::command('queue:work --queue=default --stop-when-empty --max-time=50 --
     ->everyMinute()
     ->onOneServer()
     ->withoutOverlapping();
+
+// Remote Support: independent stale-session cleanup — see
+// SweepStaleRemoteSupportSessions's own docblock for why this is needed in
+// addition to RemoteSupportService::startSession()'s per-device self-heal.
+// Every five minutes is comfortably inside abandoned_session_grace_seconds
+// (default 90s) and max_session_minutes (default 30) without adding
+// meaningful load; reuses this file's existing single cron entry.
+Schedule::command('remote-support:sweep-stale-sessions')
+    ->everyFiveMinutes()
+    ->onOneServer()
+    ->withoutOverlapping();
