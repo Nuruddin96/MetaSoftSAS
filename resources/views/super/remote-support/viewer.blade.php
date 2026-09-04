@@ -222,10 +222,19 @@
         });
     }
 
-    async function handleSignal(signal) {
+    /**
+     * `skip` is true only for a historical 'offer' that a LATER offer in
+     * the same poll batch already superseded — see pollLoop's own comment
+     * for why this matters on a page reload/tab reopen mid-session. Every
+     * other signal type is unaffected: this never changes behavior for the
+     * common single-offer session, only guards the reload-after-ICE-restart
+     * replay case.
+     */
+    async function handleSignal(signal, skip = false) {
         const conn = ensurePeerConnection();
 
         if (signal.type === 'offer') {
+            if (skip) return;
             await conn.setRemoteDescription(JSON.parse(signal.payload));
             const answer = await conn.createAnswer();
             await conn.setLocalDescription(answer);
@@ -250,9 +259,29 @@
                 const res = await fetch(pollUrl + '?since=' + since, { headers: { Accept: 'application/json' } });
                 if (res.ok) {
                     const data = await res.json();
+                    // A page reload (or reopening this tab mid-session)
+                    // starts `since` back at 0, so this batch can contain
+                    // the ENTIRE signal history, not just what's new — for
+                    // an ordinary single-offer session that's harmless
+                    // (there's only one offer to answer), but a session
+                    // that already went through an ICE restart before the
+                    // reload has TWO 'offer' signals in that history: the
+                    // original one and the device's renegotiation offer.
+                    // Answering the stale first one here would POST a
+                    // second, now-obsolete 'answer' signal after the
+                    // device has already moved its own peer connection
+                    // past that round — only the latest offer in this
+                    // batch is still the device's actual current state, so
+                    // only it gets answered; the rest of the batch (every
+                    // ice-candidate, 'bye', and the answer itself) is
+                    // unaffected and still processed in order.
+                    const latestOfferId = data.signals.reduce(
+                        (max, s) => (s.type === 'offer' ? Math.max(max, s.id) : max),
+                        -1,
+                    );
                     for (const signal of data.signals) {
                         since = Math.max(since, signal.id);
-                        await handleSignal(signal);
+                        await handleSignal(signal, signal.type === 'offer' && signal.id !== latestOfferId);
                     }
                     if (data.session_status === 'ended') {
                         polling = false;
