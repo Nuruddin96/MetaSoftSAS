@@ -118,6 +118,60 @@ class DeviceApiTest extends TestCase
         $this->assertFalse((bool) $device->remote_support_enabled);
     }
 
+    /**
+     * Reproduces the production incident (2026-09-04): the team's TECNO
+     * CK7n test phone had a device_uuid revoked under an earlier test
+     * tenant, then re-registered against a DIFFERENT tenant's login
+     * without an app reinstall (so the persisted uuid didn't change — see
+     * DeviceIdentityService's doc comment on the Flutter side). Because
+     * registerDevice()'s revoked-check used to be scoped to the CURRENT
+     * tenant only, it never saw the other tenant's revoked row and fell
+     * through to MobileDevice::create(), crashing on device_uuid's
+     * table-wide unique constraint with an unhandled 500 instead of the
+     * intended, already-documented "revoked blocks unconditionally"
+     * behavior.
+     */
+    public function test_a_device_uuid_revoked_under_another_tenant_cannot_register_here_either(): void
+    {
+        $otherTenant = $this->makeTenant();
+        $otherUser = $this->makeUser($otherTenant->id);
+        MobileDevice::create([
+            'tenant_id' => $otherTenant->id, 'user_id' => $otherUser->id, 'device_uuid' => 'shared-uuid',
+            'status' => 'revoked', 'remote_support_enabled' => false,
+        ]);
+
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/mobile/v1/devices/register', ['device_uuid' => 'shared-uuid'])
+            ->assertStatus(403);
+
+        $this->assertDatabaseCount('mobile_devices', 1);
+    }
+
+    /** Same collision, but the uuid is still actively owned by the other tenant (not revoked) — must be a clean 409, not a raw SQL 500. */
+    public function test_a_device_uuid_still_active_under_another_tenant_is_rejected_with_a_conflict_not_a_crash(): void
+    {
+        $otherTenant = $this->makeTenant();
+        $otherUser = $this->makeUser($otherTenant->id);
+        MobileDevice::create([
+            'tenant_id' => $otherTenant->id, 'user_id' => $otherUser->id, 'device_uuid' => 'shared-uuid',
+            'status' => 'on_ready', 'remote_support_enabled' => true,
+        ]);
+
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/mobile/v1/devices/register', ['device_uuid' => 'shared-uuid'])
+            ->assertStatus(409);
+
+        $this->assertDatabaseCount('mobile_devices', 1);
+    }
+
     public function test_heartbeat_requires_the_device_credential_not_the_users_login_token(): void
     {
         $tenant = $this->makeTenant();

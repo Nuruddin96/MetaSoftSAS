@@ -92,12 +92,29 @@ class RemoteSupportService
         return DB::transaction(function () use ($user, $attrs) {
             $tenant = $user->tenant;
 
+            // Looked up by device_uuid ALONE (not also scoped to this
+            // tenant) because device_uuid carries a table-wide unique
+            // constraint (see the mobile_devices migration's docblock: one
+            // physical app-install is meant to belong to exactly one
+            // tenant for its lifetime). Scoping this lookup to the current
+            // tenant let a uuid already owned by a DIFFERENT tenant fall
+            // through to the create() below and crash on that unique
+            // constraint with an unhandled 500 instead of the intended,
+            // already-documented "revoked blocks unconditionally"
+            // behavior — reproduced 2026-09-04 re-registering the team's
+            // TECNO CK7n test phone (uuid previously revoked under an
+            // earlier test tenant) against a different tenant login.
             $device = MobileDevice::withoutGlobalScope('tenant')
-                ->where('tenant_id', $tenant->id)
                 ->where('device_uuid', $attrs['device_uuid'])
                 ->first();
 
             abort_if($device && $device->status === MobileDevice::STATUS_REVOKED, 403, 'ডিভাইসটি বাতিল করা হয়েছে।');
+
+            abort_if(
+                $device && (int) $device->tenant_id !== (int) $tenant->id,
+                409,
+                'ডিভাইসটি ইতিমধ্যে অন্য একটি অ্যাকাউন্টে নিবন্ধিত। এই অ্যাকাউন্টে ব্যবহার করতে হলে অ্যাপ আনইনস্টল করে আবার ইনস্টল করুন।'
+            );
 
             $attributes = [
                 'user_id' => $user->id,
