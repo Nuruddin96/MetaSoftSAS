@@ -12,7 +12,8 @@
 
 <div class="flex flex-wrap items-center gap-3 mb-4 text-sm">
     <span id="connStatus" class="px-3 py-1.5 rounded-full bg-ink/5 text-mute font-medium">সংযোগ হচ্ছে…</span>
-    <button id="stopBtn" class="ml-auto px-4 py-2 rounded-lg text-sm font-medium bg-red-50 text-red-600">সেশন বন্ধ করুন</button>
+    <button id="reconnectBtn" class="ml-auto px-4 py-2 rounded-lg text-sm font-medium bg-ink/5 text-ink hover:bg-ink/10 disabled:opacity-50 disabled:cursor-not-allowed">🔄 রিকানেক্ট</button>
+    <button id="stopBtn" class="px-4 py-2 rounded-lg text-sm font-medium bg-red-50 text-red-600">সেশন বন্ধ করুন</button>
 </div>
 
 {{--
@@ -116,6 +117,7 @@
     const waitingNote = document.getElementById('waitingNote');
     const connStatus = document.getElementById('connStatus');
     const stopBtn = document.getElementById('stopBtn');
+    const reconnectBtn = document.getElementById('reconnectBtn');
     const screenState = document.getElementById('screenState');
     const micState = document.getElementById('micState');
     const cameraState = document.getElementById('cameraState');
@@ -202,6 +204,7 @@
         pc.onconnectionstatechange = () => {
             if (pc.connectionState === 'connected') {
                 setStatus('সংযুক্ত', 'bg-leaf/10 text-leafdk');
+                reconnectBtn.disabled = false;
             } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
                 setStatus('সংযোগ বিচ্ছিন্ন — পুনঃসংযোগের চেষ্টা হচ্ছে', 'bg-amber/10 text-amber');
                 markTracksStopped();
@@ -296,6 +299,35 @@
             await new Promise((r) => setTimeout(r, 1500));
         }
     }
+
+    /**
+     * Manual recovery for a connection stuck disconnected/reconnecting —
+     * sends a lightweight request signal the device answers by re-running
+     * its OWN existing ICE-restart path (same session, same
+     * RTCPeerConnection, same already-live screen capture): never a new
+     * session, never a fresh MediaProjection/Allow Access prompt, never a
+     * second foreground service. This page doesn't create its own new
+     * offer — the resulting device-generated offer arrives through the
+     * normal poll loop and is answered by the existing 'offer' case in
+     * handleSignal(), identical to an automatic reconnect.
+     *
+     * Disabled for a cooldown after each click (independent of connection
+     * state, which may never reach 'connected' if the network is still
+     * down) — paired with WebRtcSessionController._performIceRestart()'s
+     * own 3-second debounce on the device side, so neither a rapid double
+     * click here nor a race with the device's own automatic restart timer
+     * can fire two overlapping renegotiations.
+     */
+    reconnectBtn.addEventListener('click', async () => {
+        reconnectBtn.disabled = true;
+        setStatus('সংযোগ বিচ্ছিন্ন — পুনঃসংযোগের চেষ্টা হচ্ছে', 'bg-amber/10 text-amber');
+        try {
+            await postSignal('reconnect-request', '');
+        } catch (e) {
+            console.warn('reconnect request failed to send', e);
+        }
+        setTimeout(() => { reconnectBtn.disabled = false; }, 5000);
+    });
 
     stopBtn.addEventListener('click', async () => {
         polling = false;

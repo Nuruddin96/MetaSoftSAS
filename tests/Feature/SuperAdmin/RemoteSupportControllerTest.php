@@ -547,6 +547,93 @@ class RemoteSupportControllerTest extends TestCase
     }
 
     /**
+     * The admin console's manual "রিকানেক্ট" button (viewer.blade.php) —
+     * sends this with an empty payload; the device answers it entirely by
+     * re-running its own existing ICE-restart path
+     * (WebRtcSessionController._performIceRestart()), never by starting a
+     * new session. Here we only need to confirm the signal itself is
+     * accepted and relayed to the device side unchanged — the actual
+     * reconnect behavior is Dart-side and covered by physical-device
+     * testing (see docs/webrtc-flow.md §Reconnect).
+     */
+    public function test_admin_can_send_a_reconnect_request_signal(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, ['status' => 'on_ready', 'remote_support_enabled' => true]);
+        $sessionId = DB::table('remote_support_sessions')->insertGetId([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'sess-reconnect', 'started_at' => now(),
+            'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin, 'super_admin')
+            ->postJson(route('super.remote-support.session.signal.send', [$tenant, $device, $sessionId]), [
+                'type' => 'reconnect-request', 'payload' => '',
+            ])->assertCreated();
+
+        $this->assertDatabaseHas('remote_support_signals', [
+            'remote_support_session_id' => $sessionId, 'sender' => 'admin', 'type' => 'reconnect-request',
+        ]);
+        // Reconnecting is not the same as ending the session — a
+        // reconnect-request must never touch session status.
+        $this->assertSame('active', DB::table('remote_support_sessions')->find($sessionId)->status);
+    }
+
+    /**
+     * Repeated clicks on the admin's রিকানেক্ট button (a spam-click, or a
+     * slow network making the tenant click again before the first request
+     * lands) must be safe at the signaling layer — the actual duplicate-
+     * restart prevention is WebRtcSessionController's 3-second debounce on
+     * the device side (Dart-level, verified by physical-device testing),
+     * but the SERVER side must never reject, error on, or corrupt session
+     * state for repeat signals either.
+     */
+    public function test_repeated_reconnect_request_signals_are_all_accepted_without_affecting_session_status(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, ['status' => 'on_ready', 'remote_support_enabled' => true]);
+        $sessionId = DB::table('remote_support_sessions')->insertGetId([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'sess-repeat-reconnect', 'started_at' => now(),
+            'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        for ($i = 0; $i < 3; $i++) {
+            $this->actingAs($admin, 'super_admin')
+                ->postJson(route('super.remote-support.session.signal.send', [$tenant, $device, $sessionId]), [
+                    'type' => 'reconnect-request', 'payload' => '',
+                ])->assertCreated();
+        }
+
+        $this->assertSame(3, DB::table('remote_support_signals')
+            ->where('remote_support_session_id', $sessionId)->where('type', 'reconnect-request')->count());
+        $this->assertSame('active', DB::table('remote_support_sessions')->find($sessionId)->status);
+    }
+
+    /** Regression guard: the new 'reconnect-request' type must not have widened validation into accepting arbitrary strings. */
+    public function test_admin_sending_an_unknown_signal_type_is_rejected(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, ['status' => 'on_ready', 'remote_support_enabled' => true]);
+        $sessionId = DB::table('remote_support_sessions')->insertGetId([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'sess-bad-type', 'started_at' => now(),
+            'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin, 'super_admin')
+            ->postJson(route('super.remote-support.session.signal.send', [$tenant, $device, $sessionId]), [
+                'type' => 'not-a-real-type', 'payload' => 'x',
+            ])->assertStatus(422);
+    }
+
+    /**
      * The viewer's pollLoop only makes sense if it never echoes the
      * admin's own outgoing signals back to itself — pollSignals() must
      * filter to the opposite sender.

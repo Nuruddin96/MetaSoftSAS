@@ -19,6 +19,21 @@ return [
     'turn_username' => env('REMOTE_SUPPORT_TURN_USERNAME'),
     'turn_credential' => env('REMOTE_SUPPORT_TURN_CREDENTIAL'),
 
+    /*
+     * Cloudflare Realtime TURN (approved provider — see
+     * RemoteSupportService::cloudflareTurnCredentials()'s doc comment).
+     * Unlike the static turn_url/username/credential above, Cloudflare
+     * issues short-lived credentials via an authenticated API call keyed
+     * by a Turn Key ID + API Token (never a fixed username/password) —
+     * these two values are the only Cloudflare secrets that ever exist,
+     * and they live in .env only, never in source control. When both are
+     * set, Cloudflare TURN is used instead of the static turn_url config
+     * above; when unset, iceServers() falls back to that static config
+     * (or STUN-only if that's unset too).
+     */
+    'cloudflare_turn_key_id' => env('CLOUDFLARE_TURN_KEY_ID'),
+    'cloudflare_turn_api_token' => env('CLOUDFLARE_TURN_API_TOKEN'),
+
     /** Hard cap on a single session's lifetime, regardless of activity. */
     'max_session_minutes' => (int) env('REMOTE_SUPPORT_MAX_SESSION_MINUTES', 30),
 

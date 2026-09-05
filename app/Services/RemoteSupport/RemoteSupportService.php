@@ -11,7 +11,10 @@ use App\Models\SuperAdmin;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
@@ -436,7 +439,9 @@ class RemoteSupportService
             ->values()
             ->all();
 
-        if (config('remote_support.turn_url')) {
+        if ($cloudflare = $this->cloudflareTurnCredentials()) {
+            $servers[] = $cloudflare;
+        } elseif (config('remote_support.turn_url')) {
             $servers[] = [
                 'urls' => config('remote_support.turn_url'),
                 'username' => config('remote_support.turn_username'),
@@ -445,6 +450,78 @@ class RemoteSupportService
         }
 
         return $servers;
+    }
+
+    /**
+     * Cloudflare Realtime TURN — the approved provider (see
+     * config/remote_support.php's doc comment on why this is a separate
+     * pair of config keys from the generic static turn_url/username/
+     * credential above). Cloudflare never issues a fixed username/
+     * password: the Turn Key ID + API Token authenticate ONE call to
+     * their credential-generation endpoint, which mints a short-lived
+     * (`ttl` seconds) `{urls, username, credential}` triple bundling both
+     * their STUN and TURN (UDP/TCP/TLS) endpoints together — that whole
+     * object is returned as-is as a single RTCIceServer entry, since
+     * that's exactly the shape WebRTC expects.
+     *
+     * Cached for less than the requested TTL so this method (called on
+     * every heartbeat while a session is active, not just once per
+     * session) doesn't hit Cloudflare's API on every 20-second tick — a
+     * failed generation call is deliberately NOT cached, so the next call
+     * retries immediately rather than being stuck returning null for the
+     * full cache window.
+     */
+    private function cloudflareTurnCredentials(): ?array
+    {
+        $keyId = config('remote_support.cloudflare_turn_key_id');
+        $apiToken = config('remote_support.cloudflare_turn_api_token');
+        if (! $keyId || ! $apiToken) {
+            return null;
+        }
+
+        $cacheKey = 'remote_support:cloudflare_turn_credentials:'.$keyId;
+        if ($cached = Cache::get($cacheKey)) {
+            return $cached;
+        }
+
+        try {
+            $ttlSeconds = 86400; // 24h — Cloudflare's documented max; cached for less than this below.
+            $response = Http::withToken($apiToken)
+                ->timeout(5)
+                ->post("https://rtc.live.cloudflare.com/v1/turn/keys/{$keyId}/credentials/generate", [
+                    'ttl' => $ttlSeconds,
+                ]);
+
+            if (! $response->successful()) {
+                Log::warning('Cloudflare TURN credential generation failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+
+                return null;
+            }
+
+            $iceServer = $response->json('iceServers');
+            if (! is_array($iceServer) || ! isset($iceServer['urls'])) {
+                Log::warning('Cloudflare TURN credential response missing expected iceServers shape', [
+                    'body' => $response->body(),
+                ]);
+
+                return null;
+            }
+
+            // Refresh a comfortable margin before actual expiry rather than
+            // racing it — an in-flight session that outlives a stale cached
+            // credential would suddenly be unable to gather new relay
+            // candidates on its next ICE restart.
+            Cache::put($cacheKey, $iceServer, now()->addSeconds($ttlSeconds - 3600));
+
+            return $iceServer;
+        } catch (\Throwable $e) {
+            Log::warning('Cloudflare TURN credential generation threw', ['exception' => $e->getMessage()]);
+
+            return null;
+        }
     }
 
     public function log(

@@ -107,10 +107,18 @@ class RemoteSupportController extends Controller
 
     public function sendSignal(Request $request, Tenant $tenant, int $device, int $session)
     {
+        // 'reconnect-request' is the admin's manual Reconnect button
+        // (viewer.blade.php) — carries an empty payload, relayed to the
+        // device as-is via pushSignal() below, and handled entirely by
+        // WebRtcSessionController._handleSignal() on the Dart side by
+        // re-running the SAME ICE-restart path an automatic reconnect
+        // already uses (same session, same PeerConnection, same live
+        // capture — never a new session or a fresh consent prompt).
         $data = $request->validate([
-            'type' => 'required|string|in:offer,answer,ice-candidate,bye',
-            'payload' => 'required|string',
+            'type' => 'required|string|in:offer,answer,ice-candidate,bye,reconnect-request',
+            'payload' => 'nullable|string',
         ]);
+        $data['payload'] ??= '';
 
         $signal = $this->service->pushSignal($this->session($tenant, $device, $session), 'admin', $data['type'], $data['payload']);
 
