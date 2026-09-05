@@ -250,10 +250,11 @@ class RemoteSupportControllerTest extends TestCase
             'last_seen_at' => now(),
         ]);
 
-        $this->actingAs($admin, 'super_admin')
-            ->post(route('super.remote-support.session.start', [$tenant, $device]), [])
-            ->assertStatus(409);
+        $response = $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.session.start', [$tenant, $device]), []);
 
+        $response->assertRedirect();
+        $this->assertSame('ডিভাইসটি এখন রেডি নয়।', session('error'));
         $this->assertDatabaseCount('remote_support_sessions', 0);
     }
 
@@ -269,9 +270,11 @@ class RemoteSupportControllerTest extends TestCase
             'last_seen_at' => now(),
         ]);
 
-        $this->actingAs($admin, 'super_admin')
-            ->post(route('super.remote-support.session.start', [$tenant, $device]), [])
-            ->assertStatus(409);
+        $response = $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.session.start', [$tenant, $device]), []);
+
+        $response->assertRedirect();
+        $this->assertSame('এই টেনেন্টের জন্য রিমোট সাপোর্ট চালু নেই।', session('error'));
     }
 
     public function test_super_admin_can_start_a_session_on_a_ready_eligible_device(): void
@@ -296,7 +299,17 @@ class RemoteSupportControllerTest extends TestCase
         $this->assertDatabaseHas('device_events', ['mobile_device_id' => $device->id, 'event_type' => 'session_started']);
     }
 
-    public function test_a_second_session_is_rejected_while_the_first_is_still_open(): void
+    /**
+     * The 409 conflict guard itself is unchanged — this only checks the
+     * operator now sees the real Bengali reason via a flashed error
+     * instead of Laravel's generic uncustomized-409-view "Oops!" page
+     * (RemoteSupportController::startSession() didn't catch the service's
+     * abort before; found comparing a live Redmi 23027RAD4I session
+     * against Tecno CK7n, 2026-09-06 — the Super Admin device list offered
+     * a fresh Start form even while a session was already open, and
+     * clicking it just 409'd with no usable feedback).
+     */
+    public function test_a_second_session_attempt_while_the_first_is_still_open_flashes_the_real_conflict_message_instead_of_a_bare_409(): void
     {
         $admin = $this->makeSuperAdmin();
         $tenant = $this->makeTenant();
@@ -311,11 +324,71 @@ class RemoteSupportControllerTest extends TestCase
             'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $this->actingAs($admin, 'super_admin')
-            ->post(route('super.remote-support.session.start', [$tenant, $device]), [])
-            ->assertStatus(409);
+        $response = $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.session.start', [$tenant, $device]), []);
 
+        $response->assertRedirect();
+        $this->assertSame('এই ডিভাইসে ইতিমধ্যে একটি সেশন চলছে।', session('error'));
         $this->assertDatabaseCount('remote_support_sessions', 1);
+    }
+
+    /**
+     * The device-list page must never offer a fresh Start form for a
+     * device that already has an open session — it must instead link
+     * straight back into that SAME session, so the operator can never
+     * trigger the 409 from this page in the first place.
+     */
+    public function test_show_page_offers_resume_instead_of_start_for_a_device_with_an_open_session(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'device_model' => 'Xiaomi 23027RAD4I', 'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
+        ]);
+        $sessionId = DB::table('remote_support_sessions')->insertGetId([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'resume-me', 'started_at' => now(), 'connected_at' => now(),
+            'expires_at' => now()->addMinutes(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
+
+        $response->assertOk();
+        $response->assertSee(route('super.remote-support.session.viewer', [$tenant, $device, $sessionId]), escape: false);
+        // The Start route's own URL is a literal string PREFIX of the
+        // viewer URL (".../session" vs ".../session/{id}/view"), so it
+        // always "contains" it — assert on the Start button's label
+        // instead, which the Resume link never uses.
+        $response->assertDontSee('Live Screen');
+    }
+
+    /**
+     * A device whose session was never connected and is well past the
+     * liveness grace window has nothing live to resume — the list must
+     * still offer a fresh Start (which self-heals it), not a dead Resume
+     * link. Regression guard against filtering only on `status != ended`.
+     */
+    public function test_show_page_still_offers_start_for_a_likely_abandoned_session(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
+        ]);
+        DB::table('remote_support_sessions')->insert([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'active', 'session_token' => 'dead', 'started_at' => now()->subMinutes(5),
+            'connected_at' => null, 'expires_at' => now()->addMinutes(25), 'created_at' => now()->subMinutes(5), 'updated_at' => now()->subMinutes(5),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
+
+        $response->assertOk();
+        $response->assertSee(route('super.remote-support.session.start', [$tenant, $device]), escape: false);
     }
 
     public function test_an_abandoned_expired_session_self_heals_and_does_not_block_a_new_one(): void
@@ -402,10 +475,11 @@ class RemoteSupportControllerTest extends TestCase
             'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $this->actingAs($admin, 'super_admin')
-            ->post(route('super.remote-support.session.start', [$tenant, $device]), [])
-            ->assertStatus(409);
+        $response = $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.session.start', [$tenant, $device]), []);
 
+        $response->assertRedirect();
+        $this->assertSame('এই ডিভাইসে ইতিমধ্যে একটি সেশন চলছে।', session('error'));
         $this->assertDatabaseCount('remote_support_sessions', 1);
     }
 

@@ -69,11 +69,25 @@
                                  change, so it's never silently missing from the row; it
                                  only ever actually starts a session
                                  (RemoteSupportService::startSession) when the device is
-                                 genuinely on_ready. --}}
+                                 genuinely on_ready.
+
+                                 A device with an already-open session (see
+                                 RemoteSupportController::show()'s $openSessions) must link
+                                 back into that SAME session instead of ever rendering the
+                                 Start form — clicking Start again while one is still open
+                                 always 409s (RemoteSupportService::startSession()'s
+                                 existing-session guard), and this branch is checked before
+                                 liveStatus() so it applies even if the device's freshness
+                                 flipped since the session was opened. --}}
                             @if (! $d->remote_support_enabled)
                                 <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-ink/5 text-mute" title="ডিভাইসটি বন্ধ আছে">
                                     🎥 লাইভ স্ক্রিন অনুপলব্ধ
                                 </span>
+                            @elseif ($openSessions->has($d->id))
+                                <a href="{{ route('super.remote-support.session.viewer', [$tenant, $d, $openSessions[$d->id]->id]) }}"
+                                   class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">
+                                    🎥 চলমান লাইভ ভিউ দেখুন
+                                </a>
                             @elseif ($d->liveStatus() === 'offline')
                                 <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600">
                                     🎥 লাইভ স্ক্রিন — ডিভাইস অফলাইন

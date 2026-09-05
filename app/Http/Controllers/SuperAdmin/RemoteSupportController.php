@@ -8,6 +8,7 @@ use App\Models\RemoteSupportSession;
 use App\Models\Tenant;
 use App\Services\RemoteSupport\RemoteSupportService;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Remote Support console — Super Admin only (`auth:super_admin`, see
@@ -45,10 +46,27 @@ class RemoteSupportController extends Controller
     {
         $devices = $this->devicesFor($tenant)->orderByDesc('last_seen_at')->get();
 
+        // Devices with a session that's still open (not ended, not expired,
+        // not the self-heal-eligible "never connected" abandoned case) must
+        // link back into that SAME session instead of the list ever
+        // offering a fresh Start form for them — see
+        // RemoteSupportService::startSession()'s existing-session 409
+        // guard, which this UI gap was bypassing by always rendering Start
+        // regardless of an already-open session (confirmed 2026-09-06
+        // comparing a live Redmi 23027RAD4I session against Tecno CK7n).
+        $openSessions = RemoteSupportSession::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('mobile_device_id', $devices->pluck('id'))
+            ->where('status', '!=', RemoteSupportSession::STATUS_ENDED)
+            ->get()
+            ->filter(fn (RemoteSupportSession $s) => $s->isOpen() && ! $s->isLikelyAbandoned())
+            ->keyBy('mobile_device_id');
+
         return view('super.remote-support.show', [
             'tenant' => $tenant,
             'setting' => $tenant->remoteSupportSetting,
             'devices' => $devices,
+            'openSessions' => $openSessions,
         ]);
     }
 
@@ -78,12 +96,24 @@ class RemoteSupportController extends Controller
 
     public function startSession(Request $request, Tenant $tenant, int $device)
     {
-        $session = $this->service->startSession(
-            $this->device($tenant, $device),
-            auth('super_admin')->user(),
-            $request->boolean('include_microphone'),
-            $request->boolean('include_camera'),
-        );
+        try {
+            $session = $this->service->startSession(
+                $this->device($tenant, $device),
+                auth('super_admin')->user(),
+                $request->boolean('include_microphone'),
+                $request->boolean('include_camera'),
+            );
+        } catch (HttpException $e) {
+            if ($e->getStatusCode() !== 409) {
+                throw $e;
+            }
+
+            // Conflict protection itself is untouched — this only surfaces
+            // the service's own Bengali message instead of the generic
+            // uncustomized-409-view "Oops!" page, matching the
+            // back()->with(...) pattern every sibling action here uses.
+            return back()->with('error', $e->getMessage());
+        }
 
         return redirect()->route('super.remote-support.session.viewer', [$tenant, $device, $session->id]);
     }
