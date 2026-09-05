@@ -251,6 +251,19 @@
 
         if (signal.type === 'offer') {
             if (skip) return;
+            // Every offer after the very first now comes from a BRAND NEW
+            // device-side RTCPeerConnection (WebRtcSessionController's ICE
+            // restart recreates it — see that class's _performIceRestart
+            // doc comment), so its tracks carry new ids/ssrcs and `ontrack`
+            // genuinely re-fires for the screen video on each reconnect.
+            // Without resetting this counter first, that re-fire looked
+            // like the SECOND video track ever seen and got routed to
+            // cameraVideo instead of the main screen `video` element —
+            // Admin showed "connected" with the live screen frozen/blank.
+            // Device still adds tracks screen-first, then mic, then camera
+            // on every (re)negotiation, so restarting the count here keeps
+            // the ordering assumption correct per-renegotiation.
+            videoTracksSeen = 0;
             await conn.setRemoteDescription(JSON.parse(signal.payload));
             const answer = await conn.createAnswer();
             await conn.setLocalDescription(answer);
