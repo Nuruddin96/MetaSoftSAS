@@ -205,6 +205,19 @@
             if (pc.connectionState === 'connected') {
                 setStatus('সংযুক্ত', 'bg-leaf/10 text-leafdk');
                 reconnectBtn.disabled = false;
+                // `ontrack` does not reliably re-fire for a track that
+                // simply survives a renegotiation (confirmed via real
+                // on-device testing, 2026-09-05: after a genuine network-
+                // change reconnect, connectionState correctly recovered to
+                // 'connected' but the per-track badges below stayed stuck
+                // on "সংযোগ বিচ্ছিন্ন" forever, since nothing else ever
+                // reset them) — restore any badge whose element already
+                // has a track playing, rather than waiting on an event
+                // that may never come again for an already-established
+                // track.
+                if (video.srcObject) screenState.textContent = 'স্ট্রিমিং হচ্ছে ✅';
+                if (remoteAudio.srcObject) micState.textContent = 'শোনা যাচ্ছে ✅';
+                if (cameraVideo.srcObject) cameraState.textContent = 'স্ট্রিমিং হচ্ছে ✅';
             } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
                 setStatus('সংযোগ বিচ্ছিন্ন — পুনঃসংযোগের চেষ্টা হচ্ছে', 'bg-amber/10 text-amber');
                 markTracksStopped();
