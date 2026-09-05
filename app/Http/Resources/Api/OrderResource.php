@@ -16,6 +16,7 @@ class OrderResource extends JsonResource
             'order_number' => $this->order_number,
             'source' => $this->source,
             'channel' => $this->channel,
+            'messenger_psid' => $this->messenger_psid,
             'status' => $this->status,
             'customer_id' => $this->customer_id,
             'customer_name' => $this->customer_name,
