@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Mobile\AdvertisingController;
+use App\Http\Controllers\Api\Mobile\AiAgentSettingController;
 use App\Http\Controllers\Api\Mobile\AiChatController;
 use App\Http\Controllers\Api\Mobile\AiMemoryController;
 use App\Http\Controllers\Api\Mobile\AuthController;
@@ -90,11 +91,18 @@ Route::prefix('mobile/v1')->group(function () {
 
         // Delivery-charge + brand settings — see SettingController's
         // docblock for why the rest of Tenant\SettingController's surface
-        // (AI-agent toggles, marketing pixel) isn't mirrored here.
+        // (marketing pixel) isn't mirrored here. The AI-agent toggles ARE
+        // now mirrored, via their own AiAgentSettingController below.
         Route::get('settings', [SettingController::class, 'index']);
         Route::post('settings', [SettingController::class, 'store']);
         Route::get('settings/brand', [SettingController::class, 'brand']);
         Route::post('settings/brand', [SettingController::class, 'updateBrand']);
+
+        // Master AI switch + per-channel auto-reply toggles — mirrors
+        // Tenant\SettingController::aiAgent() exactly (see
+        // AiAgentSettingController's docblock).
+        Route::get('settings/ai-agent', [AiAgentSettingController::class, 'index']);
+        Route::post('settings/ai-agent', [AiAgentSettingController::class, 'update']);
 
         // Courier (Steadfast/Pathao) credential connect — mirrors
         // Tenant\SettingController::courier() exactly. GET is masked

@@ -111,6 +111,7 @@ class AuthController extends Controller
             'tenant' => [
                 'id' => $tenant->id,
                 'business_name' => $tenant->store_name,
+                'website_url' => $tenant->url(),
                 'plan_name' => $tenant->plan?->name,
                 'plan_expires_at' => optional($tenant->subscription_ends_at)->toIso8601String(),
                 // Subscription Expiry Enforcement project — same fields
@@ -167,6 +168,7 @@ class AuthController extends Controller
             'tenant' => [
                 'id' => $tenant->id,
                 'business_name' => $tenant->store_name,
+                'website_url' => $tenant->url(),
                 'plan_name' => $tenant->plan?->name,
                 'plan_expires_at' => optional($tenant->subscription_ends_at)->toIso8601String(),
                 // Subscription Expiry Enforcement project — same fields
@@ -200,6 +202,7 @@ class AuthController extends Controller
             'tenant' => [
                 'id' => $tenant->id,
                 'business_name' => $tenant->store_name,
+                'website_url' => $tenant->url(),
                 'plan_name' => $tenant->plan?->name,
                 'plan_expires_at' => optional($tenant->subscription_ends_at)->toIso8601String(),
                 // Subscription Expiry Enforcement project — same fields

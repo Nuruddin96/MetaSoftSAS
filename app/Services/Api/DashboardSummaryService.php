@@ -2,14 +2,15 @@
 
 namespace App\Services\Api;
 
-use App\Models\Customer;
 use App\Models\CourierSetting;
+use App\Models\Customer;
 use App\Models\Expense;
 use App\Models\IncompleteOrder;
 use App\Models\MessengerMessage;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Tenant;
+use App\Services\Advertising\AdvertisingBalanceService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -25,6 +26,8 @@ use Illuminate\Support\Facades\DB;
  */
 class DashboardSummaryService
 {
+    public function __construct(protected AdvertisingBalanceService $advertising) {}
+
     public function summary(Tenant $tenant): array
     {
         $tenantId = $tenant->id;
@@ -86,6 +89,13 @@ class DashboardSummaryService
                 ->where('status', 'new')->where('direction', 'in')->count(),
             'new_incomplete' => IncompleteOrder::where('tenant_id', $tenantId)->where('status', 'abandoned')->count(),
             'total_products' => Product::where('tenant_id', $tenantId)->count(),
+            // Mobile-only addition (dashboard parity pass) — null for any
+            // tenant the advertising module isn't enabled for, same
+            // isEnabled() gate AdvertisingController itself uses; the
+            // client must treat null as "hide", never as ৳0 spent.
+            'advertising_balance' => $this->advertising->isEnabled($tenant)
+                ? (($balance = $this->advertising->balance($tenant->id)) !== null ? (float) $balance : null)
+                : null,
         ];
     }
 }

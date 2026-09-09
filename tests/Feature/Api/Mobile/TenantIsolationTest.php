@@ -43,8 +43,21 @@ class TenantIsolationTest extends TestCase
                 'today_orders', 'today_sales', 'pending_orders', 'courier_pending_count', 'total_customers',
                 'today_expenses', 'low_stock_count', 'by_channel', 'top_districts', 'more_districts_count',
                 'recent_orders', 'checklist' => ['product', 'logo', 'courier', 'order'],
-                'new_messages', 'new_incomplete', 'total_products',
+                'new_messages', 'new_incomplete', 'total_products', 'advertising_balance',
             ]);
+    }
+
+    /** Mobile dashboard parity pass — advertising_balance must be null (never ৳0) when the module isn't enabled for this tenant. */
+    public function test_dashboard_advertising_balance_is_null_when_module_not_enabled(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/mobile/v1/dashboard')
+            ->assertOk()
+            ->assertJsonPath('advertising_balance', null);
     }
 
     /** Priority 3 parity pass — these four fields were previously missing from the mobile dashboard entirely. */
