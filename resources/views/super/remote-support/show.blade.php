@@ -64,7 +64,7 @@
                                 </button>
                             </form>
 
-                            {{-- "🎥 Live Screen" is ALWAYS shown once a device is trusted
+                            {{-- "🎥 লাইভ স্ক্রিন দেখুন" is ALWAYS shown once a device is trusted
                                  (not revoked) — only its enabled/disabled state and reason
                                  change, so it's never silently missing from the row; it
                                  only ever actually starts a session
@@ -101,7 +101,7 @@
                                     @csrf
                                     <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_microphone" value="1"> 🎙 মাইক্রোফোন</label>
                                     <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_camera" value="1"> 📷 ক্যামেরা</label>
-                                    <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🎥 Live Screen</button>
+                                    <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🎥 লাইভ স্ক্রিন দেখুন</button>
                                 </form>
                             @endif
                         </div>

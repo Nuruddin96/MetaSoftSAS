@@ -86,7 +86,7 @@ class RemoteSupportControllerTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Samsung A14');
-        $response->assertSee('Live Screen');
+        $response->assertSee('লাইভ স্ক্রিন দেখুন');
         $response->assertSee(route('super.remote-support.session.start', [$tenant, $ready]), escape: false);
         // No approval workflow anywhere on this page — see
         // RemoteSupportService::registerDevice()'s doc comment on why
@@ -361,7 +361,7 @@ class RemoteSupportControllerTest extends TestCase
         // viewer URL (".../session" vs ".../session/{id}/view"), so it
         // always "contains" it — assert on the Start button's label
         // instead, which the Resume link never uses.
-        $response->assertDontSee('Live Screen');
+        $response->assertDontSee('লাইভ স্ক্রিন দেখুন');
     }
 
     /**
