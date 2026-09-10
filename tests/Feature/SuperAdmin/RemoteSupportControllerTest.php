@@ -391,6 +391,72 @@ class RemoteSupportControllerTest extends TestCase
         $response->assertSee(route('super.remote-support.session.start', [$tenant, $device]), escape: false);
     }
 
+    /**
+     * Regression guard for the exact complaint this feature was built to
+     * fix: a device that previously had a Remote Support session must NOT
+     * be stuck showing a stale Resume link, "বাতিল", or no action at all
+     * once that session naturally ends (admin clicked "সেশন বন্ধ করুন", or
+     * the device sent 'bye') — the list must fall straight back through to
+     * a fresh "লাইভ স্ক্রিন দেখুন" the very next page load, exactly like a
+     * device that never had a session. $openSessions already excludes
+     * `status = ended` at the query level (RemoteSupportController::show()),
+     * so this locks that behavior in from the rendered HTML, not just the
+     * query.
+     */
+    public function test_show_page_offers_a_fresh_live_screen_action_after_a_previous_session_ended(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'device_model' => 'Ended Session Phone', 'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
+        ]);
+        $endedSessionId = DB::table('remote_support_sessions')->insertGetId([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'ended', 'session_token' => 'finished', 'started_at' => now()->subMinutes(10),
+            'connected_at' => now()->subMinutes(9), 'ended_at' => now()->subMinutes(1), 'end_reason' => 'stopped_by_admin',
+            'expires_at' => now()->addMinutes(20), 'created_at' => now()->subMinutes(10), 'updated_at' => now()->subMinutes(1),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
+
+        $response->assertOk();
+        $response->assertSee('লাইভ স্ক্রিন দেখুন');
+        $response->assertSee(route('super.remote-support.session.start', [$tenant, $device]), escape: false);
+        $response->assertDontSee(route('super.remote-support.session.viewer', [$tenant, $device, $endedSessionId]), escape: false);
+        $response->assertDontSee('বাতিল');
+    }
+
+    /**
+     * Mirror of the test above from the other direction: "বাতিল" must stay
+     * reserved for an actually revoked device, and a revoked device must
+     * never render ANY live-screen action (Start, Resume, or an
+     * unavailable/offline/not-ready placeholder) — see show.blade.php's
+     * `@if ($d->status === 'revoked')` branch, which replaces the whole
+     * action column with just the revoke reason.
+     */
+    public function test_show_page_shows_only_the_revoked_badge_and_reason_for_a_revoked_device(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'device_model' => 'Revoked Phone', 'status' => 'revoked', 'remote_support_enabled' => false,
+            'revoke_reason' => 'lost phone', 'last_seen_at' => now(),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
+
+        $response->assertOk();
+        $response->assertSee('বাতিল');
+        $response->assertSee('lost phone');
+        $response->assertDontSee('লাইভ স্ক্রিন দেখুন');
+        $response->assertDontSee('লাইভ স্ক্রিন অনুপলব্ধ');
+        $response->assertDontSee(route('super.remote-support.session.start', [$tenant, $device]), escape: false);
+    }
+
     public function test_an_abandoned_expired_session_self_heals_and_does_not_block_a_new_one(): void
     {
         $admin = $this->makeSuperAdmin();
