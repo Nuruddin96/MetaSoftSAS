@@ -70,7 +70,14 @@ class StorefrontOrderingTest extends TestCase
 
     // --- 1. Order button + simple product flow ---------------------------------------------------
 
-    public function test_order_button_is_visible_on_the_product_page(): void
+    /**
+     * The single "অর্ডার করুন" button became two distinct actions (storefront
+     * redesign task — product page must offer both Add to Cart and Buy
+     * Now): both post to the same, unchanged storefront.cart.add route,
+     * "Buy Now" just adds a redirect=checkout field so CartController::add()
+     * sends the customer straight to checkout instead of the cart page.
+     */
+    public function test_order_buttons_are_visible_on_the_product_page(): void
     {
         $tenant = $this->makeTenant();
         $variant = $this->makeSellableVariant($tenant->id);
@@ -78,7 +85,8 @@ class StorefrontOrderingTest extends TestCase
         $response = $this->get($this->storeUrl($tenant, 'product/'.$variant->product->slug));
 
         $response->assertOk();
-        $response->assertSee('অর্ডার করুন');
+        $response->assertSee('কার্টে যোগ করুন');
+        $response->assertSee('এখনই কিনুন');
         $response->assertSee(route('storefront.cart.add'), false);
     }
 
@@ -92,6 +100,35 @@ class StorefrontOrderingTest extends TestCase
 
         $cart = $this->app['session']->get('cart_'.$tenant->id);
         $this->assertSame(1, $cart[$variant->id]);
+    }
+
+    /** "এখনই কিনুন" (Buy Now) — same add-to-cart endpoint, redirect=checkout sends the customer straight to checkout instead of the cart page. */
+    public function test_buy_now_redirects_straight_to_checkout(): void
+    {
+        $tenant = $this->makeTenant();
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 500]);
+
+        $this->post($this->storeUrl($tenant, 'cart/add'), ['variant_id' => $variant->id, 'qty' => 1, 'redirect' => 'checkout'])
+            ->assertRedirect($this->storeUrl($tenant, 'checkout'));
+
+        $cart = $this->app['session']->get('cart_'.$tenant->id);
+        $this->assertSame(1, $cart[$variant->id]);
+    }
+
+    /** Grid quick add-to-cart only appears for a genuinely single-variant product — a multi-variant product must still force the customer through the product page's attribute picker. */
+    public function test_grid_quick_add_button_only_shows_for_single_variant_products(): void
+    {
+        $tenant = $this->makeTenant();
+        $single = $this->makeSellableVariant($tenant->id, ['selling_price' => 300]);
+        [$multiProduct] = $this->makeTwoVariantProduct($tenant);
+
+        $response = $this->get($this->storeUrl($tenant, 'products'));
+
+        $response->assertOk();
+        // The single-variant product's card form posts straight to cart.add...
+        $response->assertSee('value="'.$single->id.'"', false);
+        // ...while the multi-variant product only ever gets a plain link to its own page, never a variant_id its card never resolved.
+        $response->assertSee(route('storefront.product', $multiProduct->slug), false);
     }
 
     // --- 2. Variant selection reaches cart correctly ----------------------------------------------
@@ -438,9 +475,16 @@ class StorefrontOrderingTest extends TestCase
         $response->assertSee(route('storefront.cart'), false);
     }
 
-    // --- 7. Homepage layout: category section removed, trust strip moved -----------------------
+    // --- 7. Homepage layout: category nav section (storefront redesign) -----------------------
 
-    public function test_home_page_no_longer_shows_the_category_section_after_the_banner(): void
+    /**
+     * Reversed from an earlier "category section removed" assertion —
+     * the storefront redesign task explicitly requires a homepage
+     * category navigation section (icons/images, horizontal-scrollable),
+     * reusing HomeController::index()'s existing `categories` view data
+     * (already fetched before this change, just never rendered).
+     */
+    public function test_home_page_shows_the_category_nav_section(): void
     {
         $tenant = $this->makeTenant();
         app()->instance('currentTenant', $tenant);
@@ -450,11 +494,8 @@ class StorefrontOrderingTest extends TestCase
         $response = $this->get($this->storeUrl($tenant));
 
         $response->assertOk();
-        // "ক্যাটাগরি" alone would also match the (intentional, separate)
-        // bottom-nav label — assert the actual removed section instead:
-        // the per-category pill link the homepage used to render.
-        $response->assertDontSee(route('storefront.products', ['category' => $category->slug]), false);
-        $response->assertDontSee('Skincare');
+        $response->assertSee(route('storefront.products', ['category' => $category->slug]), false);
+        $response->assertSee('Skincare');
     }
 
     public function test_products_listing_still_has_its_own_category_filter(): void

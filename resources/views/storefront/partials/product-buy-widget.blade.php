@@ -108,6 +108,13 @@
 <script>
     const variantMap = @json($variantMap);
     const axes = @json($axes);
+    // Each including page sets data-available-label to its own "in stock"
+    // wording on the #buyBtnLabel element (product page: "কার্টে যোগ করুন",
+    // landing-page checkout section: "অর্ডার কনফার্ম করুন..."), so switching
+    // from an out-of-stock/unavailable combination back to an in-stock one
+    // restores that page's real label instead of a wording this shared
+    // script hardcodes for everyone.
+    const buyBtnAvailableLabel = document.getElementById('buyBtnLabel')?.dataset.availableLabel ?? '';
     const selected = {};
     axes.forEach(axis => {
         const firstBtn = document.querySelector(`.axis-btn[data-axis="${axis}"]`);
@@ -148,8 +155,10 @@
 
         const btn = document.getElementById('buyBtn');
         const label = document.getElementById('buyBtnLabel');
+        const buyNowBtn = document.getElementById('buyNowBtn');
         btn.disabled = outOfStock;
-        label.textContent = outOfStock ? 'স্টক নেই' : 'অর্ডার করুন';
+        label.textContent = outOfStock ? 'স্টক নেই' : buyBtnAvailableLabel;
+        if (buyNowBtn) buyNowBtn.disabled = outOfStock;
     }
 
     function applyUnavailable() {
@@ -164,8 +173,10 @@
 
         const btn = document.getElementById('buyBtn');
         const label = document.getElementById('buyBtnLabel');
+        const buyNowBtn = document.getElementById('buyNowBtn');
         btn.disabled = true;
         label.textContent = 'এভেইলেবল নেই';
+        if (buyNowBtn) buyNowBtn.disabled = true;
     }
 
     // A combination the customer can pick from the axis buttons may not

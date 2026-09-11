@@ -10,7 +10,7 @@
 @endphp
 
 @if ($heroStyle !== 'none' && $banners->isNotEmpty())
-    <div class="relative rounded-2xl overflow-hidden mb-6" id="heroWrap">
+    <div class="relative rounded-card overflow-hidden mb-6" id="heroWrap">
         @foreach ($slides as $i => $b)
             <div class="hero-slide {{ $i > 0 ? 'hidden' : '' }} relative">
                 <img src="{{ asset('storage/' . $b->image_path) }}" alt="{{ $b->title }}"
@@ -22,7 +22,7 @@
                             @if ($b->subtitle)<p class="mt-2 text-sm md:text-base text-white/90">{{ $b->subtitle }}</p>@endif
                             @if ($b->button_text)
                                 <a href="{{ $b->button_link ?: route('storefront.products') }}"
-                                   class="inline-block mt-4 px-6 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm">{{ $b->button_text }}</a>
+                                   class="inline-block mt-4 px-6 py-2.5 rounded-btn bg-brand text-white font-semibold text-sm">{{ $b->button_text }}</a>
                             @endif
                         </div>
                     </div>
@@ -37,6 +37,27 @@
                 @endforeach
             </div>
         @endif
+    </div>
+@endif
+
+@if ($showCats && $categories->isNotEmpty())
+    <div class="mb-6">
+        <h2 class="font-disp font-bold text-lg mb-3">ক্যাটাগরি</h2>
+        <div class="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
+            @foreach ($categories as $cat)
+                <a href="{{ route('storefront.products', ['category' => $cat->slug]) }}"
+                   class="shrink-0 w-20 flex flex-col items-center gap-1.5 text-center group">
+                    <span class="w-16 h-16 rounded-card border border-ink/10 bg-white overflow-hidden grid place-items-center group-hover:border-brand transition">
+                        @if ($cat->image_path)
+                            <img src="{{ asset('storage/' . $cat->image_path) }}" alt="{{ $cat->name }}" class="w-full h-full object-cover">
+                        @else
+                            <i data-lucide="shapes" class="w-6 h-6 text-mute"></i>
+                        @endif
+                    </span>
+                    <span class="text-xs text-ink/80 line-clamp-2 leading-tight">{{ $cat->name }}</span>
+                </a>
+            @endforeach
+        </div>
     </div>
 @endif
 
@@ -103,18 +124,22 @@
     </div>
 @endif
 
-<div class="grid grid-cols-3 gap-3 mt-6 text-center">
-    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
-        <p class="text-lg">✅</p>
-        <p class="text-xs text-mute mt-1">ক্যাশ অন ডেলিভারি</p>
-    </div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 text-center">
     <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
         <p class="text-lg">🚚</p>
-        <p class="text-xs text-mute mt-1">সারাদেশে ডেলিভারি</p>
+        <p class="text-xs text-mute mt-1">সারাদেশে দ্রুত ডেলিভারি</p>
     </div>
     <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
         <p class="text-lg">🔒</p>
-        <p class="text-xs text-mute mt-1">নিরাপদ অর্ডার</p>
+        <p class="text-xs text-mute mt-1">নিরাপদ পেমেন্ট</p>
+    </div>
+    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
+        <p class="text-lg">🛍️</p>
+        <p class="text-xs text-mute mt-1">সহজ অর্ডার প্রসেস</p>
+    </div>
+    <div class="bg-white rounded-card border border-ink/5 py-4 px-2">
+        <p class="text-lg">✅</p>
+        <p class="text-xs text-mute mt-1">ক্যাশ অন ডেলিভারি</p>
     </div>
 </div>
 

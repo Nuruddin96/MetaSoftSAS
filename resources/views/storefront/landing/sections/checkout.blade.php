@@ -59,7 +59,7 @@
                 </div>
 
                 <button id="buyBtn" class="w-full text-center {{ $resolver->buttonClasses($global) }} disabled:opacity-50" @disabled(!$firstVariant || $firstVariant->stockCount() <= 0)>
-                    🛒 <span id="buyBtnLabel">অর্ডার কনফার্ম করুন (ক্যাশ অন ডেলিভারি)</span>
+                    🛒 <span id="buyBtnLabel" data-available-label="অর্ডার কনফার্ম করুন (ক্যাশ অন ডেলিভারি)">অর্ডার কনফার্ম করুন (ক্যাশ অন ডেলিভারি)</span>
                 </button>
             </div>
         </form>
