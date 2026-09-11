@@ -58,15 +58,23 @@
             @csrf
             @include('storefront.partials.product-buy-widget', ['product' => $product])
 
-            <button id="buyBtn" class="w-full md:w-auto px-10 py-3.5 rounded-btn bg-brand text-white font-bold hover:opacity-90 disabled:opacity-50" @disabled($outOfStock)>
-                🛒 <span id="buyBtnLabel">{{ $outOfStock ? 'স্টক নেই' : 'অর্ডার করুন' }}</span>
-            </button>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button type="submit" id="buyBtn" name="redirect" value=""
+                        class="flex-1 h-12 rounded-btn border border-brand text-brand font-bold hover:bg-brand/5 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2" @disabled($outOfStock)>
+                    <i data-lucide="shopping-cart" class="w-4 h-4"></i> <span id="buyBtnLabel" data-available-label="কার্টে যোগ করুন">{{ $outOfStock ? 'স্টক নেই' : 'কার্টে যোগ করুন' }}</span>
+                </button>
+                <button type="submit" id="buyNowBtn" name="redirect" value="checkout" formnovalidate
+                        class="flex-1 h-12 rounded-btn bg-brand text-white font-bold hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none" @disabled($outOfStock)>
+                    এখনই কিনুন
+                </button>
+            </div>
         </form>
 
         @if ($delivery['chargeInside'] || $delivery['chargeOutside'])
-            <p class="mt-4 text-sm text-mute border-t border-ink/10 pt-4">
-                🚚 ঢাকার ভিতরে {{ number_format($delivery['chargeInside']) }}৳, ঢাকার বাইরে {{ number_format($delivery['chargeOutside']) }}৳ ডেলিভারি চার্জ
-            </p>
+            <div class="mt-5 border-t border-ink/10 pt-4 space-y-1.5 text-sm text-mute">
+                <p class="flex items-center gap-2"><i data-lucide="truck" class="w-4 h-4 shrink-0"></i> ঢাকার ভিতরে {{ number_format($delivery['chargeInside']) }}৳, ঢাকার বাইরে {{ number_format($delivery['chargeOutside']) }}৳ ডেলিভারি চার্জ</p>
+                <p class="flex items-center gap-2"><i data-lucide="banknote" class="w-4 h-4 shrink-0"></i> পেমেন্ট: শুধুমাত্র ক্যাশ অন ডেলিভারি</p>
+            </div>
         @endif
 
         @if ($product->description)

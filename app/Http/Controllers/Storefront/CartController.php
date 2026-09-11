@@ -75,6 +75,16 @@ class CartController extends Controller
         $cart[$variant->id] = $already + $qty;
         session([$this->key() => $cart]);
 
+        // "এখনই কিনুন" (Buy Now) on the product page submits this exact
+        // same add-to-cart form with one extra hidden field, then skips
+        // the cart page straight to checkout — same validated/stocked add
+        // as normal, just a different landing page. Every other caller
+        // (grid quick-add, the regular product-page button) omits the
+        // field and keeps landing on the cart page as before.
+        if ($request->input('redirect') === 'checkout') {
+            return redirect()->route('storefront.checkout');
+        }
+
         return redirect()->route('storefront.cart')->with('success', 'কার্টে যোগ হয়েছে।');
     }
 
