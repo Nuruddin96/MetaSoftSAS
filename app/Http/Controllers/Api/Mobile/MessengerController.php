@@ -278,6 +278,14 @@ class MessengerController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** Mirrors Tenant\MessengerInboxController::pauseAi() — see that method's docblock. */
+    public function pauseAi(Request $request, string $psid, AiHandoffService $handoff)
+    {
+        $handoff->trigger(app('currentTenant')->id, 'messenger', $psid, AiHandoffService::REASON_MANUALLY_DISABLED);
+
+        return response()->json(['ok' => true]);
+    }
+
     /** Identical to Tenant\MessengerInboxController::resolveReplyToken(). */
     protected function resolveReplyToken(string $psid): string|false|null
     {

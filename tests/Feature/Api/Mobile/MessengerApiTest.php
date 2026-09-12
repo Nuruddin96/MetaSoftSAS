@@ -204,6 +204,27 @@ class MessengerApiTest extends TestCase
         $this->postJson('/api/mobile/v1/messenger/psid-1/resume-ai')->assertOk()->assertJsonPath('ok', true);
     }
 
+    /**
+     * The AI [toggle]'s OFF action (pauseAi -> AiHandoffService::trigger()
+     * with REASON_MANUALLY_DISABLED) must degrade exactly like resumeAi
+     * does above — no crash before chunk38.sql is imported. Real
+     * persistence of the manually-disabled handoff (with the table
+     * present) is covered by MessengerAiToggleTest::
+     * test_mobile_pause_ai_disables_auto_reply_for_that_psid_only, which
+     * uses InteractsWithFacebookSchema's ai_handoffs table instead of
+     * this file's intentionally-table-less schema.
+     */
+    public function test_pause_ai_returns_ok_even_without_an_active_handoff_table(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeConversation($tenant->id, 'psid-1');
+
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/mobile/v1/messenger/psid-1/pause-ai')->assertOk()->assertJsonPath('ok', true);
+    }
+
     public function test_unauthenticated_request_is_rejected(): void
     {
         $this->getJson('/api/mobile/v1/messenger/conversations')->assertUnauthorized();

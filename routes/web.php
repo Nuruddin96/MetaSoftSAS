@@ -465,6 +465,7 @@ $tenantRoutes = function () {
             Route::post('messenger/{psid}/reply', [MessengerInboxController::class, 'reply'])->name('messenger.reply');
             Route::post('messenger/{psid}/status', [MessengerInboxController::class, 'updateStatus'])->name('messenger.status');
             Route::post('messenger/{psid}/resume-ai', [MessengerInboxController::class, 'resumeAi'])->name('messenger.resume-ai');
+            Route::post('messenger/{psid}/pause-ai', [MessengerInboxController::class, 'pauseAi'])->name('messenger.pause-ai');
 
             // Advertising / Ads Billing — read-only for tenants, gated by
             // AdvertisingBalanceService::isEnabled() inside the controller
@@ -545,6 +546,7 @@ $tenantRoutes = function () {
                 Route::post('whatsapp/{waId}/reply', [WhatsAppInboxController::class, 'reply'])->name('whatsapp.reply');
                 Route::post('whatsapp/{waId}/status', [WhatsAppInboxController::class, 'updateStatus'])->name('whatsapp.status');
                 Route::post('whatsapp/{waId}/resume-ai', [WhatsAppInboxController::class, 'resumeAi'])->name('whatsapp.resume-ai');
+                Route::post('whatsapp/{waId}/pause-ai', [WhatsAppInboxController::class, 'pauseAi'])->name('whatsapp.pause-ai');
             });
 
             // "Connect WordPress" (Phase 2 of the WordPress integration

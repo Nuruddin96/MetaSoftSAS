@@ -262,6 +262,77 @@ class WhatsAppInboxTest extends WhatsAppFeatureTestCase
         );
     }
 
+    /** The AI [toggle]'s OFF action — WhatsAppInboxController::pauseAi(), same REASON_MANUALLY_DISABLED reuse as Messenger's. */
+    public function test_pause_ai_creates_an_active_manually_disabled_handoff(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        WhatsAppMessage::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'wa_id' => '8801700000000', 'status' => 'new', 'direction' => 'in',
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')
+            ->post($this->panelUrl($tenant, 'whatsapp/8801700000000/pause-ai'));
+
+        $response->assertRedirect();
+        $row = DB::table('ai_handoffs')->where('tenant_id', $tenant->id)->where('external_id', '8801700000000')->first();
+        $this->assertNotNull($row);
+        $this->assertSame('manually_disabled', $row->reason);
+        $this->assertNull($row->resolved_at);
+    }
+
+    public function test_pause_then_resume_ai_resolves_the_manual_handoff(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        WhatsAppMessage::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'wa_id' => '8801700000000', 'status' => 'new', 'direction' => 'in',
+        ]);
+
+        $this->actingAs($user, 'tenant')->post($this->panelUrl($tenant, 'whatsapp/8801700000000/pause-ai'));
+        $this->actingAs($user, 'tenant')->post($this->panelUrl($tenant, 'whatsapp/8801700000000/resume-ai'));
+
+        $this->assertSame(
+            0,
+            DB::table('ai_handoffs')->where('tenant_id', $tenant->id)->whereNull('resolved_at')->count()
+        );
+    }
+
+    public function test_pause_ai_never_reaches_another_tenants_conversation(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+        WhatsAppMessage::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantB->id, 'wa_id' => '8801700000000', 'status' => 'new', 'direction' => 'in',
+        ]);
+
+        $this->actingAs($userB, 'tenant')->post($this->panelUrl($tenantB, 'whatsapp/8801700000000/pause-ai'));
+
+        $this->assertSame(
+            0,
+            DB::table('ai_handoffs')->where('tenant_id', $tenantA->id)->count(),
+            "tenant B's pause action must never create a handoff row for tenant A"
+        );
+    }
+
+    public function test_pause_ai_called_twice_does_not_duplicate_the_handoff(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        WhatsAppMessage::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'wa_id' => '8801700000000', 'status' => 'new', 'direction' => 'in',
+        ]);
+
+        $this->actingAs($user, 'tenant')->post($this->panelUrl($tenant, 'whatsapp/8801700000000/pause-ai'));
+        $this->actingAs($user, 'tenant')->post($this->panelUrl($tenant, 'whatsapp/8801700000000/pause-ai'));
+
+        $this->assertSame(
+            1,
+            DB::table('ai_handoffs')->where('tenant_id', $tenant->id)->where('external_id', '8801700000000')->count()
+        );
+    }
+
     // --- attachments ---------------------------------------------------------------------------------
 
     public function test_unsupported_message_type_renders_the_thread_without_crashing(): void
