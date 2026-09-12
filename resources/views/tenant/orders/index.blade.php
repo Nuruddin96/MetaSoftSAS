@@ -65,6 +65,17 @@
     ];
     $channelLabels = ['website' => 'ওয়েবসাইট', 'facebook' => 'ফেসবুক', 'whatsapp' => 'হোয়াটসঅ্যাপ', 'instagram' => 'ইনস্টাগ্রাম', 'call' => 'কল', 'wordpress' => 'ওয়ার্ডপ্রেস', 'others' => 'অন্যান্য'];
     $channelColors = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'wordpress' => 'text-[#21759B]', 'others' => 'text-mute'];
+
+    // Same light heuristic Flutter's _CourierStatusChip uses — only the
+    // badge's tone is guessed from the raw string, never the status text
+    // itself (that's always the real value the courier returned).
+    $courierToneClass = function (?string $status): string {
+        $status = strtolower($status ?? '');
+        if (str_contains($status, 'deliver')) return 'bg-leaf/10 text-leafdk';
+        if (str_contains($status, 'cancel') || str_contains($status, 'return')) return 'bg-red-50 text-red-700';
+        if ($status === '') return 'bg-ink/5 text-mute';
+        return 'bg-amber/15 text-ink';
+    };
 @endphp
 
 {{-- mobile: order cards --}}
@@ -78,7 +89,18 @@
                     <p class="font-semibold text-sm text-leaf break-words">{{ $order->order_number }}</p>
                     <p class="text-xs text-mute mt-0.5">{{ $order->order_date?->format('d M, Y') ?? $order->created_at->format('d M, h:i A') }}</p>
                 </div>
-                <span class="shrink-0 px-2.5 py-1 rounded-pill text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span>
+                @if ($order->courier_consignment_id)
+                    {{-- Dispatched: real Steadfast/Pathao status + inline refresh, replacing the internal-status badge here only (order->status itself is untouched). --}}
+                    <div class="shrink-0 flex items-center gap-1" data-courier-row="{{ $order->id }}">
+                        <span class="px-2.5 py-1 rounded-pill text-xs font-semibold courier-status-badge {{ $courierToneClass($order->courier_status) }}">{{ $order->courier_status ?: 'সিঙ্ক হয়নি' }}</span>
+                        <button type="button" onclick="refreshCourierRow({{ $order->id }}, this, event)"
+                                class="courier-refresh-btn w-6 h-6 flex items-center justify-center rounded-btn text-mute hover:text-ink hover:bg-ink/5 transition" title="রিফ্রেশ করুন">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                @else
+                    <span class="shrink-0 px-2.5 py-1 rounded-pill text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span>
+                @endif
             </div>
 
             <div class="mt-2.5 min-w-0">
@@ -140,7 +162,19 @@
                     </span>
                 </td>
                 <td class="px-4 py-3 font-semibold">{{ number_format($order->total) }}৳</td>
-                <td class="px-4 py-3"><span class="px-2.5 py-1 rounded-pill text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span></td>
+                <td class="px-4 py-3">
+                    @if ($order->courier_consignment_id)
+                        <div class="flex items-center gap-1" data-courier-row="{{ $order->id }}">
+                            <span class="px-2.5 py-1 rounded-pill text-xs font-semibold courier-status-badge {{ $courierToneClass($order->courier_status) }}">{{ $order->courier_status ?: 'সিঙ্ক হয়নি' }}</span>
+                            <button type="button" onclick="refreshCourierRow({{ $order->id }}, this, event)"
+                                    class="courier-refresh-btn w-6 h-6 flex items-center justify-center rounded-btn text-mute hover:text-ink hover:bg-ink/5 transition" title="রিফ্রেশ করুন">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    @else
+                        <span class="px-2.5 py-1 rounded-pill text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span>
+                    @endif
+                </td>
                 <td class="px-4 py-3 text-xs text-mute">{{ $order->order_date?->format('d M, Y') ?? $order->created_at->format('d M, h:i A') }}</td>
                 <td class="px-4 py-3">
                     <button type="button" onclick="quickFraudCheck({{ $order->id }}, '{{ $order->customer_phone }}', this)"
@@ -193,6 +227,60 @@
 
         const map = { new: '🆕 নতুন', safe: '✅ নিরাপদ', risky: '⚠️ ঝুঁকি', danger: '🚫 বিপজ্জনক', error: '⚠️ সমস্যা', unconfigured: '⚠️ সেট নেই' };
         btn.textContent = (res && map[res.verdict]) || 'এরর';
+    }
+
+    // Same tone heuristic as the server's $courierToneClass (and Flutter's
+    // _CourierStatusChip) — only ever applied to a real synced status
+    // string, never an invented one.
+    function courierToneClass(status) {
+        const s = (status || '').toLowerCase();
+        if (s.includes('deliver')) return 'bg-leaf/10 text-leafdk';
+        if (s.includes('cancel') || s.includes('return')) return 'bg-red-50 text-red-700';
+        if (s === '') return 'bg-ink/5 text-mute';
+        return 'bg-amber/15 text-ink';
+    }
+
+    const courierRefreshUrlTemplate = '{{ route('tenant.orders.courier.refresh', ['order' => '__ORDER_ID__']) }}';
+
+    // Triggers a real, immediate Steadfast/Pathao status sync for one row
+    // (Tenant\CourierController::refreshStatus(), the same endpoint/service
+    // the order-detail page's refresh form already uses — just called here
+    // via fetch instead of a full-page form submit) and patches just that
+    // row's badge in place.
+    async function refreshCourierRow(orderId, btn, event) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.classList.add('animate-spin');
+
+        // Both the mobile card and desktop table row render for every
+        // order (CSS just hides whichever doesn't match the viewport) — a
+        // refresh must patch both, not just whichever one this button lives in.
+        const rows = document.querySelectorAll(`[data-courier-row="${orderId}"]`);
+
+        try {
+            const res = await fetch(courierRefreshUrlTemplate.replace('__ORDER_ID__', orderId), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+            });
+            const data = await res.json().catch(() => null);
+
+            if (res.ok && data && data.ok) {
+                rows.forEach(row => {
+                    const badge = row.querySelector('.courier-status-badge');
+                    badge.textContent = data.courier_status || 'সিঙ্ক হয়নি';
+                    badge.className = 'px-2.5 py-1 rounded-pill text-xs font-semibold courier-status-badge ' + courierToneClass(data.courier_status);
+                });
+            } else {
+                btn.title = (data && data.message) || 'রিফ্রেশ করা যায়নি';
+            }
+        } catch (e) {
+            btn.title = 'নেটওয়ার্ক সমস্যা — আবার চেষ্টা করুন';
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('animate-spin');
+        }
     }
 </script>
 @endpush

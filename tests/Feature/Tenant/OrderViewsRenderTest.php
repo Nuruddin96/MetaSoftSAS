@@ -74,6 +74,42 @@ class OrderViewsRenderTest extends TestCase
         $searched->assertDontSee('Fatema Begum');
     }
 
+    /** Web order list — courier status must appear directly in the row once dispatched, internal status otherwise (correction task item 2). */
+    public function test_orders_index_shows_courier_status_and_refresh_for_dispatched_orders_only(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+
+        $notDispatched = Order::create([
+            'tenant_id' => $tenant->id, 'source' => 'web', 'channel' => 'website',
+            'customer_name' => 'Karim Uddin', 'customer_phone' => '01711223344',
+            'status' => 'pending', 'subtotal' => 500, 'total' => 550,
+        ]);
+
+        $dispatched = Order::create([
+            'tenant_id' => $tenant->id, 'source' => 'messenger', 'channel' => 'facebook',
+            'messenger_psid' => 'psid-list-2',
+            'customer_name' => 'Fatema Begum', 'customer_phone' => '01899887766',
+            'status' => 'processing', 'subtotal' => 1200, 'total' => 1260,
+            'courier_provider' => 'steadfast', 'courier_consignment_id' => 'CS-1',
+            'courier_tracking_code' => 'TRK-1', 'courier_status' => 'in_transit',
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')->get($this->panelUrl($tenant, 'orders'));
+
+        $response->assertOk();
+        // Real synced courier status shown verbatim for the dispatched order.
+        $response->assertSee('in_transit');
+        // Internal status label still shown for the non-dispatched order.
+        $response->assertSee('পেন্ডিং');
+        // Per-row refresh action wired to the same real refresh endpoint the order-detail page already uses.
+        $response->assertSee('refreshCourierRow('.$dispatched->id, false);
+        $response->assertSeeText('অর্ডার'); // sanity: page still renders normally
+        $this->assertStringNotContainsString('refreshCourierRow('.$notDispatched->id.',', $response->getContent(),
+            'a never-dispatched order must never get a courier refresh control');
+    }
+
     public function test_order_show_renders_with_items_courier_and_discount(): void
     {
         $tenant = $this->makeTenant();
