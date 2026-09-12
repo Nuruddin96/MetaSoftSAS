@@ -72,6 +72,12 @@ class OrderController extends Controller
             // division_id via DeliveryChargeService below; a client can no
             // longer influence the charged amount by submitting a value.
             'discount' => 'nullable|numeric|min:0',
+            // Mirrors Api\Mobile\OrderController's existing `additional_amount`
+            // field (chunk55.sql, OrderCreationService) — mobile already
+            // accepts and totals this; the web New Order form previously had
+            // no equivalent, so this column always saved as its 0 default
+            // for every web-created order.
+            'additional_amount' => 'nullable|numeric|min:0',
             'note' => 'nullable|string|max:500',
             'variant_ids' => 'required|array|min:1',
             'variant_ids.*' => 'required|exists:product_variants,id',
@@ -101,6 +107,7 @@ class OrderController extends Controller
 
             $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
             $discount = min((float) ($data['discount'] ?? 0), $subtotal);
+            $additionalAmount = (float) ($data['additional_amount'] ?? 0);
             $deliveryCharge = $deliveryChargeService->calculate($divisionId);
 
             $order = Order::create([
@@ -115,8 +122,9 @@ class OrderController extends Controller
                 'upazila_id' => $data['upazila_id'] ?? null,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
+                'additional_amount' => $additionalAmount,
                 'delivery_charge' => $deliveryCharge,
-                'total' => $subtotal - $discount + $deliveryCharge,
+                'total' => $subtotal - $discount + $additionalAmount + $deliveryCharge,
                 'payment_method' => $data['payment_method'],
                 'status' => 'confirmed',
                 'confirmed_at' => now(),

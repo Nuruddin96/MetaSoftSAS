@@ -31,6 +31,8 @@ class DashboardController extends Controller
             'new_incomplete' => $summary['new_incomplete'],
             'total_products' => $summary['total_products'],
             'advertising_balance' => $summary['advertising_balance'],
+            'today_additional_cost' => $summary['today_additional_cost'],
+            'courier_balances' => $summary['courier_balances'],
         ]);
     }
 }

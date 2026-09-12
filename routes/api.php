@@ -84,6 +84,7 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('customers/{customer}', [CustomerController::class, 'show'])->whereNumber('customer');
         Route::post('customers/{customer}/due', [CustomerController::class, 'due'])->whereNumber('customer');
         Route::post('customers/{customer}/due/add', [CustomerController::class, 'addDue'])->whereNumber('customer');
+        Route::post('customers/bulk-messenger', [CustomerController::class, 'bulkMessenger']);
 
         Route::get('reference/divisions', [ReferenceDataController::class, 'divisions']);
         Route::get('reference/districts', [ReferenceDataController::class, 'districts']);
@@ -279,6 +280,12 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('categories', [CategoryController::class, 'index']);
         Route::post('categories', [CategoryController::class, 'store']);
         Route::patch('categories/{category}', [CategoryController::class, 'update'])->whereNumber('category');
+        // Same route, POST instead of PATCH — PHP never populates $_FILES
+        // for a PATCH request body (multipart bodies are only parsed for
+        // POST), so an image-carrying update must go through this one
+        // instead. Mirrors product-catalog/{product}'s identical PATCH+POST
+        // pair for the same reason (see that route's neighboring comment).
+        Route::post('categories/{category}', [CategoryController::class, 'update'])->whereNumber('category');
         Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->whereNumber('category');
 
         // Product Attributes — new, additive vocabulary layer (Color/Size/

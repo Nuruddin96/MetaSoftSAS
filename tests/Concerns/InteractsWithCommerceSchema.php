@@ -511,6 +511,7 @@ trait InteractsWithCommerceSchema
                 $table->string('courier_consignment_id', 100)->nullable();
                 $table->string('courier_tracking_code', 100)->nullable();
                 $table->string('courier_status', 50)->nullable();
+                $table->timestamp('courier_status_checked_at')->nullable();
                 $table->integer('fraud_score')->nullable();
                 $table->json('fraud_summary')->nullable();
                 $table->string('fb_event_id', 64)->nullable();

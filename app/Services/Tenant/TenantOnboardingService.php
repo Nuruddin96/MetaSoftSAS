@@ -101,7 +101,14 @@ class TenantOnboardingService
      */
     public function seedDefaultCategories(Tenant $tenant, BusinessType $businessType): int
     {
-        if (Category::count() > 0) {
+        // The `Category::count() > 0` guard alone isn't enough: a tenant
+        // that finished onboarding and then deleted every seeded category
+        // (the normal "I don't want the defaults" flow) would have a count
+        // of 0 again, and storeBusinessType() has no route-level guard
+        // against being re-submitted post-onboarding — without this second
+        // check that combination silently resurrects the very categories
+        // the tenant just deleted.
+        if (Category::count() > 0 || $tenant->onboarding_completed_at !== null) {
             return 0;
         }
 

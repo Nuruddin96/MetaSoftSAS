@@ -107,6 +107,10 @@
                         @endif
                         <tr><td colspan="2" class="px-5 py-2 text-right text-mute">ডেলিভারি চার্জ</td>
                             <td class="px-5 py-2 text-right whitespace-nowrap">{{ number_format($order->delivery_charge) }}৳</td></tr>
+                        @if ($order->additional_amount > 0)
+                        <tr><td colspan="2" class="px-5 py-2 text-right text-mute">অতিরিক্ত খরচ</td>
+                            <td class="px-5 py-2 text-right whitespace-nowrap">{{ number_format($order->additional_amount) }}৳</td></tr>
+                        @endif
                         <tr class="font-bold text-base"><td colspan="2" class="px-5 py-3 text-right">মোট</td>
                             <td class="px-5 py-3 text-right whitespace-nowrap">{{ number_format($order->total) }}৳</td></tr>
                         </tbody>
@@ -132,6 +136,9 @@
                         <div class="px-4 py-2 flex justify-between text-sm text-mute"><span>ডিসকাউন্ট</span><span>-{{ number_format($order->discount) }}৳</span></div>
                     @endif
                     <div class="px-4 py-2 flex justify-between text-sm text-mute"><span>ডেলিভারি চার্জ</span><span>{{ number_format($order->delivery_charge) }}৳</span></div>
+                    @if ($order->additional_amount > 0)
+                        <div class="px-4 py-2 flex justify-between text-sm text-mute"><span>অতিরিক্ত খরচ</span><span>{{ number_format($order->additional_amount) }}৳</span></div>
+                    @endif
                     <div class="px-4 py-3 flex justify-between font-bold text-base"><span>মোট</span><span>{{ number_format($order->total) }}৳</span></div>
                 </div>
             </x-ui.card>
@@ -255,6 +262,9 @@
                     ট্র্যাকিং: {{ $order->courier_tracking_code }}</p>
                 @if ($order->courier_status)
                     <p class="text-xs text-mute mt-2 pt-2 border-t border-ink/10">কুরিয়ার স্ট্যাটাস: <span class="font-medium text-ink">{{ $order->courier_status }}</span></p>
+                    @if ($order->courier_status_checked_at)
+                        <p class="text-xs text-mute/70 mt-0.5">সর্বশেষ আপডেট: {{ $order->courier_status_checked_at->diffForHumans() }}</p>
+                    @endif
                 @endif
                 <form method="POST" action="{{ route('tenant.orders.courier.refresh', $order) }}" class="mt-2">
                     @csrf

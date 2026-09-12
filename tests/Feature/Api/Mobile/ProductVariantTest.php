@@ -407,6 +407,67 @@ class ProductVariantTest extends TestCase
         $this->assertEquals(350.0, $variants[$added->json('id')]['purchase_price']);
     }
 
+    /**
+     * Mobile product creation cost/regular price gap: the SIMPLE (no
+     * variants[] array) create path previously dropped top-level
+     * purchase_price/compare_at_price entirely — they were validated
+     * nowhere and never reached the auto-created "Default" variant, even
+     * though the per-row variants[] path already supported them. This
+     * locks in the fix in ProductCatalogController::store().
+     */
+    public function test_simple_product_create_saves_top_level_purchase_and_compare_at_price(): void
+    {
+        $this->actingAsTenantUser();
+
+        $created = $this->postJson('/api/mobile/v1/product-catalog', [
+            'name' => 'Mug',
+            'selling_price' => 500,
+            'purchase_price' => 300,
+            'compare_at_price' => 650,
+        ])->assertCreated();
+
+        $this->assertEquals(300.0, $created->json('variants.0.purchase_price'));
+        $this->assertEquals(650.0, $created->json('variants.0.compare_at_price'));
+    }
+
+    /** Same gap on the update side — a simple product's edit form must be able to change cost/compare-at price too, not just selling price. */
+    public function test_simple_product_update_saves_top_level_purchase_and_compare_at_price(): void
+    {
+        $this->actingAsTenantUser();
+
+        $created = $this->postJson('/api/mobile/v1/product-catalog', [
+            'name' => 'Mug', 'selling_price' => 500, 'purchase_price' => 300,
+        ])->assertCreated();
+        $productId = $created->json('id');
+
+        $this->postJson("/api/mobile/v1/product-catalog/{$productId}", [
+            'name' => 'Mug', 'selling_price' => 550, 'purchase_price' => 320, 'compare_at_price' => 700,
+        ])->assertOk();
+
+        $show = $this->getJson("/api/mobile/v1/product-catalog/{$productId}")->assertOk();
+        $this->assertEquals(320.0, $show->json('variants.0.purchase_price'));
+        $this->assertEquals(700.0, $show->json('variants.0.compare_at_price'));
+    }
+
+    /** Omitting purchase_price/compare_at_price on update must not erase previously-saved values. */
+    public function test_simple_product_update_without_price_fields_leaves_them_untouched(): void
+    {
+        $this->actingAsTenantUser();
+
+        $created = $this->postJson('/api/mobile/v1/product-catalog', [
+            'name' => 'Mug', 'selling_price' => 500, 'purchase_price' => 300, 'compare_at_price' => 650,
+        ])->assertCreated();
+        $productId = $created->json('id');
+
+        $this->postJson("/api/mobile/v1/product-catalog/{$productId}", [
+            'name' => 'Mug (renamed)', 'selling_price' => 500,
+        ])->assertOk();
+
+        $show = $this->getJson("/api/mobile/v1/product-catalog/{$productId}")->assertOk();
+        $this->assertEquals(300.0, $show->json('variants.0.purchase_price'));
+        $this->assertEquals(650.0, $show->json('variants.0.compare_at_price'));
+    }
+
     /** Web/Flutter parity project — mirrors Tenant\ProductController::reorderImages(); mobile had no reorder endpoint before this. */
     public function test_gallery_images_can_be_reordered(): void
     {

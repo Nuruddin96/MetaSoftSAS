@@ -119,7 +119,16 @@ class ProductCatalogController extends Controller
                 $rows = ! empty($data['variants'])
                     ? $data['variants']
                     : array_map(
-                        fn ($name) => ['name' => $name, 'selling_price' => $data['selling_price'], 'sku' => null],
+                        fn ($name) => [
+                            'name' => $name,
+                            'selling_price' => $data['selling_price'],
+                            'sku' => null,
+                            // Top-level cost/compare-at price (simple/no-variant
+                            // product form) — previously dropped here, so they
+                            // never reached the variant row below.
+                            'purchase_price' => $data['purchase_price'] ?? null,
+                            'compare_at_price' => $data['compare_at_price'] ?? null,
+                        ],
                         ! empty($data['variant_names']) ? $data['variant_names'] : [null],
                     );
 
@@ -224,6 +233,8 @@ class ProductCatalogController extends Controller
                     $variant->update([
                         'selling_price' => $data['selling_price'],
                         'sku' => $data['sku'] ?? $variant->sku,
+                        'purchase_price' => array_key_exists('purchase_price', $data) ? $data['purchase_price'] : $variant->purchase_price,
+                        'compare_at_price' => array_key_exists('compare_at_price', $data) ? $data['compare_at_price'] : $variant->compare_at_price,
                     ]);
                 }
             });
@@ -255,6 +266,13 @@ class ProductCatalogController extends Controller
             // Only required when the caller isn't using the new per-row
             // `variants[]` path below (each row supplies its own price).
             'selling_price' => 'required_without:variants|nullable|numeric|min:0.01',
+            // Web/Flutter parity project — the simple/no-variant product
+            // form previously had no cost/compare-at price fields at all
+            // (only the per-row `variants[]` path did); these are their
+            // top-level equivalents for that simple path, same names/rules
+            // as the web form's own `purchase_price`/`compare_at_price`.
+            'purchase_price' => 'nullable|numeric|min:0',
+            'compare_at_price' => 'nullable|numeric|gt:selling_price',
             'sku' => ['nullable', 'string', 'max:80', Rule::unique('product_variants', 'sku')->where('tenant_id', $tenant->id)],
             'initial_stock' => 'nullable|integer|min:0',
             'variant_names' => 'nullable|array|max:20',
@@ -290,6 +308,8 @@ class ProductCatalogController extends Controller
             'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')->where('tenant_id', $tenant->id)],
             'description' => 'nullable|string|max:2000',
             'selling_price' => 'nullable|numeric|min:0.01',
+            'purchase_price' => 'nullable|numeric|min:0',
+            'compare_at_price' => 'nullable|numeric|gt:selling_price',
             'sku' => ['nullable', 'string', 'max:80', Rule::unique('product_variants', 'sku')->where('tenant_id', $tenant->id)->ignore($currentVariantId)],
             'is_active' => 'nullable|boolean',
             'thumbnail' => 'nullable|image|max:4096',

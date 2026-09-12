@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\CustomerResource;
 use App\Models\Customer;
 use App\Services\Api\CustomerDueService;
+use App\Services\Messenger\BulkMessengerSendService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -116,5 +117,38 @@ class CustomerController extends Controller
         }
 
         return response()->json((new CustomerResource($customer))->toArray($request));
+    }
+
+    /**
+     * Mirrors Tenant\CustomerController::bulkMessenger() exactly, same
+     * BulkMessengerSendService — see that controller's docblock for the
+     * full reasoning (PSID resolution via orders.messenger_psid, no
+     * unofficial API, never reports a failed send as successful).
+     */
+    public function bulkMessenger(Request $request, BulkMessengerSendService $service)
+    {
+        $data = $request->validate([
+            'customer_ids' => 'required|array|min:1',
+            'customer_ids.*' => 'required|integer',
+            'message' => 'nullable|string|max:1000',
+            'image' => 'nullable|image|max:8192',
+        ]);
+
+        if (! ($data['message'] ?? null) && ! $request->hasFile('image')) {
+            return response()->json(['message' => 'মেসেজ অথবা ছবি — অন্তত একটি দিন।'], 422);
+        }
+
+        $results = $service->sendToCustomers(
+            app('currentTenant')->id,
+            array_map('intval', $data['customer_ids']),
+            $data['message'] ?? null,
+            $request->file('image'),
+        );
+
+        return response()->json([
+            'data' => $results,
+            'sent' => collect($results)->where('status', 'sent')->count(),
+            'failed' => collect($results)->where('status', 'failed')->count(),
+        ]);
     }
 }

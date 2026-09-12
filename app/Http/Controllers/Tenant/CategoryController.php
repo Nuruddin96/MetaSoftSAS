@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Services\ImageOptimizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -34,12 +36,16 @@ class CategoryController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:100',
             'parent_id' => $this->parentIdRule($tenant->id),
+            'image' => 'nullable|image|max:4096',
         ]);
 
         Category::create([
             'name' => $data['name'],
             'slug' => Str::slug($data['name']).'-'.Str::lower(Str::random(3)),
             'parent_id' => $data['parent_id'] ?? null,
+            'image_path' => $request->hasFile('image')
+                ? app(ImageOptimizer::class)->storeOptimized($request->file('image'), 'public', 'categories/'.$tenant->id)
+                : null,
         ]);
 
         return back()->with('success', 'ক্যাটাগরি যোগ হয়েছে।');
@@ -54,6 +60,8 @@ class CategoryController extends Controller
             'name' => 'required|string|max:100',
             'parent_id' => $this->parentIdRule($tenant->id, excludeId: $category->id),
             'is_active' => 'sometimes|boolean',
+            'image' => 'nullable|image|max:4096',
+            'remove_image' => 'sometimes|boolean',
         ]);
 
         if (($data['parent_id'] ?? null) !== null && $category->children()->exists()) {
@@ -62,6 +70,19 @@ class CategoryController extends Controller
             ]);
         }
 
+        if ($request->hasFile('image')) {
+            if ($category->image_path) {
+                Storage::disk('public')->delete($category->image_path);
+            }
+            $data['image_path'] = app(ImageOptimizer::class)->storeOptimized($request->file('image'), 'public', 'categories/'.$tenant->id);
+        } elseif ($request->boolean('remove_image')) {
+            if ($category->image_path) {
+                Storage::disk('public')->delete($category->image_path);
+            }
+            $data['image_path'] = null;
+        }
+        unset($data['remove_image'], $data['image']);
+
         $category->update($data);
 
         return back()->with('success', 'ক্যাটাগরি আপডেট হয়েছে।');
@@ -69,6 +90,9 @@ class CategoryController extends Controller
 
     public function destroy(Category $category)
     {
+        if ($category->image_path) {
+            Storage::disk('public')->delete($category->image_path);
+        }
         $category->delete();
 
         return back()->with('success', 'ক্যাটাগরি মুছে ফেলা হয়েছে।');
