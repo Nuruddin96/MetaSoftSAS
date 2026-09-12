@@ -104,9 +104,18 @@ class FacebookConnectController extends Controller
             return back()->with('error', 'এই Page-টি আপনার Facebook অ্যাকাউন্টে পাওয়া যায়নি।');
         }
 
+        // is_active=1 is deliberate: a Page a different tenant explicitly
+        // disconnected (or whose owning tenant was permanently deleted —
+        // BelongsToTenant's tenants FK is ON DELETE CASCADE, so that row
+        // wouldn't even exist anymore) must not go on blocking reconnection
+        // forever. "ONE Page -> max ONE ACTIVE tenant" is the actual rule,
+        // not "ONE Page -> one tenant ever, permanently" — a bare ->exists()
+        // here (ignoring is_active) was the bug: every previously-connected-
+        // then-disconnected Page stayed permanently unclaimable by anyone.
         $claimedByAnotherTenant = FacebookPage::withoutGlobalScopes()
             ->where('page_id', $match['id'])
             ->where('tenant_id', '!=', $tenant->id)
+            ->where('is_active', 1)
             ->exists();
 
         if ($claimedByAnotherTenant) {

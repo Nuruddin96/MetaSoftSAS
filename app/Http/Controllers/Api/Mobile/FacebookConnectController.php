@@ -137,9 +137,14 @@ class FacebookConnectController extends Controller
             return response()->json(['message' => 'এই Page-টি আপনার Facebook অ্যাকাউন্টে পাওয়া যায়নি।'], 422);
         }
 
+        // is_active=1 is deliberate — see Tenant\FacebookConnectController::
+        // connect()'s identical check for the full explanation. A Page a
+        // different (or now-deleted) tenant previously disconnected must
+        // not go on blocking reconnection forever.
         $claimedByAnotherTenant = FacebookPage::withoutGlobalScopes()
             ->where('page_id', $match['id'])
             ->where('tenant_id', '!=', $tenant->id)
+            ->where('is_active', 1)
             ->exists();
 
         if ($claimedByAnotherTenant) {
