@@ -585,7 +585,11 @@ trait InteractsWithCommerceSchema
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
                 $table->string('key', 100);
-                $table->string('value', 255)->nullable();
+                // TEXT, matching database/sql/schema.sql's real column —
+                // was VARCHAR(255) here, fine for the short boolean/charge
+                // values this table mostly holds, but too small for
+                // ai_custom_instructions' real 5000-character cap.
+                $table->text('value')->nullable();
                 $table->timestamps();
             });
         }
