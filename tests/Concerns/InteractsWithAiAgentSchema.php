@@ -96,7 +96,9 @@ trait InteractsWithAiAgentSchema
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
                 $table->string('key', 100);
-                $table->string('value', 255)->nullable();
+                // TEXT, matching database/sql/schema.sql's real column —
+                // ai_custom_instructions needs up to 5000 characters.
+                $table->text('value')->nullable();
                 $table->timestamps();
             });
         }
