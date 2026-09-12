@@ -41,6 +41,7 @@ class OrderResource extends JsonResource
             'courier_consignment_id' => $this->courier_consignment_id,
             'courier_tracking_code' => $this->courier_tracking_code,
             'courier_status' => $this->courier_status,
+            'courier_status_checked_at' => optional($this->courier_status_checked_at)->toIso8601String(),
             'note' => $this->note,
             'confirmed_at' => optional($this->confirmed_at)->toIso8601String(),
             'delivered_at' => optional($this->delivered_at)->toIso8601String(),

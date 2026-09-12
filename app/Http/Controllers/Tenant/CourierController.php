@@ -59,6 +59,7 @@ class CourierController extends Controller
             'courier_consignment_id' => $result['consignment_id'],
             'courier_tracking_code' => $result['tracking_code'],
             'courier_status' => 'pending',
+            'courier_status_checked_at' => now(),
             'status' => $order->status === 'pending' ? 'processing' : $order->status,
         ]);
 
@@ -95,7 +96,7 @@ class CourierController extends Controller
             return back()->with('error', 'স্ট্যাটাস রিফ্রেশ করা যায়নি: '.Str::limit($e->getMessage(), 120));
         }
 
-        $order->update(['courier_status' => $status]);
+        $order->update(['courier_status' => $status, 'courier_status_checked_at' => now()]);
 
         return back()->with('success', 'কুরিয়ার স্ট্যাটাস আপডেট হয়েছে: '.$status);
     }

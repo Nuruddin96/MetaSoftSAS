@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\DueLedger;
+use App\Services\Messenger\BulkMessengerSendService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -103,5 +104,41 @@ class CustomerController extends Controller
         });
 
         return back()->with('success', number_format($amount).'৳ আদায় হয়েছে।');
+    }
+
+    /**
+     * Bulk Messenger send — Customers → All Customers multi-select. Reuses
+     * BulkMessengerSendService (same one the mobile API endpoint calls) so
+     * the send logic lives in exactly one place. Never reports a failed
+     * send as successful — the flash message always states the real
+     * sent/failed split, and every per-recipient reason is shown.
+     */
+    public function bulkMessenger(Request $request, BulkMessengerSendService $service)
+    {
+        $data = $request->validate([
+            'customer_ids' => 'required|array|min:1',
+            'customer_ids.*' => 'required|integer',
+            'message' => 'nullable|string|max:1000',
+            'image' => 'nullable|image|max:8192',
+        ]);
+
+        if (! ($data['message'] ?? null) && ! $request->hasFile('image')) {
+            return back()->with('error', 'মেসেজ অথবা ছবি — অন্তত একটি দিন।');
+        }
+
+        $results = $service->sendToCustomers(
+            app('currentTenant')->id,
+            array_map('intval', $data['customer_ids']),
+            $data['message'] ?? null,
+            $request->file('image'),
+        );
+
+        $sent = collect($results)->where('status', 'sent')->count();
+        $failed = collect($results)->where('status', 'failed')->count();
+
+        return back()->with(
+            $failed === 0 ? 'success' : 'error',
+            "{$sent} জনকে মেসেজ পাঠানো হয়েছে".($failed > 0 ? ", {$failed} জনের কাছে পাঠানো যায়নি" : '').'।'
+        )->with('bulkMessengerResults', $results);
     }
 }

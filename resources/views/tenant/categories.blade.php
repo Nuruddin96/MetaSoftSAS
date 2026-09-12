@@ -5,7 +5,7 @@
 @section('content')
 <h1 class="font-disp font-bold text-2xl mb-6">ক্যাটাগরি</h1>
 
-<form method="POST" action="{{ route('tenant.categories.store') }}" class="flex flex-wrap gap-3 mb-6 max-w-2xl">
+<form method="POST" action="{{ route('tenant.categories.store') }}" enctype="multipart/form-data" class="flex flex-wrap items-center gap-3 mb-6 max-w-2xl">
     @csrf
     <input name="name" required placeholder="নতুন ক্যাটাগরি/সাব-ক্যাটাগরির নাম"
            class="flex-1 min-w-[200px] rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
@@ -15,6 +15,8 @@
             <option value="{{ $top->id }}">— "{{ $top->name }}"-এর সাব-ক্যাটাগরি</option>
         @endforeach
     </select>
+    <input type="file" name="image" accept="image/*"
+           class="text-xs border border-dashed border-ink/25 rounded-btn px-2 py-2 cursor-pointer hover:bg-paper transition file:mr-2 file:px-2 file:py-1 file:rounded-btn file:border-0 file:bg-ink/5 file:text-xs file:font-semibold file:cursor-pointer">
     <x-ui.button type="submit" variant="accent" size="sm">যোগ করুন</x-ui.button>
 </form>
 
@@ -23,7 +25,13 @@
         <div class="border-b border-ink/5 last:border-0">
             <div class="flex items-center justify-between px-4 py-3">
                 <span class="flex items-center gap-2">
-                    <i data-lucide="folder" class="w-4 h-4 text-mute"></i>
+                    @if ($cat->image_path)
+                        <img src="{{ asset('storage/'.$cat->image_path) }}" class="w-8 h-8 rounded-btn object-cover border border-ink/10" loading="lazy" alt="">
+                    @else
+                        <span class="w-8 h-8 rounded-btn bg-paper flex items-center justify-center shrink-0">
+                            <i data-lucide="folder" class="w-4 h-4 text-mute"></i>
+                        </span>
+                    @endif
                     {{ $cat->name }} <span class="text-mute text-xs">({{ $cat->products_count }}টি প্রোডাক্ট)</span>
                 </span>
                 <span class="flex items-center gap-3 text-xs">
@@ -36,10 +44,17 @@
                 </span>
             </div>
             <div id="edit-cat-{{ $cat->id }}" class="hidden px-4 pb-3">
-                <form method="POST" action="{{ route('tenant.categories.update', $cat) }}" class="flex flex-wrap gap-2">
+                <form method="POST" action="{{ route('tenant.categories.update', $cat) }}" enctype="multipart/form-data" class="flex flex-wrap items-center gap-2">
                     @csrf @method('PUT')
                     <input name="name" value="{{ $cat->name }}" required
                            class="flex-1 min-w-[160px] rounded-btn border border-ink/15 px-3 py-2 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                    <input type="file" name="image" accept="image/*"
+                           class="text-xs border border-dashed border-ink/25 rounded-btn px-2 py-1.5 cursor-pointer hover:bg-paper transition file:mr-2 file:px-2 file:py-1 file:rounded-btn file:border-0 file:bg-ink/5 file:text-xs file:font-semibold file:cursor-pointer">
+                    @if ($cat->image_path)
+                        <label class="flex items-center gap-1 text-xs text-mute">
+                            <input type="checkbox" name="remove_image" value="1"> ছবি সরান
+                        </label>
+                    @endif
                     <x-ui.button type="submit" variant="outline" size="sm">সেভ করুন</x-ui.button>
                 </form>
             </div>
@@ -50,6 +65,9 @@
                         <div class="flex items-center justify-between py-2 pr-4 border-t border-ink/5">
                             <span class="flex items-center gap-2 text-[13px]">
                                 <i data-lucide="corner-down-right" class="w-3.5 h-3.5 text-mute"></i>
+                                @if ($child->image_path)
+                                    <img src="{{ asset('storage/'.$child->image_path) }}" class="w-6 h-6 rounded-btn object-cover border border-ink/10" loading="lazy" alt="">
+                                @endif
                                 {{ $child->name }} <span class="text-mute text-xs">({{ $child->products_count ?? 0 }}টি প্রোডাক্ট)</span>
                             </span>
                             <span class="flex items-center gap-3 text-xs">
@@ -62,10 +80,17 @@
                             </span>
                         </div>
                         <div id="edit-cat-{{ $child->id }}" class="hidden pb-2">
-                            <form method="POST" action="{{ route('tenant.categories.update', $child) }}" class="flex flex-wrap gap-2">
+                            <form method="POST" action="{{ route('tenant.categories.update', $child) }}" enctype="multipart/form-data" class="flex flex-wrap items-center gap-2">
                                 @csrf @method('PUT')
                                 <input name="name" value="{{ $child->name }}" required
                                        class="flex-1 min-w-[160px] rounded-btn border border-ink/15 px-3 py-2 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                                <input type="file" name="image" accept="image/*"
+                                       class="text-xs border border-dashed border-ink/25 rounded-btn px-2 py-1.5 cursor-pointer hover:bg-paper transition file:mr-2 file:px-2 file:py-1 file:rounded-btn file:border-0 file:bg-ink/5 file:text-xs file:font-semibold file:cursor-pointer">
+                                @if ($child->image_path)
+                                    <label class="flex items-center gap-1 text-xs text-mute">
+                                        <input type="checkbox" name="remove_image" value="1"> ছবি সরান
+                                    </label>
+                                @endif
                                 <x-ui.button type="submit" variant="outline" size="sm">সেভ করুন</x-ui.button>
                             </form>
                         </div>

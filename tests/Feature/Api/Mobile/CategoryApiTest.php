@@ -4,6 +4,8 @@ namespace Tests\Feature\Api\Mobile;
 
 use App\Models\Category;
 use App\Models\Product;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\Concerns\InteractsWithApiSchema;
 use Tests\TestCase;
@@ -136,5 +138,97 @@ class CategoryApiTest extends TestCase
     public function test_unauthenticated_request_is_rejected(): void
     {
         $this->getJson('/api/mobile/v1/categories')->assertUnauthorized();
+    }
+
+    /** Category image/icon feature — create with an image, exposed as image_url on the storefront-facing present(). */
+    public function test_create_category_with_an_image_exposes_image_url(): void
+    {
+        Storage::fake('public');
+        $tenant = $this->makeTenant();
+        Sanctum::actingAs($this->makeUser($tenant->id));
+
+        $response = $this->post('/api/mobile/v1/categories', [
+            'name' => 'Skincare',
+            'image' => UploadedFile::fake()->image('skincare.jpg'),
+        ]);
+
+        $response->assertCreated();
+        $this->assertNotNull($response->json('image_url'));
+        $category = Category::find($response->json('id'));
+        Storage::disk('public')->assertExists($category->image_path);
+    }
+
+    public function test_category_without_an_image_has_a_null_image_url(): void
+    {
+        $tenant = $this->makeTenant();
+        Sanctum::actingAs($this->makeUser($tenant->id));
+
+        $response = $this->postJson('/api/mobile/v1/categories', ['name' => 'No Image Category']);
+
+        $response->assertCreated()->assertJsonPath('image_url', null);
+    }
+
+    /** Update via the POST variant of the route (multipart bodies aren't parsed on PATCH) replaces the image and deletes the old file. */
+    public function test_update_category_replaces_the_image_and_deletes_the_old_file(): void
+    {
+        Storage::fake('public');
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        Sanctum::actingAs($user);
+
+        $created = $this->post('/api/mobile/v1/categories', [
+            'name' => 'Skincare', 'image' => UploadedFile::fake()->image('old.jpg'),
+        ])->assertCreated();
+        $oldPath = Category::find($created->json('id'))->image_path;
+
+        $updated = $this->post('/api/mobile/v1/categories/'.$created->json('id'), [
+            'name' => 'Skincare', 'image' => UploadedFile::fake()->image('new.jpg'),
+        ])->assertOk();
+
+        $newPath = Category::find($created->json('id'))->image_path;
+        $this->assertNotSame($oldPath, $newPath);
+        Storage::disk('public')->assertMissing($oldPath);
+        Storage::disk('public')->assertExists($newPath);
+        $this->assertNotNull($updated->json('image_url'));
+    }
+
+    /** remove_image (no new file) clears image_path and deletes the stored file, via the plain PATCH route. */
+    public function test_update_category_can_remove_the_image(): void
+    {
+        Storage::fake('public');
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        Sanctum::actingAs($user);
+
+        $created = $this->post('/api/mobile/v1/categories', [
+            'name' => 'Skincare', 'image' => UploadedFile::fake()->image('old.jpg'),
+        ])->assertCreated();
+        $oldPath = Category::find($created->json('id'))->image_path;
+
+        $updated = $this->patchJson('/api/mobile/v1/categories/'.$created->json('id'), [
+            'name' => 'Skincare', 'remove_image' => true,
+        ])->assertOk();
+
+        Storage::disk('public')->assertMissing($oldPath);
+        $this->assertNull($updated->json('image_url'));
+        $this->assertNull(Category::find($created->json('id'))->image_path);
+    }
+
+    /** destroy() must clean up the stored image file too, not just the DB row. */
+    public function test_delete_category_deletes_its_image_file(): void
+    {
+        Storage::fake('public');
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        Sanctum::actingAs($user);
+
+        $created = $this->post('/api/mobile/v1/categories', [
+            'name' => 'Skincare', 'image' => UploadedFile::fake()->image('old.jpg'),
+        ])->assertCreated();
+        $path = Category::find($created->json('id'))->image_path;
+
+        $this->deleteJson('/api/mobile/v1/categories/'.$created->json('id'))->assertOk();
+
+        Storage::disk('public')->assertMissing($path);
     }
 }

@@ -11,6 +11,9 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\Tenant;
 use App\Services\Advertising\AdvertisingBalanceService;
+use App\Services\Courier\CourierManager;
+use App\Services\Courier\SteadfastService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -96,6 +99,50 @@ class DashboardSummaryService
             'advertising_balance' => $this->advertising->isEnabled($tenant)
                 ? (($balance = $this->advertising->balance($tenant->id)) !== null ? (float) $balance : null)
                 : null,
+            // "Add Cost" dashboard widget — the sum of today's per-order
+            // additional_amount entries (see chunk55.sql / the New Order
+            // "অতিরিক্ত খরচ" field), not a separate feature/table of its own.
+            'today_additional_cost' => (float) Order::where('tenant_id', $tenantId)
+                ->where('created_at', '>=', $today)->sum('additional_amount'),
+            'courier_balances' => $this->courierBalances($tenant),
         ];
+    }
+
+    /**
+     * Only Steadfast has a real, confirmed balance endpoint in this
+     * codebase (Pathao's status-lookup was already documented elsewhere as
+     * unavailable — CourierDispatchService::refreshStatus()'s own doc
+     * comment — and no balance endpoint for it is used/verified anywhere,
+     * so it's deliberately never attempted here rather than guessed at).
+     * A live Graph-style API call on every dashboard load would be slow
+     * and rate-limit-risky, so this is cached briefly per tenant; a fetch
+     * failure (bad credentials, network) degrades to "just don't show it"
+     * rather than a broken dashboard — never a fabricated ৳0.
+     */
+    protected function courierBalances(Tenant $tenant): array
+    {
+        $service = CourierManager::forProvider('steadfast');
+        if (! $service instanceof SteadfastService) {
+            return [];
+        }
+
+        $cacheKey = "courier_balance_steadfast_{$tenant->id}";
+        $cached = Cache::get($cacheKey);
+        if ($cached !== null) {
+            return [['provider' => 'steadfast', 'balance' => (float) $cached]];
+        }
+
+        try {
+            $balance = $service->getBalance();
+        } catch (\Throwable $e) {
+            // Never cache a failure — a transient network/credential blip
+            // shouldn't hide a real balance for the full cache window; the
+            // next dashboard load just tries again.
+            return [];
+        }
+
+        Cache::put($cacheKey, $balance, now()->addMinutes(15));
+
+        return [['provider' => 'steadfast', 'balance' => (float) $balance]];
     }
 }

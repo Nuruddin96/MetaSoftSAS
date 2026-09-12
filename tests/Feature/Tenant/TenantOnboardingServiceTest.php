@@ -104,6 +104,34 @@ class TenantOnboardingServiceTest extends TestCase
     }
 
     /**
+     * The actual bug this task fixes: a tenant who finished onboarding and
+     * then deleted every seeded default category (Category::count() back to
+     * 0) must never have them resurrected just because storeBusinessType()
+     * gets re-submitted — which has no route-level guard blocking a
+     * completed tenant from reaching it. Only the `Category::count() > 0`
+     * check existed before; this test locks in the second, onboarding-
+     * completion-based guard added in seedDefaultCategories().
+     */
+    public function test_seeding_never_reruns_for_a_tenant_that_already_completed_onboarding(): void
+    {
+        // Default from makeTenant(): onboarding_completed_at is already set,
+        // i.e. exactly the "tenant deleted their default categories after
+        // finishing onboarding" state.
+        $tenant = $this->makeTenant();
+        app()->instance('currentTenant', $tenant);
+
+        $businessType = $this->makeBusinessType();
+        $businessType->categories()->create(['name' => 'Face Care', 'sort_order' => 10]);
+
+        $created = $this->service()->seedDefaultCategories($tenant, $businessType);
+
+        $this->assertSame(0, $created, 'a completed tenant must never have default categories resurrected');
+        $this->assertSame(0, Category::count());
+
+        app()->forgetInstance('currentTenant');
+    }
+
+    /**
      * Catalog Architecture project: CategoryController::store()/update() now
      * accept parent_id (see Category model's parent()/children()), so this
      * gap (documented in the old test this replaces) is closed — a

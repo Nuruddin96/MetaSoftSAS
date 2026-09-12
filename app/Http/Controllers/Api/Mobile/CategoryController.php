@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Services\ImageOptimizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -24,8 +26,10 @@ use Illuminate\Validation\ValidationException;
  * levels (a subcategory can never itself have a parent_id pointing at
  * another subcategory): `parent_id` must reference one of the tenant's own
  * TOP-LEVEL categories, enforced by the `whereNull('parent_id')` clause in
- * [parentIdRule]. `image_path` is still not exposed — no upload endpoint
- * exists for it and adding one is out of scope for this pass.
+ * [parentIdRule]. `image_path` is now read/written here (store/update accept an
+ * optional `image` file, same `ImageOptimizer`-backed pattern
+ * Tenant\ProductController uses for thumbnails) and exposed as `image_url`
+ * in [present] for the storefront image/icon feature.
  */
 class CategoryController extends Controller
 {
@@ -45,12 +49,16 @@ class CategoryController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:100',
             'parent_id' => $this->parentIdRule($tenant->id),
+            'image' => 'nullable|image|max:4096',
         ]);
 
         $category = Category::create([
             'name' => $data['name'],
             'slug' => Str::slug($data['name']).'-'.Str::lower(Str::random(3)),
             'parent_id' => $data['parent_id'] ?? null,
+            'image_path' => $request->hasFile('image')
+                ? app(ImageOptimizer::class)->storeOptimized($request->file('image'), 'public', 'categories/'.$tenant->id)
+                : null,
         ]);
 
         return response()->json($this->present($category), 201);
@@ -73,6 +81,8 @@ class CategoryController extends Controller
                 ...$this->parentIdRule($tenant->id, excludeId: $category->id),
             ],
             'is_active' => 'sometimes|boolean',
+            'image' => 'nullable|image|max:4096',
+            'remove_image' => 'sometimes|boolean',
         ]);
 
         if (array_key_exists('parent_id', $data) && $data['parent_id'] !== null && $category->children()->exists()) {
@@ -80,6 +90,19 @@ class CategoryController extends Controller
                 'parent_id' => ['এই ক্যাটাগরির নিজস্ব সাব-ক্যাটাগরি আছে, তাই এটিকে অন্য কোনো ক্যাটাগরির সাব-ক্যাটাগরি বানানো যাবে না।'],
             ]);
         }
+
+        if ($request->hasFile('image')) {
+            if ($category->image_path) {
+                Storage::disk('public')->delete($category->image_path);
+            }
+            $data['image_path'] = app(ImageOptimizer::class)->storeOptimized($request->file('image'), 'public', 'categories/'.$tenant->id);
+        } elseif ($request->boolean('remove_image')) {
+            if ($category->image_path) {
+                Storage::disk('public')->delete($category->image_path);
+            }
+            $data['image_path'] = null;
+        }
+        unset($data['remove_image'], $data['image']);
 
         $category->update($data);
 
@@ -100,6 +123,9 @@ class CategoryController extends Controller
     {
         $tenant = app('currentTenant');
         $category = Category::where('tenant_id', $tenant->id)->findOrFail($category);
+        if ($category->image_path) {
+            Storage::disk('public')->delete($category->image_path);
+        }
         $category->delete();
 
         return response()->json(['ok' => true]);
@@ -134,6 +160,7 @@ class CategoryController extends Controller
             'product_count' => (int) ($category->products_count ?? 0),
             'parent_id' => $category->parent_id,
             'is_active' => (bool) $category->is_active,
+            'image_url' => $category->image_path ? asset('storage/'.$category->image_path) : null,
         ];
     }
 }

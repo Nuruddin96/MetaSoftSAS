@@ -387,6 +387,7 @@ $tenantRoutes = function () {
             Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
             Route::post('customers/{customer}/due', [CustomerController::class, 'receiveDue'])->name('customers.due.receive');
             Route::post('customers/{customer}/due/add', [CustomerController::class, 'addDue'])->name('customers.due.add');
+            Route::post('customers/bulk-messenger', [CustomerController::class, 'bulkMessenger'])->name('customers.bulk-messenger');
 
             // Incomplete orders
             Route::get('incomplete-orders', [IncompleteOrderController::class, 'index'])->name('incomplete');

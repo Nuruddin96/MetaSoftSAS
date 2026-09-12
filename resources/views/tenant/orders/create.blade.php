@@ -46,13 +46,14 @@
         </div>
         <div>
             <label class="text-sm font-medium">অর্ডারের উৎস</label>
+            @php($selectedChannel = old('channel', request('channel', 'facebook')))
             <select name="channel" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 bg-white">
-                <option value="call" @selected(request('channel')==='call')>📞 কল</option>
-                <option value="facebook" @selected(request('channel')==='facebook')>📘 ফেসবুক</option>
-                <option value="whatsapp" @selected(request('channel')==='whatsapp')>💬 হোয়াটসঅ্যাপ</option>
-                <option value="instagram" @selected(request('channel')==='instagram')>📷 ইনস্টাগ্রাম</option>
-                <option value="website" @selected(request('channel')==='website')>🌐 ওয়েবসাইট</option>
-                <option value="others" @selected(request('channel')==='others')>📦 অন্যান্য</option>
+                <option value="call" @selected($selectedChannel==='call')>📞 কল</option>
+                <option value="facebook" @selected($selectedChannel==='facebook')>📘 ফেসবুক</option>
+                <option value="whatsapp" @selected($selectedChannel==='whatsapp')>💬 হোয়াটসঅ্যাপ</option>
+                <option value="instagram" @selected($selectedChannel==='instagram')>📷 ইনস্টাগ্রাম</option>
+                <option value="website" @selected($selectedChannel==='website')>🌐 ওয়েবসাইট</option>
+                <option value="others" @selected($selectedChannel==='others')>📦 অন্যান্য</option>
             </select>
         </div>
     </x-ui.card>
@@ -67,6 +68,7 @@
         <div class="mt-4 pt-4 border-t border-ink/10 space-y-1.5 text-sm">
             <div class="flex justify-between text-mute"><span>প্রোডাক্ট সাবটোটাল</span><span id="subtotalShow">0৳</span></div>
             <div class="flex justify-between text-mute"><span>ডেলিভারি চার্জ</span><span id="deliveryChargeShow">0৳</span></div>
+            <div class="flex justify-between text-mute"><span>অতিরিক্ত খরচ</span><span id="additionalAmountShow">0৳</span></div>
             <div class="flex justify-between font-bold text-base pt-1.5 border-t border-ink/10"><span>মোট টাকা</span><span id="grandTotalShow">0৳</span></div>
         </div>
     </x-ui.card>
@@ -87,6 +89,10 @@
             <div>
                 <label class="text-sm font-medium">ডিসকাউন্ট</label>
                 <input name="discount" id="discountInput" type="number" step="0.01" min="0" value="0" oninput="calcTotal()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
+            </div>
+            <div>
+                <label class="text-sm font-medium">অতিরিক্ত খরচ (ঐচ্ছিক)</label>
+                <input name="additional_amount" id="additionalAmountInput" type="number" step="0.01" min="0" value="0" oninput="calcTotal()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 focus:ring-2 focus:ring-leaf outline-none">
             </div>
         </div>
         {{-- No manual delivery-charge field — Settings → ডেলিভারি চার্জ
@@ -259,8 +265,10 @@
 
         const delivery = currentDeliveryCharge();
         const discount = Math.min(parseFloat(document.getElementById('discountInput').value) || 0, subtotal);
+        const additionalAmount = parseFloat(document.getElementById('additionalAmountInput').value) || 0;
         document.getElementById('deliveryChargeShow').textContent = delivery.toLocaleString() + '৳';
-        document.getElementById('grandTotalShow').textContent = (subtotal - discount + delivery).toLocaleString() + '৳';
+        document.getElementById('additionalAmountShow').textContent = additionalAmount.toLocaleString() + '৳';
+        document.getElementById('grandTotalShow').textContent = (subtotal - discount + additionalAmount + delivery).toLocaleString() + '৳';
     }
 
     document.getElementById('orderForm').addEventListener('submit', function (e) {
