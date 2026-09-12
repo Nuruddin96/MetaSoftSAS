@@ -262,6 +262,50 @@ class FacebookConnectApiTest extends TestCase
         );
     }
 
+    /**
+     * The bug fix, mirrored from PageConnectionTest's web coverage: a Page
+     * Tenant A explicitly disconnected must become claimable by a different
+     * tenant, not stay permanently blocked by a stale is_active=0 row.
+     */
+    public function test_connect_allows_a_page_disconnected_by_its_previous_tenant(): void
+    {
+        $tenantA = $this->makeTenant();
+        $userA = $this->makeUser($tenantA->id);
+        app()->instance('currentTenant', $tenantA);
+        $connA = $this->connectTenant($tenantA->id, $userA->id);
+        $pageA = FacebookPage::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantA->id, 'facebook_connection_id' => $connA->id,
+            'page_id' => 'reusable-mobile-page', 'page_access_token' => 'tok-a', 'status' => 'active', 'is_active' => 1,
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+        $this->connectTenant($tenantB->id, $userB->id);
+
+        Http::fake(['*/subscribed_apps*' => Http::response(['success' => true])]);
+
+        Sanctum::actingAs($userA);
+        $this->postJson('/api/mobile/v1/settings/facebook/pages/'.$pageA->id.'/disconnect')->assertOk();
+        $this->assertFalse($pageA->fresh()->is_active);
+
+        Http::fake([
+            '*/me/accounts*' => Http::response(['data' => [
+                ['id' => 'reusable-mobile-page', 'name' => 'Reusable', 'access_token' => 'fresh-tok'],
+            ]]),
+            '*/subscribed_apps*' => Http::response(['success' => true]),
+        ]);
+
+        Sanctum::actingAs($userB);
+        $this->postJson('/api/mobile/v1/settings/facebook/pages/reusable-mobile-page/connect')
+            ->assertOk()->assertJsonPath('ok', true);
+
+        $page = FacebookPage::withoutGlobalScopes()->where('page_id', 'reusable-mobile-page')->first();
+        $this->assertSame($pageA->id, $page->id);
+        $this->assertSame($tenantB->id, $page->tenant_id);
+        $this->assertTrue((bool) $page->is_active);
+    }
+
     public function test_connect_records_subscription_failure_without_blocking_the_connection(): void
     {
         $tenant = $this->makeTenant();
