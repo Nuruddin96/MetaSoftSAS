@@ -338,6 +338,7 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('messenger/{psid}/reply', [MessengerController::class, 'reply']);
         Route::patch('messenger/{psid}/status', [MessengerController::class, 'updateStatus']);
         Route::post('messenger/{psid}/resume-ai', [MessengerController::class, 'resumeAi']);
+        Route::post('messenger/{psid}/pause-ai', [MessengerController::class, 'pauseAi']);
 
         // WhatsApp — mirrors Tenant\WhatsAppInboxController's real
         // capability, same shape as Messenger above.
@@ -350,6 +351,7 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('whatsapp/{waId}/reply', [WhatsAppController::class, 'reply']);
         Route::patch('whatsapp/{waId}/status', [WhatsAppController::class, 'updateStatus']);
         Route::post('whatsapp/{waId}/resume-ai', [WhatsAppController::class, 'resumeAi']);
+        Route::post('whatsapp/{waId}/pause-ai', [WhatsAppController::class, 'pauseAi']);
 
         // AI Assistant — mirrors Tenant\AiChatController's real capability
         // (the staff tool-calling panel chat), reusing AiChatService/

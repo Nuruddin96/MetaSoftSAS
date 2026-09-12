@@ -101,6 +101,13 @@ class WhatsAppApiTest extends TestCase
                 $table->string('channel', 20);
                 $table->string('external_id', 100);
                 $table->string('reason', 50)->nullable();
+                // AiHandoffService::trigger() always writes this column
+                // (null when no triggering message id applies) — omitting
+                // it here previously made trigger() silently fail on
+                // SQLite ("no such column"), swallowed by its own
+                // try/catch, so pauseAi()/REASON_MANUALLY_DISABLED never
+                // actually persisted a row under this file's schema.
+                $table->unsignedBigInteger('triggered_by_message_id')->nullable();
                 $table->timestamp('resolved_at')->nullable();
                 $table->unsignedBigInteger('resolved_by_user_id')->nullable();
                 $table->timestamps();
@@ -271,6 +278,40 @@ class WhatsAppApiTest extends TestCase
 
         $this->assertDatabaseHas('ai_handoffs', ['tenant_id' => $tenant->id, 'external_id' => '8801700000001']);
         $this->assertNotNull(\App\Models\AiHandoff::withoutGlobalScopes()->first()->resolved_at);
+    }
+
+    /** The AI [toggle]'s OFF action — Api\Mobile\WhatsAppController::pauseAi(). */
+    public function test_pause_ai_creates_a_manually_disabled_handoff(): void
+    {
+        [$tenant, $user] = $this->connectTenant();
+        $this->makeConversation($tenant->id, '8801700000001');
+
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/mobile/v1/whatsapp/8801700000001/pause-ai')->assertOk()->assertJsonPath('ok', true);
+
+        $this->assertDatabaseHas('ai_handoffs', [
+            'tenant_id' => $tenant->id, 'external_id' => '8801700000001', 'reason' => 'manually_disabled',
+        ]);
+        $this->assertNull(\App\Models\AiHandoff::withoutGlobalScopes()->first()->resolved_at);
+    }
+
+    public function test_pause_ai_never_reaches_another_tenants_conversation(): void
+    {
+        [$tenantA] = $this->connectTenant();
+        [$tenantB, $userB] = $this->connectTenant();
+        $this->makeConversation($tenantA->id, '8801700000001');
+        $this->makeConversation($tenantB->id, '8801700000002');
+
+        Sanctum::actingAs($userB);
+
+        $this->postJson('/api/mobile/v1/whatsapp/8801700000001/pause-ai')->assertOk();
+
+        $this->assertSame(
+            0,
+            \App\Models\AiHandoff::withoutGlobalScopes()->where('tenant_id', $tenantA->id)->count(),
+            "tenant B's pause-ai call must never create a handoff row for tenant A"
+        );
     }
 
     public function test_unauthenticated_request_is_rejected(): void

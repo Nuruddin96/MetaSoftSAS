@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Api\Mobile;
 
+use App\Models\CourierSetting;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
 use Tests\Concerns\InteractsWithApiSchema;
 use Tests\TestCase;
@@ -382,6 +384,97 @@ class OrderApiTest extends TestCase
         Sanctum::actingAs($userB);
 
         $this->postJson("/api/mobile/v1/orders/{$orderA->id}/courier/refresh")->assertNotFound();
+    }
+
+    /** Mirrors CourierTest's web-layer refresh-status coverage, at the mobile OrderResource boundary consumed by the Flutter order list's courier chip. */
+    public function test_refresh_courier_status_updates_from_a_real_steadfast_response(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        CourierSetting::create([
+            'tenant_id' => $tenant->id, 'provider' => 'steadfast',
+            'credentials' => ['api_key' => 'key-1', 'secret_key' => 'secret-1'],
+            'is_active' => true,
+        ]);
+        $order = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'Test', 'customer_phone' => '01712345678',
+            'subtotal' => 500, 'total' => 500, 'payment_method' => 'cod', 'status' => 'processing',
+            'courier_provider' => 'steadfast', 'courier_consignment_id' => 'SF-1', 'courier_status' => 'pending',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Http::fake(['https://portal.packzy.com/*' => Http::response(['delivery_status' => 'delivered'])]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/mobile/v1/orders/{$order->id}/courier/refresh")->assertOk();
+
+        $this->assertSame('delivered', $response->json('courier_status'));
+        $this->assertNotNull($response->json('courier_status_checked_at'));
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'courier_status' => 'delivered']);
+    }
+
+    public function test_refresh_courier_status_returns_a_friendly_error_on_courier_api_failure(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        CourierSetting::create([
+            'tenant_id' => $tenant->id, 'provider' => 'steadfast',
+            'credentials' => ['api_key' => 'key-1', 'secret_key' => 'secret-1'],
+            'is_active' => true,
+        ]);
+        $order = \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'Test', 'customer_phone' => '01712345678',
+            'subtotal' => 500, 'total' => 500, 'payment_method' => 'cod', 'status' => 'processing',
+            'courier_provider' => 'steadfast', 'courier_consignment_id' => 'SF-1', 'courier_status' => 'pending',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Http::fake(['https://portal.packzy.com/*' => Http::response(['message' => 'Server error'], 500)]);
+
+        Sanctum::actingAs($user);
+
+        $this->postJson("/api/mobile/v1/orders/{$order->id}/courier/refresh")
+            ->assertStatus(422)->assertJsonValidationErrors('courier');
+
+        // A failed refresh must never silently overwrite the last known real status.
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'courier_status' => 'pending']);
+    }
+
+    /** The Flutter order list's courier chip needs courier_status/checked_at present for a dispatched order and absent for one still awaiting dispatch. */
+    public function test_index_exposes_courier_status_fields_only_for_a_dispatched_order(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'Dispatched', 'customer_phone' => '01712345678',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'processing',
+            'courier_provider' => 'steadfast', 'courier_consignment_id' => 'SF-1', 'courier_status' => 'in_review',
+        ]);
+        \App\Models\Order::create([
+            'source' => 'manual', 'channel' => 'call',
+            'customer_name' => 'NotDispatched', 'customer_phone' => '01712345679',
+            'subtotal' => 100, 'total' => 100, 'payment_method' => 'cod', 'status' => 'pending',
+        ]);
+        app()->forgetInstance('currentTenant');
+
+        Sanctum::actingAs($user);
+
+        $data = collect($this->getJson('/api/mobile/v1/orders')->assertOk()->json('data'));
+
+        $dispatched = $data->firstWhere('customer_name', 'Dispatched');
+        $this->assertSame('steadfast', $dispatched['courier_provider']);
+        $this->assertSame('in_review', $dispatched['courier_status']);
+
+        $notDispatched = $data->firstWhere('customer_name', 'NotDispatched');
+        $this->assertNull($notDispatched['courier_provider']);
+        $this->assertNull($notDispatched['courier_status']);
     }
 
     public function test_update_order_status(): void

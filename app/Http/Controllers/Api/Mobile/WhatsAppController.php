@@ -182,6 +182,14 @@ class WhatsAppController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** Mirrors Api\Mobile\MessengerController::pauseAi() — see that method's docblock. */
+    public function pauseAi(Request $request, string $waId, AiHandoffService $handoff)
+    {
+        $handoff->trigger(app('currentTenant')->id, 'whatsapp', $waId, AiHandoffService::REASON_MANUALLY_DISABLED);
+
+        return response()->json(['ok' => true]);
+    }
+
     /** Identical to Tenant\WhatsAppInboxController::phoneCandidates(). */
     protected function phoneCandidates(string $rawId): array
     {
