@@ -36,7 +36,6 @@ use App\Http\Controllers\Tenant\AiMemoryController;
 use App\Http\Controllers\Tenant\BarcodeController;
 use App\Http\Controllers\Tenant\BillingController;
 use App\Http\Controllers\Tenant\CategoryController;
-use App\Http\Controllers\Tenant\ProductAttributeController;
 use App\Http\Controllers\Tenant\CourierController;
 use App\Http\Controllers\Tenant\CustomerController;
 use App\Http\Controllers\Tenant\DashboardController;
@@ -53,6 +52,7 @@ use App\Http\Controllers\Tenant\NotificationPreferenceController;
 use App\Http\Controllers\Tenant\OnboardingController;
 use App\Http\Controllers\Tenant\OrderController;
 use App\Http\Controllers\Tenant\PosController;
+use App\Http\Controllers\Tenant\ProductAttributeController;
 use App\Http\Controllers\Tenant\ProductController;
 use App\Http\Controllers\Tenant\ProductImageMemoryController;
 use App\Http\Controllers\Tenant\ProductImportController;
@@ -208,6 +208,8 @@ Route::domain(config('app.central_domain'))->group(function () {
                     ->whereNumber('device')->name('devices.toggle');
                 Route::post('{tenant}/devices/{device}/session', [SuperRemoteSupportController::class, 'startSession'])
                     ->whereNumber('device')->name('session.start');
+                Route::post('{tenant}/devices/{device}/wake', [SuperRemoteSupportController::class, 'wakeAndStart'])
+                    ->whereNumber('device')->name('devices.wake');
                 Route::get('{tenant}/devices/{device}/session/{session}/view', [SuperRemoteSupportController::class, 'viewer'])
                     ->whereNumber('device')->whereNumber('session')->name('session.viewer');
                 Route::delete('{tenant}/devices/{device}/session/{session}', [SuperRemoteSupportController::class, 'stopSession'])

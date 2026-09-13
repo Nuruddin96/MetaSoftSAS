@@ -412,6 +412,13 @@ Route::prefix('mobile/v1')->group(function () {
     // working after the human logs out of the app on that phone.
     Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/heartbeat', [DeviceController::class, 'heartbeat']);
 
+    // Remote Support FCM wake PROOF-OF-CONCEPT only — see
+    // RemoteSupportFcmService.kt (Android) and RemoteSupportTestWake (the
+    // manual test-send command this feeds). Not called anywhere in the
+    // existing Dart code yet; reuses the same device-credential ability as
+    // heartbeat rather than introducing a new one.
+    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/fcm-token', [DeviceController::class, 'updateFcmToken']);
+
     Route::middleware(['auth:sanctum', 'ability:device:signal'])->group(function () {
         Route::post('devices/sessions/{sessionToken}/signal', [SignalController::class, 'send']);
         Route::get('devices/sessions/{sessionToken}/signal', [SignalController::class, 'poll']);

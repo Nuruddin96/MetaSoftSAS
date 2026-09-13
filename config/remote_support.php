@@ -54,4 +54,25 @@ return [
 
     /** Heartbeat gap beyond which a device is considered offline. */
     'offline_after_seconds' => (int) env('REMOTE_SUPPORT_OFFLINE_AFTER_SECONDS', 180),
+
+    /*
+     * FCM wake — see RemoteSupportService::sendWakeSignal(),
+     * RemoteSupportController::wakeAndStart(), and RemoteSupportFcmService.kt
+     * on the Android side. `fcm_service_account_path` points at a Firebase
+     * project service-account JSON (Google Cloud Console → IAM → Service
+     * Accounts), kept out of source control, used only to sign a
+     * short-lived OAuth token for the FCM HTTP v1 send API.
+     */
+    'fcm_project_id' => env('REMOTE_SUPPORT_FCM_PROJECT_ID'),
+    'fcm_service_account_path' => env('REMOTE_SUPPORT_FCM_SERVICE_ACCOUNT_PATH'),
+
+    /**
+     * "Wake & Start" bounded readiness poll — see
+     * RemoteSupportController::wakeAndStart()'s doc comment. This is the
+     * absolute ceiling an Admin's click blocks for before giving up with a
+     * clear error; it never waits indefinitely. Kept well under typical
+     * PHP-FPM/web-server request timeouts.
+     */
+    'wake_timeout_seconds' => (int) env('REMOTE_SUPPORT_WAKE_TIMEOUT_SECONDS', 40),
+    'wake_poll_interval_seconds' => (int) env('REMOTE_SUPPORT_WAKE_POLL_INTERVAL_SECONDS', 3),
 ];

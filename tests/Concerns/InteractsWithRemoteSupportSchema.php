@@ -67,6 +67,9 @@ trait InteractsWithRemoteSupportSchema
                 $table->string('revoke_reason', 255)->nullable();
                 $table->boolean('remote_support_enabled')->default(false);
                 $table->unsignedBigInteger('credential_token_id')->nullable();
+                // FCM wake proof-of-concept only — see
+                // database/migrations/2026_09_13_000000_add_fcm_token_to_mobile_devices_table.php.
+                $table->string('fcm_token', 255)->nullable();
                 $table->timestamp('last_seen_at')->nullable();
                 $table->unsignedTinyInteger('battery_pct')->nullable();
                 $table->boolean('charging')->nullable();

@@ -524,6 +524,101 @@ class RemoteSupportService
         }
     }
 
+    /**
+     * Whether enough FCM config exists to even attempt {@see sendWakeSignal}
+     * — checked up front by RemoteSupportController::wakeAndStart() so a
+     * missing/invalid server-side Firebase config surfaces as a clear error
+     * immediately, before ever entering the bounded readiness-poll loop.
+     */
+    public function isWakeConfigured(): bool
+    {
+        $path = config('remote_support.fcm_service_account_path');
+
+        return (bool) config('remote_support.fcm_project_id') && $path && is_file($path);
+    }
+
+    /**
+     * "Wake & Start" PROOF-OF-CONCEPT → production: sends exactly one
+     * data-only, high-priority FCM message to $device's stored token —
+     * moved here (unchanged in substance) from RemoteSupportTestWake, which
+     * now calls this same method, so the JWT/OAuth/send logic exists in
+     * exactly one place. See that class's original doc comment for why
+     * `android.priority: high` matters (Android's background-FGS-start
+     * restriction exemption for a high-priority FCM message) and why this
+     * is data-only, never a `notification` payload (must never show system
+     * UI on the device).
+     *
+     * Deliberately does NOT touch RemoteSupportSession/start a session
+     * itself — this only ever asks the device to resume heartbeat via its
+     * own existing HeadlessEngineHost.startIfNeeded() path (Android side);
+     * RemoteSupportController::wakeAndStart() is what polls for readiness
+     * afterwards and calls the existing startSession() once (and only if)
+     * the device reports itself on_ready.
+     */
+    public function sendWakeSignal(MobileDevice $device): bool
+    {
+        if (! $device->fcm_token || ! $this->isWakeConfigured()) {
+            return false;
+        }
+
+        try {
+            $serviceAccount = json_decode(file_get_contents(config('remote_support.fcm_service_account_path')), true);
+            $accessToken = $this->fetchFcmAccessToken($serviceAccount);
+
+            $response = Http::withToken($accessToken)
+                ->post('https://fcm.googleapis.com/v1/projects/'.config('remote_support.fcm_project_id').'/messages:send', [
+                    'message' => [
+                        'token' => $device->fcm_token,
+                        'data' => ['type' => 'remote_support_wake'],
+                        'android' => ['priority' => 'high'],
+                    ],
+                ]);
+
+            if (! $response->successful()) {
+                Log::warning('Remote Support wake FCM send failed', ['device_id' => $device->id, 'status' => $response->status(), 'body' => $response->body()]);
+            }
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::warning('Remote Support wake FCM send threw', ['device_id' => $device->id, 'exception' => $e->getMessage()]);
+
+            return false;
+        }
+    }
+
+    private function fetchFcmAccessToken(array $serviceAccount): string
+    {
+        $now = time();
+        $header = $this->base64url(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+        $claims = $this->base64url(json_encode([
+            'iss' => $serviceAccount['client_email'],
+            'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+            'aud' => $serviceAccount['token_uri'] ?? 'https://oauth2.googleapis.com/token',
+            'iat' => $now,
+            'exp' => $now + 3600,
+        ]));
+
+        $unsigned = "{$header}.{$claims}";
+        openssl_sign($unsigned, $signature, $serviceAccount['private_key'], 'sha256WithRSAEncryption');
+        $jwt = $unsigned.'.'.$this->base64url($signature);
+
+        $response = Http::asForm()->post($serviceAccount['token_uri'] ?? 'https://oauth2.googleapis.com/token', [
+            'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            'assertion' => $jwt,
+        ]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('token endpoint returned '.$response->status().': '.$response->body());
+        }
+
+        return $response->json('access_token');
+    }
+
+    private function base64url(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
     public function log(
         ?int $tenantId,
         ?int $deviceId = null,

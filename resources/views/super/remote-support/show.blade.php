@@ -89,9 +89,27 @@
                                     🎥 চলমান লাইভ ভিউ দেখুন
                                 </a>
                             @elseif ($d->liveStatus() === 'offline')
-                                <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600">
-                                    🎥 লাইভ স্ক্রিন — ডিভাইস অফলাইন
-                                </span>
+                                {{-- "Wake & Start" only ever applies here (offline = stale
+                                     heartbeat, likely a dead process) — an on_not_ready device
+                                     is already heartbeating, so HeadlessEngineHost.startIfNeeded()
+                                     would just no-op (see its own doc comment); nothing to wake.
+                                     Requires an fcm_token to have ever been captured — see
+                                     RemoteSupportFcmService.kt / DeviceController::updateFcmToken. --}}
+                                @if ($d->fcm_token)
+                                    <form method="POST" action="{{ route('super.remote-support.devices.wake', [$tenant, $d]) }}"
+                                          class="flex items-center gap-2" onsubmit="return remoteSupportWakeSubmit(this);">
+                                        @csrf
+                                        <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_microphone" value="1"> 🎙 মাইক্রোফোন</label>
+                                        <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_camera" value="1"> 📷 ক্যামেরা</label>
+                                        <button type="submit" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber text-white">
+                                            🔄 Wake &amp; Start Remote Support
+                                        </button>
+                                    </form>
+                                @else
+                                    <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600">
+                                        🎥 লাইভ স্ক্রিন — ডিভাইস অফলাইন (FCM টোকেন নেই)
+                                    </span>
+                                @endif
                             @elseif ($d->liveStatus() !== 'on_ready')
                                 <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber/10 text-amber">
                                     🎥 লাইভ স্ক্রিন — ডিভাইস প্রস্তুত হচ্ছে…
@@ -121,4 +139,21 @@
         </tbody>
     </table>
 </div>
+
+<script>
+    // Prevents a duplicate click while the request is in flight — the
+    // backend request itself blocks for up to
+    // config('remote_support.wake_timeout_seconds') waiting for the device
+    // to wake (RemoteSupportController::wakeAndStart()), so the normal page
+    // navigation/loading state during that wait IS the "waiting" UI; this
+    // only stops a second submit and gives a clearer label than the browser
+    // default while it's pending.
+    function remoteSupportWakeSubmit(form) {
+        const btn = form.querySelector('button[type="submit"]');
+        if (btn.disabled) return false;
+        btn.disabled = true;
+        btn.textContent = '⏳ ডিভাইস জাগানো হচ্ছে…';
+        return true;
+    }
+</script>
 @endsection

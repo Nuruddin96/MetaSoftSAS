@@ -118,6 +118,64 @@ class RemoteSupportController extends Controller
         return redirect()->route('super.remote-support.session.viewer', [$tenant, $device, $session->id]);
     }
 
+    /**
+     * "Wake & Start Remote Support" — for a device that's currently
+     * offline/not-ready. Sends exactly one FCM wake message (see
+     * RemoteSupportService::sendWakeSignal()'s doc comment — this never
+     * touches the device's on-device permission flow; it only asks the
+     * device's own existing HeadlessEngineHost.startIfNeeded() to resume
+     * heartbeat), then polls this SAME device row for a bounded window
+     * waiting for it to report itself `on_ready` via its own normal
+     * heartbeat — never starting a session before that's genuinely true.
+     * Once (and only if) it is, this calls the EXACT SAME
+     * RemoteSupportService::startSession() the ordinary Start button uses
+     * — no second session-creation path exists. A device that never wakes
+     * within the bounded window gets a clear, actionable error instead of
+     * this request hanging indefinitely.
+     */
+    public function wakeAndStart(Request $request, Tenant $tenant, int $device)
+    {
+        $deviceModel = $this->device($tenant, $device);
+
+        if (! $deviceModel->fcm_token) {
+            return back()->with('error', 'ডিভাইসের কোনো FCM টোকেন নেই — ডিভাইসে অ্যাপটি অন্তত একবার খুলে চালু করা প্রয়োজন।');
+        }
+
+        if (! $this->service->isWakeConfigured()) {
+            return back()->with('error', 'সার্ভারে FCM কনফিগারেশন সেট করা নেই।');
+        }
+
+        if (! $this->service->sendWakeSignal($deviceModel)) {
+            return back()->with('error', 'ওয়েক সিগন্যাল পাঠানো যায়নি।');
+        }
+
+        $timeoutSeconds = (int) config('remote_support.wake_timeout_seconds', 40);
+        $pollIntervalSeconds = max(1, (int) config('remote_support.wake_poll_interval_seconds', 3));
+        $deadline = now()->addSeconds($timeoutSeconds);
+
+        while (now()->lt($deadline)) {
+            sleep($pollIntervalSeconds);
+            $deviceModel->refresh();
+
+            if ($deviceModel->isEligibleForSession()) {
+                try {
+                    $session = $this->service->startSession(
+                        $deviceModel,
+                        auth('super_admin')->user(),
+                        $request->boolean('include_microphone'),
+                        $request->boolean('include_camera'),
+                    );
+                } catch (HttpException $e) {
+                    return back()->with('error', $e->getMessage());
+                }
+
+                return redirect()->route('super.remote-support.session.viewer', [$tenant, $deviceModel, $session->id]);
+            }
+        }
+
+        return back()->with('error', 'ডিভাইসটিকে জাগানো যায়নি। অ্যাপের ব্যাকগ্রাউন্ড/অটোস্টার্ট অনুমতি এবং ইন্টারনেট সংযোগ যাচাই করুন।');
+    }
+
     public function viewer(Tenant $tenant, int $device, int $session)
     {
         return view('super.remote-support.viewer', [
