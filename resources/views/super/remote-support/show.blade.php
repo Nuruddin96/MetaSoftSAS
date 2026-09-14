@@ -10,6 +10,30 @@
         'offline' => ['bg-red-50 text-red-600', 'অফলাইন'],
         'revoked' => ['bg-red-100 text-red-700', 'বাতিল'],
     ];
+
+    // App consent / Android access — a SEPARATE layer from the session
+    // status above (device-lifecycle.md status / liveStatus()). Never
+    // implies "Connected" == "Consent Enabled" — see
+    // docs/remote-support-consent-model.md (Flutter repo) §"Keep Remote
+    // Support session status separate from permission/consent status".
+    $consentBadge = [
+        'not_asked' => ['bg-ink/5 text-mute', 'জিজ্ঞাসা করা হয়নি'],
+        'enabled' => ['bg-leaf/10 text-leafdk', 'চালু'],
+        'disabled' => ['bg-red-50 text-red-600', 'বন্ধ'],
+    ];
+    $accessBadge = [
+        'granted' => ['bg-leaf/10 text-leafdk', 'দেওয়া আছে'],
+        'denied' => ['bg-red-50 text-red-600', 'দেওয়া নেই'],
+        'restricted' => ['bg-amber/10 text-amber', 'সীমাবদ্ধ'],
+        'not_supported' => ['bg-ink/5 text-mute', 'প্রযোজ্য নয়'],
+        'not_requested' => ['bg-ink/5 text-mute', 'চাওয়া হয়নি'],
+    ];
+    $activationBadge = [
+        'inactive' => ['bg-ink/5 text-mute', 'নিষ্ক্রিয়'],
+        'waiting_for_android_access' => ['bg-amber/10 text-amber', 'অ্যান্ড্রয়েড অনুমতির অপেক্ষায়'],
+        'disabled_by_tenant' => ['bg-red-50 text-red-600', 'টেনেন্ট কর্তৃক বন্ধ'],
+        'active' => ['bg-leaf/10 text-leafdk', 'সক্রিয়'],
+    ];
 @endphp
 
 <a href="{{ route('super.remote-support.index') }}" class="text-mute text-sm hover:underline">← রিমোট সাপোর্ট</a>
@@ -35,6 +59,7 @@
         <thead class="text-left text-mute"><tr class="border-b border-ink/5">
             <th class="px-4 py-3">ডিভাইস</th>
             <th class="px-4 py-3">স্ট্যাটাস</th>
+            <th class="px-4 py-3">কনসেন্ট / অ্যাক্সেস</th>
             <th class="px-4 py-3">শেষ দেখা</th>
             <th class="px-4 py-3">ব্যাটারি</th>
             <th class="px-4 py-3"></th>
@@ -49,6 +74,34 @@
                     <p class="text-mute text-[11px] mt-1">{{ Str::limit($d->device_uuid, 16) }}</p>
                 </td>
                 <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs {{ $cls }}">{{ $label }}</span></td>
+                <td class="px-4 py-3">
+                    @php
+                        [$consentCls, $consentLabel] = $consentBadge[$d->app_consent_status] ?? ['bg-ink/5 text-mute', $d->app_consent_status];
+                        [$activationCls, $activationLabel] = $activationBadge[$d->activation_status] ?? ['bg-ink/5 text-mute', $d->activation_status];
+                        $access = $d->android_access ?? [];
+                    @endphp
+                    <div class="space-y-1">
+                        <div class="flex flex-wrap items-center gap-1">
+                            <span class="px-2 py-0.5 rounded text-[11px] {{ $consentCls }}" title="App Consent">সম্মতি: {{ $consentLabel }}</span>
+                            <span class="px-2 py-0.5 rounded text-[11px] {{ $activationCls }}" title="Activation">{{ $activationLabel }}</span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1">
+                            @foreach (['notifications' => 'নোটিফিকেশন', 'battery_optimization_exempt' => 'ব্যাটারি'] as $key => $accessLabel)
+                                @php [$aCls, $aLabel] = $accessBadge[$access[$key] ?? 'not_requested'] ?? ['bg-ink/5 text-mute', $access[$key] ?? '—']; @endphp
+                                <span class="px-1.5 py-0.5 rounded text-[10px] {{ $aCls }}" title="Android Access — {{ $accessLabel }}">{{ $accessLabel }}: {{ $aLabel }}</span>
+                            @endforeach
+                        </div>
+                        <p class="text-mute text-[10px]">
+                            রিপোর্ট: {{ $d->access_synced_at?->diffForHumans() ?? '—' }}
+                            @if ($d->consent_changed_at)
+                                · সম্মতি পরিবর্তন: {{ $d->consent_changed_at->diffForHumans() }}
+                            @endif
+                            @if ($d->remote_support_last_active_at)
+                                · সর্বশেষ সক্রিয়: {{ $d->remote_support_last_active_at->diffForHumans() }}
+                            @endif
+                        </p>
+                    </div>
+                </td>
                 <td class="px-4 py-3 text-mute text-xs">{{ $d->last_seen_at?->diffForHumans() ?? '—' }}</td>
                 <td class="px-4 py-3 text-mute text-xs">{{ $d->battery_pct !== null ? $d->battery_pct.'%'.($d->charging ? ' ⚡' : '') : '—' }}</td>
                 <td class="px-4 py-3 space-y-2">
@@ -134,7 +187,7 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="5" class="px-4 py-12 text-center text-mute">এখনো কোনো ডিভাইস রেজিস্টার হয়নি।</td></tr>
+            <tr><td colspan="6" class="px-4 py-12 text-center text-mute">এখনো কোনো ডিভাইস রেজিস্টার হয়নি।</td></tr>
         @endforelse
         </tbody>
     </table>

@@ -76,6 +76,17 @@ trait InteractsWithRemoteSupportSchema
                 $table->string('network_type', 20)->nullable();
                 $table->json('permissions')->nullable();
                 $table->boolean('foreground_service_running')->default(false);
+                // App consent / Android access sync — see
+                // database/migrations/2026_09_14_000000_add_consent_access_state_to_mobile_devices_table.php.
+                $table->string('app_consent_status', 20)->default('not_asked');
+                $table->json('android_access')->nullable();
+                $table->string('activation_status', 30)->default('inactive');
+                $table->timestamp('consent_changed_at')->nullable();
+                $table->timestamp('access_synced_at')->nullable();
+                // Stale/out-of-order sync ordering — see
+                // database/migrations/2026_09_15_000000_add_state_observed_at_to_mobile_devices_table.php.
+                $table->timestamp('state_observed_at')->nullable();
+                $table->timestamp('remote_support_last_active_at')->nullable();
                 $table->timestamps();
             });
         }

@@ -146,6 +146,46 @@ class DeviceController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /**
+     * Syncs the Flutter app's LOCAL app-consent/Android-access state to
+     * this device row for Admin Dashboard visibility only — see
+     * RemoteSupportService::syncConsentState()'s doc comment. Called from
+     * SetupController's existing evaluation path (consent change, Android
+     * access change, app start/resume, or any other re-evaluation) with
+     * built-in change detection on the Dart side, so this is expected to
+     * be hit far less often than heartbeat, not on every 20s tick. Reuses
+     * the same device-credential ability as heartbeat/fcm-token — no new
+     * Sanctum ability introduced.
+     */
+    public function syncConsent(Request $request)
+    {
+        $data = $request->validate([
+            'app_consent_status' => 'nullable|string|in:not_asked,enabled,disabled',
+            'android_access' => 'nullable|array',
+            'android_access.notifications' => 'nullable|string|in:granted,denied,restricted,not_supported,not_requested',
+            'android_access.battery_optimization_exempt' => 'nullable|string|in:granted,denied,restricted,not_supported,not_requested',
+            'android_access.camera' => 'nullable|string|in:granted,denied,restricted,not_supported,not_requested',
+            'android_access.microphone' => 'nullable|string|in:granted,denied,restricted,not_supported,not_requested',
+            'android_access.screen_capture' => 'nullable|string|in:granted,denied,restricted,not_supported,not_requested',
+            // Stale/out-of-order hardening — see
+            // RemoteSupportService::syncConsentState()'s doc comment.
+            // Optional: a request without it is always applied.
+            'observed_at' => 'nullable|date',
+        ]);
+
+        $device = $this->deviceFromToken($request);
+        $device = $this->service->syncConsentState($device, $data);
+
+        return response()->json([
+            'app_consent_status' => $device->app_consent_status,
+            'android_access' => $device->android_access,
+            'activation_status' => $device->activation_status,
+            'state_observed_at' => $device->state_observed_at?->toIso8601String(),
+            'consent_changed_at' => $device->consent_changed_at?->toIso8601String(),
+            'remote_support_last_active_at' => $device->remote_support_last_active_at?->toIso8601String(),
+        ]);
+    }
+
     public function deviceFromToken(Request $request): MobileDevice
     {
         $tokenId = $request->user()->currentAccessToken()->id;

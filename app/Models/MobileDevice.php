@@ -31,6 +31,39 @@ class MobileDevice extends Model
     /** Heartbeat gap beyond this many seconds flips a device to OFFLINE (device-lifecycle.md: "3 missed 60s intervals"). */
     public const OFFLINE_AFTER_SECONDS = 180;
 
+    // --- App consent / Android access sync (see
+    // docs/remote-support-consent-model.md on the Flutter side and
+    // database/migrations/2026_09_14_000000_add_consent_access_state_to_mobile_devices_table.php)
+    // — a SEPARATE layer from remote_support_enabled/permissions above,
+    // never collapsed into it. ---------------------------------------
+
+    public const CONSENT_NOT_ASKED = 'not_asked';
+
+    public const CONSENT_ENABLED = 'enabled';
+
+    public const CONSENT_DISABLED = 'disabled';
+
+    public const ACCESS_GRANTED = 'granted';
+
+    public const ACCESS_DENIED = 'denied';
+
+    public const ACCESS_RESTRICTED = 'restricted';
+
+    public const ACCESS_NOT_SUPPORTED = 'not_supported';
+
+    public const ACCESS_NOT_REQUESTED = 'not_requested';
+
+    public const ACTIVATION_INACTIVE = 'inactive';
+
+    public const ACTIVATION_WAITING_FOR_ANDROID_ACCESS = 'waiting_for_android_access';
+
+    public const ACTIVATION_DISABLED_BY_TENANT = 'disabled_by_tenant';
+
+    public const ACTIVATION_ACTIVE = 'active';
+
+    /** The two android_access keys that gate activation — mirrors RemoteSupportAccessSnapshot.requiredAndroidAccessGranted on the Flutter side exactly (camera/microphone/screen_capture stay best-effort, never gating). */
+    public const REQUIRED_ACCESS_KEYS = ['notifications', 'battery_optimization_exempt'];
+
     protected $guarded = [];
 
     protected $casts = [
@@ -42,6 +75,11 @@ class MobileDevice extends Model
         'charging' => 'boolean',
         'foreground_service_running' => 'boolean',
         'permissions' => 'array',
+        'android_access' => 'array',
+        'consent_changed_at' => 'datetime',
+        'access_synced_at' => 'datetime',
+        'state_observed_at' => 'datetime',
+        'remote_support_last_active_at' => 'datetime',
     ];
 
     public function user()
@@ -105,5 +143,36 @@ class MobileDevice extends Model
         return $this->status !== self::STATUS_REVOKED
             && $this->remote_support_enabled
             && $this->liveStatus() === self::STATUS_ON_READY;
+    }
+
+    /**
+     * Pure function — the SAME rule as `remoteSupportActivationFor` in
+     * remote_support_access_state.dart on the Flutter side, kept in exact
+     * sync intentionally (see that function's doc comment for the full
+     * rationale). Never called directly by a controller; always go through
+     * RemoteSupportService::syncConsentState() so the result is persisted
+     * and logged consistently. Exposed as a static, side-effect-free method
+     * (rather than reading $this->android_access) so it's trivially
+     * unit-testable against the full consent × access matrix without a
+     * database row.
+     *
+     * @param  array<string, string>  $androidAccess  keyed by
+     *                                                 REQUIRED_ACCESS_KEYS entries (and optionally camera/microphone/screen_capture, which never affect the result)
+     */
+    public static function computeActivationStatus(string $consentStatus, array $androidAccess): string
+    {
+        $requiredGranted = true;
+        foreach (self::REQUIRED_ACCESS_KEYS as $key) {
+            if (($androidAccess[$key] ?? self::ACCESS_NOT_REQUESTED) !== self::ACCESS_GRANTED) {
+                $requiredGranted = false;
+                break;
+            }
+        }
+
+        if ($consentStatus === self::CONSENT_ENABLED) {
+            return $requiredGranted ? self::ACTIVATION_ACTIVE : self::ACTIVATION_WAITING_FOR_ANDROID_ACCESS;
+        }
+
+        return $requiredGranted ? self::ACTIVATION_DISABLED_BY_TENANT : self::ACTIVATION_INACTIVE;
     }
 }

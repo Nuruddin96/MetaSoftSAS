@@ -806,6 +806,79 @@ class RemoteSupportControllerTest extends TestCase
         $this->assertSame('offer', $response->json('signals.0.type'));
     }
 
+    /**
+     * The Access/Consent column on the device list — see
+     * docs/remote-support-consent-model.md (Flutter repo) §5. Read-only:
+     * this whole section must never render a control that implies the
+     * Admin can grant Android permission remotely (that stays entirely on
+     * the tenant's device — see the view's own doc comment).
+     */
+    public function test_show_page_displays_app_consent_android_access_and_activation_state(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeDevice($tenant->id, $user->id, [
+            'device_model' => 'Pixel 8', 'status' => 'on_ready', 'remote_support_enabled' => true,
+            'app_consent_status' => 'enabled',
+            'android_access' => ['notifications' => 'granted', 'battery_optimization_exempt' => 'denied'],
+            'activation_status' => 'waiting_for_android_access',
+            'consent_changed_at' => now()->subMinutes(10),
+            'access_synced_at' => now()->subMinute(),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
+
+        $response->assertOk();
+        $response->assertSee('কনসেন্ট / অ্যাক্সেস');
+        $response->assertSee('চালু'); // app consent = enabled
+        $response->assertSee('অ্যান্ড্রয়েড অনুমতির অপেক্ষায়'); // activation = waiting_for_android_access
+        $response->assertDontSee('গ্রান্ট করুন', escape: false); // Admin never gets a "grant permission" control
+    }
+
+    /**
+     * Session status (liveStatus()) and consent/activation are computed
+     * from entirely different inputs and must never be conflated — a
+     * device can be freshly heartbeating (`on_ready`/`প্রস্তুত`) while its
+     * OWN local consent is disabled, or vice versa.
+     */
+    public function test_show_page_never_implies_connected_equals_consent_enabled(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeDevice($tenant->id, $user->id, [
+            'device_model' => 'Redmi Note', 'status' => 'on_ready', 'remote_support_enabled' => true,
+            'last_seen_at' => now(),
+            'app_consent_status' => 'disabled',
+            'android_access' => ['notifications' => 'granted', 'battery_optimization_exempt' => 'granted'],
+            'activation_status' => 'disabled_by_tenant',
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
+
+        $response->assertOk();
+        $response->assertSee('প্রস্তুত'); // session status: ready/heartbeating
+        $response->assertSee('টেনেন্ট কর্তৃক বন্ধ'); // activation: disabled_by_tenant — a SEPARATE fact
+    }
+
+    /** Tenant isolation: Tenant B's consent/access state must never render on Tenant A's page. */
+    public function test_show_page_never_leaks_another_tenants_device_consent_state(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+        $this->makeDevice($tenantB->id, $userB->id, [
+            'device_model' => 'Tenant B Device', 'app_consent_status' => 'enabled',
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenantA));
+
+        $response->assertOk();
+        $response->assertDontSee('Tenant B Device');
+    }
+
     private function extractBetween(string $haystack, string $start, string $end): string
     {
         $startPos = strpos($haystack, $start);

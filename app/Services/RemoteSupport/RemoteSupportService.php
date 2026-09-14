@@ -10,6 +10,7 @@ use App\Models\RemoteSupportSignal;
 use App\Models\SuperAdmin;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -268,6 +269,124 @@ class RemoteSupportService
         $device->save();
 
         return $device;
+    }
+
+    /**
+     * Mirrors the Flutter app's LOCAL consent/access state onto this
+     * device row for Admin Dashboard visibility ONLY — see
+     * docs/remote-support-consent-model.md (Flutter repo) §5. Purely
+     * informational: `remote_support_enabled`/`permissions`/
+     * `isEligibleForSession()` — the actual session-eligibility gate —
+     * are entirely untouched by this method. `activation_status` is
+     * always recomputed server-side via `MobileDevice::
+     * computeActivationStatus()`, never trusted from the client.
+     *
+     * STALE/OUT-OF-ORDER HARDENING: `$data['observed_at']` is the moment
+     * the Flutter app captured this snapshot
+     * (`RemoteSupportAccessSnapshot.lastPermissionCheck`), not when this
+     * HTTP request happened to arrive. Two network requests can arrive out
+     * of order (a retried/delayed earlier request landing AFTER a later
+     * one already applied — see SetupController's fire-and-forget sync,
+     * which does not serialize consecutive calls). A request whose
+     * `observed_at` is not STRICTLY newer than the currently stored
+     * `state_observed_at` is treated as stale: `access_synced_at` still
+     * advances (a genuine "we heard from the device" fact, logged
+     * separately) but `app_consent_status`/`android_access`/
+     * `activation_status`/`consent_changed_at` are left exactly as they
+     * are, so a delayed duplicate can never regress state a newer request
+     * already applied. A request with no `observed_at` at all (an older
+     * client build, or a caller that can't supply one) is always applied —
+     * ordering protection only activates when the client actually
+     * participates in it; this is additive, never a stricter requirement
+     * than before this hardening existed.
+     *
+     * Locks the device row (`lockForUpdate`) for the duration of the
+     * compare-and-apply so two genuinely concurrent requests can't both
+     * read the same "currently newer" value and each wrongly conclude
+     * they're the newer one.
+     *
+     * Idempotent/change-detected even among APPLIED (non-stale) syncs: one
+     * carrying identical values still updates `access_synced_at` but does
+     * NOT bump `consent_changed_at` (only a real change to
+     * `app_consent_status` does that) and logs no `_synced` DeviceEvent
+     * (only an actual change to consent or access does).
+     * `remote_support_last_active_at` is stamped whenever the freshly
+     * computed activation is genuinely `active` — mirroring
+     * SecureStorageService.markRemoteSupportActiveNow's own "every
+     * resolve to active" semantics on the Flutter side, not just the
+     * first transition into it.
+     */
+    public function syncConsentState(MobileDevice $device, array $data): MobileDevice
+    {
+        abort_if($device->status === MobileDevice::STATUS_REVOKED, 403);
+
+        return DB::transaction(function () use ($device, $data) {
+            /** @var MobileDevice $device */
+            $device = MobileDevice::withoutGlobalScope('tenant')->lockForUpdate()->findOrFail($device->id);
+
+            $observedAt = isset($data['observed_at']) ? Carbon::parse($data['observed_at']) : null;
+            $storedObservedAt = $device->state_observed_at;
+
+            $isStale = $observedAt !== null && $storedObservedAt !== null && ! $observedAt->gt($storedObservedAt);
+
+            // "Last reported" always advances regardless of staleness —
+            // this is a genuine fact (a request from this device really
+            // did arrive just now), distinct from whether ITS payload won.
+            $device->access_synced_at = now();
+
+            if ($isStale) {
+                $device->save();
+
+                $this->log(
+                    tenantId: $device->tenant_id,
+                    deviceId: $device->id,
+                    eventType: 'remote_support_consent_sync_stale_ignored',
+                    actorType: 'device',
+                    note: json_encode([
+                        'rejected_observed_at' => $observedAt?->toIso8601String(),
+                        'kept_observed_at' => $storedObservedAt?->toIso8601String(),
+                    ]),
+                );
+
+                return $device;
+            }
+
+            $newConsent = $data['app_consent_status'] ?? $device->app_consent_status;
+            $newAccess = array_key_exists('android_access', $data) ? $data['android_access'] : ($device->android_access ?? []);
+
+            $consentChanged = $newConsent !== $device->app_consent_status;
+            $accessChanged = $newAccess !== ($device->android_access ?? []);
+
+            $newActivation = MobileDevice::computeActivationStatus($newConsent, $newAccess);
+
+            $device->app_consent_status = $newConsent;
+            $device->android_access = $newAccess;
+            $device->activation_status = $newActivation;
+            if ($observedAt !== null) {
+                $device->state_observed_at = $observedAt;
+            }
+
+            if ($consentChanged) {
+                $device->consent_changed_at = now();
+            }
+            if ($newActivation === MobileDevice::ACTIVATION_ACTIVE) {
+                $device->remote_support_last_active_at = now();
+            }
+
+            $device->save();
+
+            if ($consentChanged || $accessChanged) {
+                $this->log(
+                    tenantId: $device->tenant_id,
+                    deviceId: $device->id,
+                    eventType: 'remote_support_consent_synced',
+                    actorType: 'device',
+                    note: json_encode(['app_consent_status' => $newConsent, 'activation_status' => $newActivation]),
+                );
+            }
+
+            return $device;
+        });
     }
 
     /** Shared by recordHeartbeat and toggleDevice — see toggleDevice's doc comment for why the latter needs this too. */
