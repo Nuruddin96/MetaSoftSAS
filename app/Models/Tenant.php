@@ -111,6 +111,17 @@ class Tenant extends Model
         return (bool) $this->remoteSupportSetting?->enabled;
     }
 
+    public function deviceIntelligenceSetting()
+    {
+        return $this->hasOne(\App\Models\DeviceIntelligenceSetting::class);
+    }
+
+    /** True once this tenant has an explicitly-enabled Device Intelligence setting row — a SEPARATE toggle from Remote Support's own, see DeviceIntelligenceSetting's docblock. */
+    public function hasDeviceIntelligenceEnabled(): bool
+    {
+        return (bool) $this->deviceIntelligenceSetting?->enabled;
+    }
+
     /**
      * True once database/sql/chunk39.sql's ai_paused_at/
      * ai_paused_by_super_admin_id/ai_paused_reason columns exist — same

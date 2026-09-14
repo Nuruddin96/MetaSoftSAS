@@ -25,6 +25,7 @@ use App\Http\Controllers\SuperAdmin\ClientPaymentController;
 use App\Http\Controllers\SuperAdmin\DomainRequestController;
 use App\Http\Controllers\SuperAdmin\PaymentController;
 use App\Http\Controllers\SuperAdmin\PlanController;
+use App\Http\Controllers\SuperAdmin\DeviceIntelligenceController as SuperDeviceIntelligenceController;
 use App\Http\Controllers\SuperAdmin\RemoteSupportController as SuperRemoteSupportController;
 use App\Http\Controllers\SuperAdmin\SourceOrderController;
 use App\Http\Controllers\SuperAdmin\SourceProductController;
@@ -218,6 +219,20 @@ Route::domain(config('app.central_domain'))->group(function () {
                     ->whereNumber('device')->whereNumber('session')->name('session.signal.send');
                 Route::get('{tenant}/devices/{device}/session/{session}/signal', [SuperRemoteSupportController::class, 'pollSignal'])
                     ->whereNumber('device')->whereNumber('session')->name('session.signal.poll');
+            });
+
+            // Device Intelligence — Super Admin only, a SEPARATE module
+            // from Remote Support above (see
+            // SuperDeviceIntelligenceController's docblock). Same
+            // manual-resolution convention for {device} as Remote
+            // Support's own group, for the same reason (no
+            // resolve.tenant middleware runs in this route space).
+            Route::prefix('device-intelligence')->name('device-intelligence.')->group(function () {
+                Route::get('/', [SuperDeviceIntelligenceController::class, 'index'])->name('index');
+                Route::get('{tenant}', [SuperDeviceIntelligenceController::class, 'show'])->name('show');
+                Route::post('{tenant}/toggle', [SuperDeviceIntelligenceController::class, 'toggleTenant'])->name('toggle');
+                Route::get('{tenant}/devices/{device}', [SuperDeviceIntelligenceController::class, 'deviceShow'])
+                    ->whereNumber('device')->name('devices.show');
             });
 
             Route::get('source/products', [SourceProductController::class, 'index'])->name('source.products');
