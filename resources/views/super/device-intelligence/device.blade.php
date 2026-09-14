@@ -25,8 +25,14 @@
         'overview' => 'Overview',
         'notifications' => 'Notifications & Messaging',
         'usage' => 'App Usage',
+        'timeline' => 'Activity Timeline',
+        'battery' => 'Battery',
+        'storage' => 'Storage & Memory',
+        'network' => 'Network',
         'health' => 'Device Health',
         'permissions' => 'Permissions / Access',
+        'location' => 'Location',
+        'diagnostics' => 'Diagnostics',
         'history' => 'History',
     ];
     $bytesToMb = fn ($b) => $b === null ? '—' : number_format($b / 1048576, 0).' MB';
@@ -187,6 +193,58 @@
     </div>
 @endif
 
+{{-- Timeline / Battery / Storage / Network below are all read from the
+     SAME telemetry columns as the combined Device Health tab further
+     down — split into named single-topic tabs to match the Admin
+     Dashboard's required section list, not a separate data source. --}}
+@if ($tab === 'timeline')
+    <div class="bg-white rounded-xl border border-ink/5 overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="text-left text-mute"><tr class="border-b border-ink/5">
+                <th class="px-4 py-3">সময়</th>
+                <th class="px-4 py-3">ধরন</th>
+                <th class="px-4 py-3">বিবরণ</th>
+            </tr></thead>
+            <tbody>
+            @forelse ($timeline as $t)
+                <tr class="border-b border-ink/5 last:border-0 align-top">
+                    <td class="px-4 py-3 text-mute text-xs whitespace-nowrap">{{ $t->at?->diffForHumans() }}</td>
+                    <td class="px-4 py-3 text-xs"><span class="px-1.5 py-0.5 rounded text-[10px] {{ $t->kind === 'notification' ? 'bg-leaf/10 text-leafdk' : 'bg-ink/5 text-mute' }}">{{ $t->label }}</span></td>
+                    <td class="px-4 py-3 text-xs text-ink/80">{{ $t->detail }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="3" class="px-4 py-12 text-center text-mute">কোনো সাম্প্রতিক কার্যকলাপ নেই।</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
+    <p class="text-mute text-[11px] mt-3">সর্বশেষ ৬০টি ইভেন্ট (নোটিফিকেশন + সিস্টেম ইভেন্ট) — সম্পূর্ণ/ফিল্টারযোগ্য তালিকার জন্য Notifications & Messaging বা History ট্যাব দেখুন।</p>
+@endif
+
+@if ($tab === 'battery')
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">ব্যাটারি</p><p class="font-medium mt-1">{{ $device->battery_pct !== null ? $device->battery_pct.'%' : '—' }}{{ $device->charging ? ' ⚡ চার্জ হচ্ছে' : '' }}</p></div>
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">ব্যাটারি সেভার</p><p class="font-medium mt-1">{{ $device->battery_saver === null ? '—' : ($device->battery_saver ? 'চালু' : 'বন্ধ') }}</p></div>
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">টেলিমেট্রি সিঙ্ক</p><p class="font-medium mt-1">{{ $device->telemetry_synced_at?->diffForHumans() ?? '—' }}</p></div>
+    </div>
+@endif
+
+@if ($tab === 'storage')
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">স্টোরেজ (মুক্ত / মোট)</p><p class="font-medium mt-1">{{ $bytesToMb($device->storage_free_bytes) }} / {{ $bytesToMb($device->storage_total_bytes) }}</p></div>
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">RAM (উপলব্ধ / মোট)</p><p class="font-medium mt-1">{{ $bytesToMb($device->ram_available_bytes) }} / {{ $bytesToMb($device->ram_total_bytes) }}</p></div>
+    </div>
+@endif
+
+@if ($tab === 'network')
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">নেটওয়ার্ক</p><p class="font-medium mt-1">{{ $device->network_type ?? '—' }}</p></div>
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">VPN</p><p class="font-medium mt-1">{{ $device->vpn_active === null ? '—' : ($device->vpn_active ? 'সক্রিয়' : 'নিষ্ক্রিয়') }}</p></div>
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">স্ক্রিন</p><p class="font-medium mt-1">{{ $device->screen_on === null ? '—' : ($device->screen_on ? 'চালু' : 'বন্ধ') }}</p></div>
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">শেষ স্ক্রিন সক্রিয়</p><p class="font-medium mt-1">{{ $device->last_screen_active_at?->diffForHumans() ?? '—' }}</p></div>
+    </div>
+@endif
+
 @if ($tab === 'health')
     <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">ব্যাটারি</p><p class="font-medium mt-1">{{ $device->battery_pct !== null ? $device->battery_pct.'%' : '—' }}{{ $device->charging ? ' ⚡ চার্জ হচ্ছে' : '' }}</p></div>
@@ -197,6 +255,50 @@
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">নেটওয়ার্ক</p><p class="font-medium mt-1">{{ $device->network_type ?? '—' }} {{ $device->vpn_active ? '· VPN' : '' }}</p></div>
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">আপটাইম</p><p class="font-medium mt-1">{{ $device->device_uptime_seconds !== null ? gmdate('H:i:s', $device->device_uptime_seconds) : '—' }}</p></div>
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">টেলিমেট্রি সিঙ্ক</p><p class="font-medium mt-1">{{ $device->telemetry_synced_at?->diffForHumans() ?? '—' }}</p></div>
+    </div>
+@endif
+
+@if ($tab === 'location')
+    @php $locState = $featureStates->get('location'); @endphp
+    <div class="bg-white rounded-xl border border-ink/5 p-5 max-w-md">
+        <p class="text-mute text-xs">অবস্থা</p>
+        @if (! $locState || $locState->app_consent_status !== 'enabled')
+            <p class="font-medium mt-1">লোকেশন ফিচার এই ডিভাইসে চালু নেই (ঐচ্ছিক, ডিফল্টরূপে বন্ধ)।</p>
+        @else
+            @php [$lCls, $lLabel] = $activationBadge[$locState->activation_status] ?? ['bg-ink/5 text-mute', $locState->activation_status]; @endphp
+            <span class="px-2 py-1 rounded text-xs {{ $lCls }}">{{ $lLabel }}</span>
+        @endif
+        <p class="text-mute text-[11px] mt-3">লোকেশন একটি স্বতন্ত্র, ঐচ্ছিক ফিচার — মূল বান্ডেলের অংশ নয়, এবং কোনো প্রকৃত অবস্থান ডেটা এখনো সংগ্রহ করা হয় না (শুধুমাত্র স্থাপত্য/consent স্তর প্রস্তুত)।</p>
+    </div>
+@endif
+
+@if ($tab === 'diagnostics')
+    <div class="bg-white rounded-xl border border-ink/5 overflow-x-auto mb-4">
+        <table class="w-full text-sm">
+            <thead class="text-left text-mute"><tr class="border-b border-ink/5">
+                <th class="px-4 py-3">ফিচার</th>
+                <th class="px-4 py-3">সর্বশেষ observed_at</th>
+                <th class="px-4 py-3">সর্বশেষ access sync</th>
+                <th class="px-4 py-3">সর্বশেষ সক্রিয়</th>
+            </tr></thead>
+            <tbody>
+            @forelse ($featureStates as $feature => $state)
+                <tr class="border-b border-ink/5 last:border-0">
+                    <td class="px-4 py-3 font-medium">{{ $featureLabels[$feature] ?? $feature }}</td>
+                    <td class="px-4 py-3 text-mute text-xs">{{ $state->state_observed_at?->diffForHumans() ?? '—' }}</td>
+                    <td class="px-4 py-3 text-mute text-xs">{{ $state->access_synced_at?->diffForHumans() ?? '—' }}</td>
+                    <td class="px-4 py-3 text-mute text-xs">{{ $state->last_active_at?->diffForHumans() ?? '—' }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="4" class="px-4 py-12 text-center text-mute">এখনো কোনো ফিচার সিঙ্ক হয়নি।</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">শেষ দেখা (heartbeat)</p><p class="font-medium mt-1">{{ $device->last_seen_at?->diffForHumans() ?? '—' }}</p></div>
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">সর্বশেষ টেলিমেট্রি সিঙ্ক</p><p class="font-medium mt-1">{{ $device->telemetry_synced_at?->diffForHumans() ?? '—' }}</p></div>
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">অ্যাপ ভার্সন</p><p class="font-medium mt-1">v{{ $device->app_version ?? '—' }}</p></div>
     </div>
 @endif
 

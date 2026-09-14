@@ -180,6 +180,36 @@ class DeviceIntelligenceController extends Controller
                 ->paginate(30)->withQueryString();
         }
 
+        // Activity Timeline — a read-only chronological MERGE of
+        // notifications + device-intelligence events, each already stored
+        // for their own tabs above; never a separate collection pipeline,
+        // just the two existing sources interleaved by timestamp. Capped
+        // rather than paginated (a "recent activity" view, not a full
+        // export — Notifications & Messaging / History already provide
+        // the exhaustive, filterable, paginated views of each source).
+        $timeline = null;
+        if ($tab === 'timeline') {
+            $recentNotifications = DeviceNotification::query()
+                ->where('mobile_device_id', $deviceModel->id)
+                ->orderByDesc('posted_at')->limit(50)->get()
+                ->map(fn ($n) => (object) [
+                    'at' => $n->posted_at,
+                    'kind' => 'notification',
+                    'label' => ($n->app_name ?: $n->package_name).($n->sender ? ' — '.$n->sender : ''),
+                    'detail' => $n->title ?: \Illuminate\Support\Str::limit($n->body, 80),
+                ]);
+            $recentEvents = $deviceModel->events()
+                ->where('event_type', 'like', 'device_intelligence%')
+                ->orderByDesc('created_at')->limit(50)->get()
+                ->map(fn ($e) => (object) [
+                    'at' => $e->created_at,
+                    'kind' => 'event',
+                    'label' => $e->event_type,
+                    'detail' => $e->note,
+                ]);
+            $timeline = $recentNotifications->concat($recentEvents)->sortByDesc('at')->values()->take(60);
+        }
+
         return view('super.device-intelligence.device', [
             'tenant' => $tenant,
             'device' => $deviceModel,
@@ -190,6 +220,7 @@ class DeviceIntelligenceController extends Controller
             'categoryLabels' => self::CATEGORY_LABELS,
             'usage' => $usage,
             'history' => $history,
+            'timeline' => $timeline,
         ]);
     }
 

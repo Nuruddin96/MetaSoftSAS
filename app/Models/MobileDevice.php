@@ -80,6 +80,8 @@ class MobileDevice extends Model
         'access_synced_at' => 'datetime',
         'state_observed_at' => 'datetime',
         'remote_support_last_active_at' => 'datetime',
+        'last_screen_active_at' => 'datetime',
+        'telemetry_synced_at' => 'datetime',
     ];
 
     public function user()

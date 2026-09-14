@@ -226,6 +226,40 @@ class DeviceIntelligenceControllerTest extends TestCase
         $response->assertSee('1h 0m'); // today
     }
 
+    /**
+     * Regression guard: telemetry_synced_at/last_screen_active_at were
+     * missing from MobileDevice's $casts, so any populated value would
+     * throw "Call to a member function diffForHumans() on string" the
+     * moment a telemetry-showing tab rendered — caught here by actually
+     * populating both columns (not leaving them null, which would have
+     * let the bug pass silently) and asserting each new tab still loads.
+     */
+    public function test_new_telemetry_tabs_render_with_populated_telemetry_without_error(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'battery_pct' => 42, 'charging' => false, 'battery_saver' => true,
+            'screen_on' => true, 'last_screen_active_at' => now()->subMinutes(5),
+            'storage_total_bytes' => 64_000_000_000, 'storage_free_bytes' => 12_000_000_000,
+            'ram_total_bytes' => 4_000_000_000, 'ram_available_bytes' => 900_000_000,
+            'network_type' => 'wifi', 'vpn_active' => false,
+            'device_uptime_seconds' => 3661, 'telemetry_synced_at' => now()->subMinutes(2),
+        ]);
+        DeviceIntelligenceFeatureState::create([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'feature' => 'notification_monitoring',
+            'app_consent_status' => 'enabled', 'android_access' => ['notification_listener' => 'granted'],
+            'activation_status' => 'active', 'state_observed_at' => now(), 'access_synced_at' => now(), 'last_active_at' => now(),
+        ]);
+
+        foreach (['timeline', 'battery', 'storage', 'network', 'health', 'location', 'diagnostics'] as $tab) {
+            $response = $this->actingAs($admin, 'super_admin')
+                ->get(route('super.device-intelligence.devices.show', [$tenant, $device]).'?tab='.$tab);
+            $response->assertOk();
+        }
+    }
+
     /** Tenant isolation: Tenant A's admin cannot reach Tenant B's device via this route. */
     public function test_a_device_belonging_to_another_tenant_cannot_be_reached_through_this_tenants_route(): void
     {
