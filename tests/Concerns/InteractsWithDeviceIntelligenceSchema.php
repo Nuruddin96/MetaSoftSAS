@@ -65,7 +65,10 @@ trait InteractsWithDeviceIntelligenceSchema
                 $table->timestamp('state_observed_at')->nullable();
                 $table->timestamp('last_active_at')->nullable();
                 $table->timestamps();
-                $table->unique(['mobile_device_id', 'feature']);
+                // Matches the migration's explicit short constraint name
+                // — see that file's doc comment on the MySQL 64-char
+                // identifier-length limit this avoids.
+                $table->unique(['mobile_device_id', 'feature'], 'di_feature_states_device_feature_unique');
             });
         }
 

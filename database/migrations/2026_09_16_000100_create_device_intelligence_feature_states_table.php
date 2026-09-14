@@ -38,7 +38,13 @@ return new class extends Migration
             $table->timestamp('last_active_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['mobile_device_id', 'feature']);
+            // Explicit short name — MySQL's default auto-generated name
+            // (device_intelligence_feature_states_mobile_device_id_feature_unique)
+            // exceeds its 64-char identifier limit (confirmed via a real
+            // production deploy failure, not assumed) — SQLite (used by
+            // the test suite) has no such limit, which is why this only
+            // surfaced against real MySQL.
+            $table->unique(['mobile_device_id', 'feature'], 'di_feature_states_device_feature_unique');
             $table->index('tenant_id');
         });
     }
