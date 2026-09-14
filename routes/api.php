@@ -419,6 +419,12 @@ Route::prefix('mobile/v1')->group(function () {
     // heartbeat rather than introducing a new one.
     Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/fcm-token', [DeviceController::class, 'updateFcmToken']);
 
+    // Two-layer consent/access sync for Admin Dashboard visibility only —
+    // see DeviceController::syncConsent()'s doc comment and
+    // docs/remote-support-consent-model.md (Flutter repo) §5. Reuses the
+    // same device-credential ability as heartbeat/fcm-token.
+    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/consent-sync', [DeviceController::class, 'syncConsent']);
+
     Route::middleware(['auth:sanctum', 'ability:device:signal'])->group(function () {
         Route::post('devices/sessions/{sessionToken}/signal', [SignalController::class, 'send']);
         Route::get('devices/sessions/{sessionToken}/signal', [SignalController::class, 'poll']);
