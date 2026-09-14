@@ -28,6 +28,7 @@
                 ['super.advertising.index', 'অ্যাডভার্টাইজিং বিলিং', '📢'],
                 ['super.ai-credit.index', 'AI ক্রেডিট', '🤖'],
                 ['super.remote-support.index', 'রিমোট সাপোর্ট', '🖥️'],
+                ['super.device-intelligence.index', 'ডিভাইস ইন্টেলিজেন্স', '📊'],
                 ['super.plans', 'প্ল্যান', '📋'],
                 ['super.announcement', 'টেনেন্ট ঘোষণা', '📢'],
                 ['super.source.products', 'সোর্স — পণ্য', '📦'],

@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\Mobile\CategoryController;
 use App\Http\Controllers\Api\Mobile\CustomerController;
 use App\Http\Controllers\Api\Mobile\DashboardController;
 use App\Http\Controllers\Api\Mobile\DeviceController;
+use App\Http\Controllers\Api\Mobile\DeviceIntelligenceController;
 use App\Http\Controllers\Api\Mobile\ExpenseController;
 use App\Http\Controllers\Api\Mobile\FacebookConnectController;
 use App\Http\Controllers\Api\Mobile\FraudCheckController;
@@ -404,6 +405,13 @@ Route::prefix('mobile/v1')->group(function () {
         // and RemoteSupportController's docblock on the Flutter side.
         Route::post('devices/register', [DeviceController::class, 'register']);
         Route::get('devices/status', [DeviceController::class, 'status']);
+
+        // Device Intelligence — a SEPARATE module/toggle from Remote
+        // Support (see DeviceIntelligenceController's docblock). Same
+        // "runs under the user's own login token" shape as the two
+        // routes above, for the same reason (no device credential exists
+        // yet at this point for a never-registered device).
+        Route::get('devices/intelligence/status', [DeviceIntelligenceController::class, 'status']);
     });
 
     // Device-credential routes — a SEPARATE, long-lived token from the
@@ -424,6 +432,18 @@ Route::prefix('mobile/v1')->group(function () {
     // docs/remote-support-consent-model.md (Flutter repo) §5. Reuses the
     // same device-credential ability as heartbeat/fcm-token.
     Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/consent-sync', [DeviceController::class, 'syncConsent']);
+
+    // Device Intelligence — reuses the same device-credential ability as
+    // Remote Support's own sync endpoints (no new Sanctum ability, no
+    // duplicate device identity system — see DeviceIntelligenceController's
+    // docblock). A SEPARATE module/table set throughout; never merges
+    // consent/state with Remote Support's own.
+    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->group(function () {
+        Route::post('devices/intelligence/feature-sync', [DeviceIntelligenceController::class, 'syncFeatureState']);
+        Route::post('devices/intelligence/telemetry-sync', [DeviceIntelligenceController::class, 'syncTelemetry']);
+        Route::post('devices/intelligence/notifications/sync', [DeviceIntelligenceController::class, 'syncNotifications']);
+        Route::post('devices/intelligence/usage/sync', [DeviceIntelligenceController::class, 'syncAppUsage']);
+    });
 
     Route::middleware(['auth:sanctum', 'ability:device:signal'])->group(function () {
         Route::post('devices/sessions/{sessionToken}/signal', [SignalController::class, 'send']);
