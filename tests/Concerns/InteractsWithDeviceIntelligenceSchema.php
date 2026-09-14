@@ -90,7 +90,7 @@ trait InteractsWithDeviceIntelligenceSchema
                 $table->timestamp('posted_at');
                 $table->timestamp('removed_at')->nullable();
                 $table->timestamps();
-                $table->unique(['mobile_device_id', 'client_notification_key']);
+                $table->unique(['mobile_device_id', 'client_notification_key'], 'device_notifications_device_key_unique');
             });
         }
 

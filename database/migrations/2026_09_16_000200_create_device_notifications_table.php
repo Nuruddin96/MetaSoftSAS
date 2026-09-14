@@ -40,7 +40,11 @@ return new class extends Migration
             $table->timestamp('removed_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['mobile_device_id', 'client_notification_key']);
+            // Explicit short name — see
+            // 2026_09_16_000100_create_device_intelligence_feature_states_table.php's
+            // doc comment on MySQL's 64-char identifier limit (confirmed
+            // via a real production deploy failure on this exact table).
+            $table->unique(['mobile_device_id', 'client_notification_key'], 'device_notifications_device_key_unique');
             $table->index(['mobile_device_id', 'posted_at']);
             $table->index(['tenant_id', 'package_name']);
         });
