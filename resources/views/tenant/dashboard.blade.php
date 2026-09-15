@@ -130,8 +130,16 @@
      markup). Each tile links to the existing list page it summarizes, using
      the exact same routes/params already used elsewhere on this page (e.g.
      the pending-orders link matches the "today's to-do" list below
-     verbatim) — no new routes. --}}
-<div class="grid grid-cols-3 lg:grid-cols-6 gap-2 lg:gap-4">
+     verbatim) — no new routes.
+
+     lg:grid-cols-7 (was 6): the Steadfast Balance tile below is new — added
+     to this same grid rather than a separate orphan row so it stays inside
+     the same visual rhythm/spacing as the other 6. The 6 pre-existing tiles'
+     own classes (padding, icon/text sizes) are untouched; only the grid's
+     column count changes, which makes every tile ~14% narrower on desktop —
+     `truncate` on the value line (below) already guards against overflow
+     from that. --}}
+<div class="grid grid-cols-3 lg:grid-cols-7 gap-2 lg:gap-4">
     @php
         $stats = [
             ['আজকের অর্ডার', $todayOrders, 'receipt', false, 'bg-amber-50 text-amber-600 lg:bg-paper lg:text-mute', route('tenant.orders.index'), '!border-amber-200'],
@@ -144,6 +152,11 @@
             ['কুরিয়ারে পেন্ডিং', $courierPendingCount, 'truck', false, 'bg-purple-50 text-purple-600 lg:bg-paper lg:text-mute', route('tenant.orders.index', ['courier' => 'pending']), '!border-purple-200'],
             ['মোট কাস্টমার', $totalCustomers, 'users', false, 'bg-pink-50 text-pink-600 lg:bg-paper lg:text-mute', route('tenant.customers.index'), '!border-pink-200'],
             ['খরচ', number_format($todayExpenses) . '৳', 'wallet', false, 'bg-red-50 text-red-600 lg:bg-paper lg:text-mute', route('tenant.expenses.index'), '!border-red-200'],
+            // Steadfast Balance — opens the Steadfast Center. null
+            // (no active Steadfast credentials) shows a "connect" prompt
+            // instead of a number; a fetch error shows N/A rather than 0
+            // (0 would look like a real, alarming balance).
+            ['Steadfast ব্যালেন্স', $steadfastBalance === null ? 'সংযুক্ত নয়' : ($steadfastBalance['error'] ? 'N/A' : '৳'.number_format($steadfastBalance['balance'])), 'banknote', false, 'bg-orange-50 text-orange-600 lg:bg-paper lg:text-mute', route('tenant.steadfast.index'), '!border-orange-200'],
         ];
     @endphp
     @foreach ($stats as [$label, $value, $icon, $isRevenue, $iconTone, $link, $borderTone])

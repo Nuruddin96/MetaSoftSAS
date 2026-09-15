@@ -245,7 +245,10 @@
                 <p class="text-sm">{{ ucfirst($order->courier_provider) }}-এ পাঠানো হয়েছে ✓</p>
                 <p class="text-xs text-mute mt-1 break-words">কনসাইনমেন্ট: {{ $order->courier_consignment_id }}<br>
                     ট্র্যাকিং: {{ $order->courier_tracking_code }}</p>
-                @if ($order->courier_status)
+                @if ($order->courier_provider === 'steadfast')
+                    {{-- Real courier tracking timeline — see components/courier/timeline.blade.php's docblock for why only 3 honest stages, not a fabricated multi-hub breakdown --}}
+                    <x-courier.timeline :order="$order" class="mt-3 pt-3 border-t border-ink/10" />
+                @elseif ($order->courier_status)
                     <p class="text-xs text-mute mt-2 pt-2 border-t border-ink/10">কুরিয়ার স্ট্যাটাস: <span class="font-medium text-ink">{{ $order->courier_status }}</span></p>
                 @endif
                 <form method="POST" action="{{ route('tenant.orders.courier.refresh', $order) }}" class="mt-2">

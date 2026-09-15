@@ -32,6 +32,10 @@
     $adEnabled = $adService->isEnabled($notifTenant);
     $adBalance = $adEnabled ? $adService->balance($notifTenant->id) : null;
 
+    // Nav entry only shown once Steadfast credentials are actually active —
+    // CourierManager::forProvider() just checks CourierSetting, no API call.
+    $steadfastNavEnabled = (bool) \App\Services\Courier\CourierManager::forProvider('steadfast');
+
     // Notifications have no persisted record of their own to hang a
     // read/unread flag on — badges below are live business-state counts.
     // "Read" is tracked per-category as a session timestamp instead (set
@@ -116,6 +120,7 @@
                     'বিক্রি' => array_filter([
                         $tenant->plan?->allow_pos ? ['tenant.pos', 'POS বিক্রি', 'calculator'] : null,
                         ['tenant.orders.index', 'অর্ডার', 'receipt'],
+                        $steadfastNavEnabled ? ['tenant.steadfast.index', 'Steadfast সেন্টার', 'truck'] : null,
                         ['tenant.incomplete', 'অসম্পূর্ণ অর্ডার', 'phone-missed'],
                         // The WhatsApp-style unified inbox (Messenger +
                         // WhatsApp together, filterable by channel) is now

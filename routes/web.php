@@ -55,6 +55,7 @@ use App\Http\Controllers\Tenant\PushSubscriptionController;
 use App\Http\Controllers\Tenant\PwaController as TenantPwaController;
 use App\Http\Controllers\Tenant\ReportController;
 use App\Http\Controllers\Tenant\SettingController;
+use App\Http\Controllers\Tenant\SteadfastCenterController;
 use App\Http\Controllers\Tenant\WebsiteController;
 use App\Http\Controllers\Tenant\WhatsAppConnectController;
 use App\Http\Controllers\Tenant\WhatsAppInboxController;
@@ -311,6 +312,13 @@ $tenantRoutes = function () {
             Route::post('orders/bulk-status', [OrderController::class, 'bulkStatus'])->name('orders.bulk-status');
             Route::post('orders/bulk-courier', [OrderController::class, 'bulkCourier'])->name('orders.bulk-courier');
             Route::post('fraud-check', [FraudCheckController::class, 'check'])->name('fraud.check');
+
+            // Steadfast Center — dashboard-style hub opened from the
+            // Steadfast Balance tile: balance, parcels actually sent to
+            // Steadfast, courier overview, COD/settlement info, payment
+            // history, search. See SteadfastCenterController's docblock.
+            Route::get('steadfast', [SteadfastCenterController::class, 'index'])->name('steadfast.index');
+            Route::post('steadfast/balance/refresh', [SteadfastCenterController::class, 'refreshBalance'])->name('steadfast.balance.refresh');
 
             // POS
             Route::get('pos', [PosController::class, 'index'])->name('pos');

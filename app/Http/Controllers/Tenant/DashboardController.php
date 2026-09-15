@@ -10,6 +10,7 @@ use App\Models\IncompleteOrder;
 use App\Models\MessengerMessage;
 use App\Models\Order;
 use App\Models\Product;
+use App\Services\Courier\CourierManager;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
@@ -36,6 +37,15 @@ class DashboardController extends Controller
 
         $newMessages = MessengerMessage::where('status', 'new')->where('direction', 'in')->count();
         $newIncomplete = IncompleteOrder::where('status', 'abandoned')->count();
+
+        // Steadfast Balance dashboard tile — null when the tenant has no
+        // active Steadfast credentials (CourierManager::forProvider returns
+        // null then), same "just skip it" pattern as courierPendingCount
+        // requiring nothing at all. cachedBalance() never throws — it
+        // swallows Steadfast API errors into ['error' => ...] so a slow/down
+        // courier API can never break the dashboard.
+        $steadfastService = CourierManager::forProvider('steadfast');
+        $steadfastBalance = $steadfastService ? $steadfastService->cachedBalance($tenant->id) : null;
 
         $districtStats = Order::whereNotIn('orders.status', ['cancelled'])
             ->whereNotNull('district_id')
@@ -67,6 +77,7 @@ class DashboardController extends Controller
                 ->whereNotIn('status', ['delivered', 'cancelled', 'returned'])
                 ->count(),
             'todayExpenses' => (float) Expense::whereDate('expense_date', $today)->sum('amount'),
+            'steadfastBalance' => $steadfastBalance,
             'recentOrders' => Order::latest()->paginate(10),
             'byChannel' => Order::selectRaw('channel, COUNT(*) as c')->groupBy('channel')->pluck('c', 'channel'),
             'topDistricts' => $districtStats->take(5),
