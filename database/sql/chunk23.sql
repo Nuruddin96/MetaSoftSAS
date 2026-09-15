@@ -39,8 +39,17 @@ CREATE TABLE facebook_connections (
     token_expires_at TIMESTAMP NULL DEFAULT NULL,
     granted_scopes VARCHAR(500) DEFAULT NULL,
     created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
+    -- ON DELETE CASCADE here too (matches facebook_oauth_states.user_id
+    -- right above) — without it, deleting a tenant whose staff account is
+    -- still referenced by connected_by_user_id throws a raw FK violation
+    -- (1451) on `DELETE FROM tenants`, since MySQL's cascade from tenants
+    -- reaches both `users` (tenant_id CASCADE) and this table's own row
+    -- (tenant_id CASCADE) but has no path that lets it also satisfy this
+    -- non-cascading reference to the user being deleted along the way —
+    -- see database/sql/chunk61.sql for the ALTER that fixes an
+    -- already-imported database.
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-    FOREIGN KEY (connected_by_user_id) REFERENCES users(id)
+    FOREIGN KEY (connected_by_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- OAuth-connected Facebook Pages. Deliberately NOT unique on tenant_id

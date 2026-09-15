@@ -165,6 +165,42 @@ class AiHandoffServiceTest extends TestCase
         $this->assertTrue($this->service()->isActive($tenantB->id, 'messenger', 'psid-b'));
     }
 
+    // --- REASON_MANUALLY_DISABLED (Messenger inbox "AI [toggle]") --------------------------
+
+    /** The manual per-customer AI toggle just calls trigger()/resolve() with a distinct reason — this locks in that it behaves identically to any other reason for isActive() purposes. */
+    public function test_manually_disabling_ai_makes_isactive_true_same_as_any_other_reason(): void
+    {
+        $tenant = $this->makeTenant();
+
+        $this->service()->trigger($tenant->id, 'messenger', 'psid-1', AiHandoffService::REASON_MANUALLY_DISABLED);
+
+        $this->assertTrue($this->service()->isActive($tenant->id, 'messenger', 'psid-1'));
+        $row = DB::table('ai_handoffs')->where('tenant_id', $tenant->id)->first();
+        $this->assertSame(AiHandoffService::REASON_MANUALLY_DISABLED, $row->reason);
+    }
+
+    public function test_turning_the_toggle_back_on_resolves_the_manual_handoff(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->service()->trigger($tenant->id, 'messenger', 'psid-1', AiHandoffService::REASON_MANUALLY_DISABLED);
+
+        $this->service()->resolve($tenant->id, 'messenger', 'psid-1', $user->id);
+
+        $this->assertFalse($this->service()->isActive($tenant->id, 'messenger', 'psid-1'));
+    }
+
+    /** Toggling AI off twice must not create two rows (trigger()'s existing idempotency already covers this new reason too). */
+    public function test_toggling_ai_off_twice_does_not_duplicate_the_handoff_row(): void
+    {
+        $tenant = $this->makeTenant();
+
+        $this->service()->trigger($tenant->id, 'messenger', 'psid-1', AiHandoffService::REASON_MANUALLY_DISABLED);
+        $this->service()->trigger($tenant->id, 'messenger', 'psid-1', AiHandoffService::REASON_MANUALLY_DISABLED);
+
+        $this->assertSame(1, DB::table('ai_handoffs')->where('tenant_id', $tenant->id)->count());
+    }
+
     public function test_isactive_degrades_to_false_when_the_table_does_not_exist(): void
     {
         $tenant = $this->makeTenant();

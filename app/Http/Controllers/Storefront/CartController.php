@@ -50,6 +50,14 @@ class CartController extends Controller
         ]);
 
         $variant = ProductVariant::findOrFail($data['variant_id']);
+
+        // Same enforcement OrderPlacementService::place() applies at actual
+        // checkout time — rejecting here too means a deactivated variant
+        // never even reaches the cart, not just never reaches an order.
+        if (! $variant->is_active) {
+            return back()->with('error', 'দুঃখিত, এই প্রোডাক্টটি এখন পাওয়া যাচ্ছে না।');
+        }
+
         $stock = $variant->totalStock();
 
         if ($stock <= 0) {
@@ -66,6 +74,16 @@ class CartController extends Controller
 
         $cart[$variant->id] = $already + $qty;
         session([$this->key() => $cart]);
+
+        // "এখনই কিনুন" (Buy Now) on the product page submits this exact
+        // same add-to-cart form with one extra hidden field, then skips
+        // the cart page straight to checkout — same validated/stocked add
+        // as normal, just a different landing page. Every other caller
+        // (grid quick-add, the regular product-page button) omits the
+        // field and keeps landing on the cart page as before.
+        if ($request->input('redirect') === 'checkout') {
+            return redirect()->route('storefront.checkout');
+        }
 
         return redirect()->route('storefront.cart')->with('success', 'কার্টে যোগ হয়েছে।');
     }

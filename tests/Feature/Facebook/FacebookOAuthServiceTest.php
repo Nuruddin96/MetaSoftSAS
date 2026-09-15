@@ -3,11 +3,39 @@
 namespace Tests\Feature\Facebook;
 
 use App\Exceptions\FacebookGraphException;
+use App\Models\FacebookOauthState;
 use App\Services\Facebook\FacebookOAuthService;
 use Illuminate\Support\Facades\Http;
 
 class FacebookOAuthServiceTest extends FacebookFeatureTestCase
 {
+    /**
+     * Root cause of "the previous tenant's Page keeps coming back": once a
+     * Facebook user has granted this app pages_* access for one tenant,
+     * Meta's /dialog/oauth silently auto-approves every later visit for
+     * that same user+app+scopes (Page picker included) and just replays
+     * the originally-granted Page set — with no way to choose a different
+     * Page for a second tenant — unless auth_type=rerequest is present to
+     * force the full consent dialog to render again every time.
+     */
+    public function test_authorization_url_forces_rerequest_so_the_page_picker_always_reappears(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $state = FacebookOauthState::create([
+            'state' => str_repeat('a', 64),
+            'tenant_id' => $tenant->id,
+            'user_id' => $user->id,
+            'purpose' => 'messenger',
+            'expires_at' => now()->addMinutes(10),
+        ]);
+
+        $url = (new FacebookOAuthService)->authorizationUrl($state);
+
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $params);
+        $this->assertSame('rerequest', $params['auth_type'] ?? null);
+    }
+
     public function test_unsubscribe_sends_access_token_as_a_query_parameter_not_a_json_body(): void
     {
         Http::fake(['*/subscribed_apps*' => Http::response(['success' => true])]);

@@ -51,13 +51,23 @@
     {{-- Storefront paper is a slightly different shade, and brand/accent come from this tenant's own colors.
          --color-header-fg is bound explicitly to the header's own (currently always white) background,
          instead of the store name relying on the shared global --color-ink token — so it can never go
-         invisible if --color-ink is ever repurposed elsewhere for this tenant. --}}
+         invisible if --color-ink is ever repurposed elsewhere for this tenant.
+
+         Radius override: the shared --radius-card (1.25rem/20px) reads as
+         "heavily rounded" for a clean/simple ecommerce storefront —
+         central/panel/super keep the shared default from app.css
+         unchanged, only the storefront scales it down here so every
+         existing rounded-card/rounded-btn usage across every storefront
+         view picks up the smaller radius for free, with zero Blade
+         changes required per-view. --}}
     <style>
         :root {
             --color-paper: #F7F6F1;
             --color-brand: {{ $tenant->primary_color ?: '#128155' }};
             --color-accent: {{ $tenant->secondary_color ?: '#f59e0b' }};
             --color-header-fg: #132A21;
+            --radius-btn: 0.5rem;
+            --radius-card: 0.625rem;
         }
     </style>
 
@@ -81,6 +91,16 @@
     <noscript><img height="1" width="1" style="display:none"
         src="https://www.facebook.com/tr?id={{ $mk->fb_pixel_id }}&ev=PageView&noscript=1"/></noscript>
     @endif
+
+    @if ($mk?->clarity_project_id)
+    <script type="text/javascript">
+        (function(c,l,a,r,i,t,y){
+            c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+            t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+            y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+        })(window, document, "clarity", "script", "{{ $mk->clarity_project_id }}");
+    </script>
+    @endif
 </head>
 <body class="font-body bg-paper text-ink antialiased">
 @if ($mk?->gtm_container_id)
@@ -102,33 +122,53 @@
 @endif
 
 <header class="bg-white border-b border-ink/5 sticky top-0 z-40">
-    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-        <a href="{{ route('storefront.home') }}" class="flex items-center gap-2 min-w-0">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3 md:gap-5">
+        <a href="{{ route('storefront.home') }}" class="flex items-center gap-2 min-w-0 shrink-0">
             @if ($tenant->logo_path)
-                <img src="{{ asset('storage/' . $tenant->logo_path) }}" alt="{{ $tenant->store_name }}" class="h-10 max-w-[120px] object-contain shrink-0"
+                <img src="{{ asset('storage/' . $tenant->logo_path) }}" alt="{{ $tenant->store_name }}" class="h-9 max-w-[110px] object-contain shrink-0"
                      onerror="this.remove();">
             @endif
-            <span class="font-disp font-bold text-lg truncate" style="color: var(--color-header-fg)">{{ $tenant->store_name }}</span>
+            <span class="font-disp font-bold text-base md:text-lg truncate" style="color: var(--color-header-fg)">{{ $tenant->store_name }}</span>
         </a>
 
-        <nav class="flex items-center gap-4 md:gap-5 text-sm shrink-0">
-            <a href="{{ route('storefront.products') }}" class="hidden sm:inline hover:text-brand">সব প্রোডাক্ট</a>
+        <nav class="hidden md:flex items-center gap-5 text-sm shrink-0">
+            <a href="{{ route('storefront.products') }}" class="hover:text-brand {{ request()->routeIs('storefront.products') ? 'text-brand font-semibold' : '' }}">সব প্রোডাক্ট</a>
             @foreach ($headerPages as $p)
-                <a href="{{ route('storefront.page', $p->slug) }}" class="hidden md:inline hover:text-brand">{{ $p->title }}</a>
+                <a href="{{ route('storefront.page', $p->slug) }}" class="hover:text-brand">{{ $p->title }}</a>
             @endforeach
-            <a href="{{ route('storefront.cart') }}" class="relative hover:text-brand">
-                🛒 <span class="hidden sm:inline">কার্ট</span>
-                @if ($cartCount)
-                    <span class="absolute -top-2 -right-3 bg-brand text-white text-[10px] font-bold rounded-full w-5 h-5 grid place-items-center">{{ $cartCount }}</span>
-                @endif
-            </a>
         </nav>
+
+        {{-- Compact inline search — GET to the product listing's own `q` filter, no separate search page/JS needed. Hidden on the smallest screens to keep the header from crowding; the mobile bottom nav's ক্যাটাগরি/সব প্রোডাক্ট items cover discovery there instead. --}}
+        <form action="{{ route('storefront.products') }}" method="GET" class="hidden sm:flex flex-1 max-w-xs">
+            <label class="sr-only" for="headerSearch">প্রোডাক্ট খুঁজুন</label>
+            <div class="relative w-full">
+                <input id="headerSearch" type="search" name="q" value="{{ request('q') }}" placeholder="প্রোডাক্ট খুঁজুন..."
+                       class="w-full h-9 rounded-btn border border-ink/15 bg-paper pl-9 pr-3 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-mute"></i>
+            </div>
+        </form>
+
+        <a href="{{ route('storefront.products') }}#search" class="sm:hidden ml-auto text-ink/70" aria-label="প্রোডাক্ট খুঁজুন">
+            <i data-lucide="search" class="w-5 h-5"></i>
+        </a>
+
+        <a href="{{ route('storefront.cart') }}" class="relative shrink-0 text-ink/70 hover:text-brand" aria-label="কার্ট">
+            <i data-lucide="shopping-cart" class="w-5 h-5"></i>
+            @if ($cartCount)
+                <span class="absolute -top-2 -right-2 bg-brand text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 grid place-items-center">{{ $cartCount }}</span>
+            @endif
+        </a>
     </div>
 </header>
 
-@if (session('success'))
+@if (session('success') || session('error'))
     <div class="max-w-5xl mx-auto px-4 pt-4">
-        <p class="bg-brand/10 border border-brand/30 rounded-lg px-4 py-3 text-sm">{{ session('success') }}</p>
+        @if (session('success'))
+            <p class="bg-leaf/10 border border-leaf/30 text-leafdk rounded-btn px-4 py-3 text-sm">{{ session('success') }}</p>
+        @endif
+        @if (session('error'))
+            <p class="bg-red-50 border border-red-200 text-red-700 rounded-btn px-4 py-3 text-sm">{{ session('error') }}</p>
+        @endif
     </div>
 @endif
 

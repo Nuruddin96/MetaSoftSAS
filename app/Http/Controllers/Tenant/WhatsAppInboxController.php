@@ -206,6 +206,14 @@ class WhatsAppInboxController extends Controller
         return back()->with('success', 'এই কনভারসেশনের জন্য AI Agent আবার চালু হয়েছে।');
     }
 
+    /** Mirrors Tenant\MessengerInboxController::pauseAi() — see that method's docblock. */
+    public function pauseAi(string $waId, AiHandoffService $handoff)
+    {
+        $handoff->trigger(app('currentTenant')->id, 'whatsapp', $waId, AiHandoffService::REASON_MANUALLY_DISABLED);
+
+        return back()->with('success', 'এই কনভারসেশনের জন্য AI Agent বন্ধ করা হয়েছে।');
+    }
+
     /** Polling endpoint for the thread view — same "no confirmed queue worker on shared hosting" reasoning as MessengerInboxController::updates(), plain request/response, not WebSockets. */
     public function updates(Request $request)
     {

@@ -46,12 +46,40 @@ trait InteractsWithCommerceSchema
             });
         }
 
+        if (! Schema::hasTable('business_types')) {
+            Schema::create('business_types', function (Blueprint $table) {
+                $table->id();
+                $table->string('slug', 60)->unique();
+                $table->string('name_bn', 100);
+                $table->string('name_en', 100);
+                $table->string('icon', 10)->nullable();
+                $table->json('default_attributes')->nullable();
+                $table->integer('sort_order')->default(0);
+                $table->boolean('is_active')->default(true);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('business_type_categories')) {
+            Schema::create('business_type_categories', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('business_type_id');
+                $table->string('name', 150);
+                $table->string('parent_name', 150)->nullable();
+                $table->integer('sort_order')->default(0);
+            });
+        }
+
         if (! Schema::hasTable('tenants')) {
             Schema::create('tenants', function (Blueprint $table) {
                 $table->id();
                 $table->unsignedBigInteger('plan_id')->nullable();
+                $table->unsignedBigInteger('business_type_id')->nullable();
+                $table->string('onboarding_step', 30)->nullable();
+                $table->timestamp('onboarding_completed_at')->nullable();
                 $table->string('subdomain')->unique();
                 $table->string('store_name');
+                $table->string('theme', 50)->default('default');
                 $table->string('status')->default('active');
                 $table->timestamp('trial_ends_at')->nullable();
                 $table->timestamp('subscription_ends_at')->nullable();
@@ -251,7 +279,15 @@ trait InteractsWithCommerceSchema
                 $table->string('fb_pixel_id', 50)->nullable();
                 $table->text('fb_capi_token')->nullable();
                 $table->string('fb_test_event_code', 50)->nullable();
+                // Phase 1 CAPI hardening columns — database/sql/chunk48.sql.
+                $table->boolean('capi_test_mode')->default(false);
+                $table->string('capi_last_status', 20)->nullable();
+                $table->smallInteger('capi_last_http_status')->nullable();
+                $table->string('capi_last_error', 255)->nullable();
+                $table->timestamp('capi_last_event_at')->nullable();
                 $table->string('gtm_container_id', 20)->nullable();
+                // Microsoft Clarity — database/sql/chunk58.sql.
+                $table->string('clarity_project_id', 20)->nullable();
                 $table->string('meta_app_id', 50)->nullable();
                 $table->text('meta_app_secret')->nullable();
                 $table->text('meta_access_token')->nullable();
@@ -398,6 +434,26 @@ trait InteractsWithCommerceSchema
             });
         }
 
+        if (! Schema::hasTable('product_attributes')) {
+            Schema::create('product_attributes', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->string('name', 60);
+                $table->integer('sort_order')->default(0);
+                $table->timestamps();
+            });
+        }
+
+        if (! Schema::hasTable('product_attribute_values')) {
+            Schema::create('product_attribute_values', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('product_attribute_id');
+                $table->string('value', 80);
+                $table->integer('sort_order')->default(0);
+                $table->timestamps();
+            });
+        }
+
         if (! Schema::hasTable('inventory')) {
             Schema::create('inventory', function (Blueprint $table) {
                 $table->id();
@@ -442,6 +498,7 @@ trait InteractsWithCommerceSchema
                 $table->unsignedInteger('upazila_id')->nullable();
                 $table->decimal('subtotal', 12, 2)->default(0);
                 $table->decimal('discount', 12, 2)->default(0);
+                $table->decimal('additional_amount', 12, 2)->default(0);
                 $table->decimal('delivery_charge', 10, 2)->default(0);
                 $table->decimal('total', 12, 2)->default(0);
                 $table->decimal('paid_amount', 12, 2)->default(0);
@@ -454,11 +511,22 @@ trait InteractsWithCommerceSchema
                 $table->string('courier_consignment_id', 100)->nullable();
                 $table->string('courier_tracking_code', 100)->nullable();
                 $table->string('courier_status', 50)->nullable();
+                $table->timestamp('courier_status_checked_at')->nullable();
                 $table->integer('fraud_score')->nullable();
                 $table->json('fraud_summary')->nullable();
                 $table->string('fb_event_id', 64)->nullable();
                 $table->string('utm_source', 100)->nullable();
                 $table->text('note')->nullable();
+                // Matches schema.sql's real order_date column —
+                // OrderController::store()/complete() have always set this
+                // on every write, so its absence here was a pre-existing
+                // gap (silently breaking any test class using only this
+                // trait that exercises those two actions), not something
+                // introduced by Priority 2's district/upazila work. Same
+                // fix InteractsWithApiSchema already applied locally for
+                // its own test suite — added here at the root instead,
+                // since it recurred a third time.
+                $table->date('order_date')->nullable();
                 $table->timestamp('confirmed_at')->nullable();
                 $table->timestamp('delivered_at')->nullable();
                 $table->timestamps();
@@ -493,6 +561,23 @@ trait InteractsWithCommerceSchema
             });
         }
 
+        // Single Product Landing Page Builder — database/sql/chunk56.sql,
+        // design column added by chunk57.sql (Landing Page Design System).
+        if (! Schema::hasTable('landing_pages')) {
+            Schema::create('landing_pages', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('product_id');
+                $table->string('title', 150);
+                $table->string('slug', 180);
+                $table->string('status', 20)->default('draft');
+                $table->json('sections')->nullable();
+                $table->json('design')->nullable();
+                $table->timestamp('published_at')->nullable();
+                $table->timestamps();
+            });
+        }
+
         // DeliveryChargeService (order calculation fix) queries this on
         // every order create/show/complete render.
         if (! Schema::hasTable('store_settings')) {
@@ -500,7 +585,11 @@ trait InteractsWithCommerceSchema
                 $table->id();
                 $table->unsignedBigInteger('tenant_id');
                 $table->string('key', 100);
-                $table->string('value', 255)->nullable();
+                // TEXT, matching database/sql/schema.sql's real column —
+                // was VARCHAR(255) here, fine for the short boolean/charge
+                // values this table mostly holds, but too small for
+                // ai_custom_instructions' real 5000-character cap.
+                $table->text('value')->nullable();
                 $table->timestamps();
             });
         }
@@ -514,6 +603,15 @@ trait InteractsWithCommerceSchema
         ], $attrs));
     }
 
+    /**
+     * onboarding_completed_at defaults to "already done" — every existing
+     * test that calls makeTenant() and then exercises ordinary panel routes
+     * predates the Onboarding Wizard and expects normal (non-redirected)
+     * behavior, exactly like a real pre-existing tenant (backfilled by
+     * chunk52.sql). Pass onboarding_completed_at => null explicitly in
+     * $attrs for a test that specifically exercises the wizard/
+     * RequireOnboarding.
+     */
     protected function makeTenant(array $attrs = []): Tenant
     {
         $id = DB::table('tenants')->insertGetId(array_merge([
@@ -521,6 +619,7 @@ trait InteractsWithCommerceSchema
             'store_name' => 'Test Store',
             'status' => 'active',
             'subscription_ends_at' => now()->addYear(),
+            'onboarding_completed_at' => now(),
             'created_at' => now(),
             'updated_at' => now(),
         ], $attrs));

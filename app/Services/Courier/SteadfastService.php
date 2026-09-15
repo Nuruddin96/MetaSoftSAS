@@ -54,6 +54,23 @@ class SteadfastService implements CourierService
         return $response['delivery_status'] ?? 'unknown';
     }
 
+    /**
+     * Steadfast's real, documented `GET /api/v1/get_balance` endpoint —
+     * same base URL/auth headers as every other call in this class, no new
+     * integration. Used by the dashboard's courier-balance widget; callers
+     * must catch/guard for a connection failure themselves (this throws on
+     * a non-2xx response, same as createShipment()/getStatus()) since a
+     * dashboard tile must degrade gracefully rather than break the page.
+     */
+    public function getBalance(): float
+    {
+        $response = Http::withHeaders($this->headers())
+            ->get($this->baseUrl.'/get_balance')
+            ->throw()->json();
+
+        return (float) ($response['current_balance'] ?? 0);
+    }
+
     public function checkPhoneHistory(string $phone): array
     {
         // Steadfast fraud-check endpoint (verify current path in their docs;
@@ -67,16 +84,6 @@ class SteadfastService implements CourierService
             'delivered' => (int) ($response['total_delivered'] ?? 0),
             'returned' => (int) ($response['total_cancelled'] ?? 0),
         ];
-    }
-
-    /** Current Steadfast account balance (documented `GET /get_balance` endpoint). */
-    public function getBalance(): float
-    {
-        $response = Http::withHeaders($this->headers())
-            ->get($this->baseUrl.'/get_balance')
-            ->throw()->json();
-
-        return (float) ($response['current_balance'] ?? 0);
     }
 
     /**

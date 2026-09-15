@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Inventory;
 use App\Models\Product;
+use App\Models\ProductAttribute;
 use App\Models\ProductImage;
 use App\Models\StockMovement;
 use App\Models\Warehouse;
@@ -30,9 +31,12 @@ class ProductController extends Controller
 
     public function create()
     {
+        $tenant = app('currentTenant');
+
         return view('tenant.products.form', [
             'product' => null,
             'categories' => Category::orderBy('name')->get(),
+            'attributes' => ProductAttribute::where('tenant_id', $tenant->id)->with('values')->orderBy('sort_order')->get(),
             'warehouses' => Warehouse::all(),
         ]);
     }
@@ -47,6 +51,7 @@ class ProductController extends Controller
         }
 
         $data = $this->validateProduct($request);
+        $this->assertNoDuplicateVariantCombinations($data['variants']);
 
         $uploadedPaths = [];
 
@@ -78,6 +83,10 @@ class ProductController extends Controller
                     $variant = $product->variants()->create([
                         'tenant_id' => $tenant->id,
                         'variant_name' => $v['variant_name'] ?: 'Default',
+                        // Left null/absent, ProductVariant::booted() auto-
+                        // generates one on create — unchanged behavior.
+                        // Only actually set when the merchant supplied one.
+                        'sku' => ! empty($v['sku']) ? $v['sku'] : null,
                         'purchase_price' => $v['purchase_price'] ?? 0,
                         'selling_price' => $v['selling_price'],
                         'compare_at_price' => $v['compare_at_price'] ?? null,
@@ -123,11 +132,13 @@ class ProductController extends Controller
 
     public function edit(Product $product)
     {
+        $tenant = app('currentTenant');
         $product->load(['variants.inventory', 'images' => fn ($q) => $q->orderBy('sort_order')]);
 
         return view('tenant.products.form', [
             'product' => $product,
             'categories' => Category::orderBy('name')->get(),
+            'attributes' => ProductAttribute::where('tenant_id', $tenant->id)->with('values')->orderBy('sort_order')->get(),
             'warehouses' => Warehouse::all(),
         ]);
     }
@@ -135,6 +146,7 @@ class ProductController extends Controller
     public function update(Request $request, Product $product)
     {
         $data = $this->validateProduct($request);
+        $this->assertNoDuplicateVariantCombinations($data['variants']);
 
         $uploadedPaths = [];
         $tenant = app('currentTenant');
@@ -183,6 +195,12 @@ class ProductController extends Controller
                     if (! empty($v['id'])) {
                         $product->variants()->where('id', $v['id'])->update([
                             'variant_name' => $v['variant_name'] ?: 'Default',
+                            // Only ever overwritten when a real value is
+                            // submitted — a blank field must never null out
+                            // an existing (possibly barcode/POS-linked)
+                            // SKU; unlike compare_at_price, this one is not
+                            // safely "clearable" via blank.
+                            ...(! empty($v['sku']) ? ['sku' => $v['sku']] : []),
                             'purchase_price' => $v['purchase_price'] ?? 0,
                             'selling_price' => $v['selling_price'],
                             'compare_at_price' => $v['compare_at_price'] ?? null,
@@ -192,6 +210,7 @@ class ProductController extends Controller
                         $variant = $product->variants()->create([
                             'tenant_id' => $product->tenant_id,
                             'variant_name' => $v['variant_name'] ?: 'Default',
+                            'sku' => ! empty($v['sku']) ? $v['sku'] : null,
                             'purchase_price' => $v['purchase_price'] ?? 0,
                             'selling_price' => $v['selling_price'],
                             'compare_at_price' => $v['compare_at_price'] ?? null,
@@ -242,6 +261,32 @@ class ProductController extends Controller
         $product->delete();
 
         return back()->with('success', 'প্রোডাক্ট মুছে ফেলা হয়েছে।');
+    }
+
+    /**
+     * New, additive — the product edit form's variant loop above only ever
+     * creates/updates rows present in the submitted array, it never
+     * deletes one missing from it (no such behavior existed before this).
+     * Blocked when it's the product's only remaining variant — schema
+     * comment on product_variants states "every product has at least ONE
+     * variant row", and Order/POS/storefront code all assume a product
+     * resolves to at least one sellable row.
+     */
+    public function destroyVariant(Product $product, int $variant)
+    {
+        $variant = $product->variants()->findOrFail($variant);
+
+        if ($product->variants()->count() <= 1) {
+            return back()->with('error', 'প্রোডাক্টের অন্তত একটি ভ্যারিয়েন্ট থাকতে হবে।');
+        }
+
+        $variant->delete();
+
+        if ($product->variants()->count() <= 1) {
+            $product->update(['has_variants' => false]);
+        }
+
+        return back()->with('success', 'ভ্যারিয়েন্ট মুছে ফেলা হয়েছে।');
     }
 
     /** Delete a single gallery image — file + row. Featured thumbnail is untouched by this. */
@@ -299,17 +344,28 @@ class ProductController extends Controller
             // and the storefront card/detail views, which already read
             // this column — this was the missing write side.
             'variants.*.compare_at_price' => 'nullable|numeric|gt:variants.*.selling_price',
+            // New — the web form never had a manual SKU field before (only
+            // auto-generation, see ProductVariant::booted()); left blank,
+            // that auto-generation is completely unaffected. True
+            // cross-variant duplicates are still caught by the database's
+            // own uq_tenant_sku constraint (store()/update() already wrap
+            // the whole write in try/catch with a friendly error message).
+            'variants.*.sku' => 'nullable|string|max:80',
             'variants.*.stock' => 'nullable|integer|min:0',
             'variants.*.low_stock_threshold' => 'nullable|integer|min:0',
-            // Up to two option axes per variant (e.g. Size, Color) —
-            // stored into the existing (previously write-never-used)
-            // attributes JSON column. Deliberately capped at two: covers
-            // this codebase's real product shapes (size, color, or both)
-            // without building a fully dynamic N-axis option-type editor.
+            // Two option axes per variant (e.g. Size, Color), stored into
+            // the existing attributes JSON column — still accepted exactly
+            // as before for any caller still submitting this shape.
             'variants.*.attr1_name' => 'nullable|string|max:40',
             'variants.*.attr1_value' => 'nullable|string|max:60',
             'variants.*.attr2_name' => 'nullable|string|max:40',
             'variants.*.attr2_value' => 'nullable|string|max:60',
+            // New, additive alternative: an arbitrary-N-axis map (e.g.
+            // {"Color":"Red","Size":"M","Storage":"128GB"}), built by the
+            // Attributes/variant-combination UI. When present it wins over
+            // attr1_*/attr2_* for that row — see attributesFromInput().
+            'variants.*.attributes' => 'nullable|array',
+            'variants.*.attributes.*' => 'nullable|string|max:60',
         ], [
             'variants.*.selling_price.required' => 'বিক্রয় মূল্য দিতে হবে।',
             'variants.*.compare_at_price.gt' => 'অফার/আগের মূল্য অবশ্যই বিক্রয় মূল্যের চেয়ে বেশি হতে হবে।',
@@ -317,16 +373,33 @@ class ProductController extends Controller
     }
 
     /**
-     * Builds the attributes JSON payload from up to two optional name/value
-     * pairs the form submits per variant row (attr1_name/attr1_value,
-     * attr2_name/attr2_value) — null when neither pair was filled in, so a
-     * plain single-price product's variant keeps attributes = null exactly
-     * as before this feature existed, never an empty array on-disk.
+     * Builds the attributes JSON payload for one variant row. Prefers the
+     * new dynamic `attributes` map (arbitrary N axes, e.g. Color+Size+
+     * Storage — the Attributes/variant-combination UI submits this) when
+     * present and non-empty; otherwise falls back to the original up-to-
+     * two attr1/attr2 name-value pairs unchanged, so any existing caller
+     * still submitting that shape keeps working exactly as before. Null
+     * (not an empty array) when nothing was filled in, so a plain
+     * single-price product's variant keeps attributes = null on-disk as
+     * always.
      *
      * @return array<string, string>|null
      */
     protected function attributesFromInput(array $v): ?array
     {
+        if (! empty($v['attributes']) && is_array($v['attributes'])) {
+            $attrs = [];
+            foreach ($v['attributes'] as $name => $value) {
+                $name = trim((string) $name);
+                $value = trim((string) $value);
+                if ($name !== '' && $value !== '') {
+                    $attrs[$name] = $value;
+                }
+            }
+
+            return $attrs ?: null;
+        }
+
         $attrs = [];
 
         foreach ([1, 2] as $n) {
@@ -339,5 +412,32 @@ class ProductController extends Controller
         }
 
         return $attrs ?: null;
+    }
+
+    /**
+     * Attribute/Variant Generator project — rejects a submission where two
+     * rows resolve to the identical attribute combination (e.g. two
+     * "Color=Black, Size=S" rows), regardless of insertion order within
+     * each row's map. Rows with no attributes at all (a plain/simple
+     * variant) are never compared against each other — only genuinely
+     * attribute-tagged rows can collide.
+     */
+    protected function assertNoDuplicateVariantCombinations(array $variants): void
+    {
+        $seen = [];
+        foreach ($variants as $v) {
+            $attrs = $this->attributesFromInput($v);
+            if ($attrs === null) {
+                continue;
+            }
+            ksort($attrs);
+            $key = json_encode($attrs);
+            if (isset($seen[$key])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'variants' => ['একই অ্যাট্রিবিউট কম্বিনেশনের একাধিক ভ্যারিয়েন্ট থাকতে পারবে না।'],
+                ]);
+            }
+            $seen[$key] = true;
+        }
     }
 }

@@ -93,4 +93,146 @@ class AiAgentMessageJob extends Model
             ->where('messenger_message_id', $messengerMessageId)
             ->update(['status' => 'failed', 'updated_at' => now()]);
     }
+
+    /**
+     * True once database/sql/chunk51.sql has been imported. Message
+     * coalescing (see this class's own docblock) is entirely skipped
+     * when this is false — App\Jobs\ProcessAiAgentMessage and
+     * MessengerWebhookController::maybeDispatchAiAgent() fall back to the
+     * original one-message-one-job-one-reply behavior, never a raw SQL
+     * error, same schema-readiness pattern as ::tablesReady().
+     */
+    public static function conversationKeyColumnReady(): bool
+    {
+        return Schema::hasColumn('ai_agent_message_jobs', 'conversation_key');
+    }
+
+    /** The conversation_key stamped on this row at creation time, or null if the row/column doesn't exist. */
+    public static function conversationKeyFor(int $tenantId, int $messengerMessageId): ?string
+    {
+        return static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('messenger_message_id', $messengerMessageId)
+            ->value('conversation_key');
+    }
+
+    /**
+     * True when a message that arrived AFTER $afterMessageId, for the
+     * same tenant+conversation, is still genuinely untouched ('pending')
+     * — the coalescing "should I defer to a later message's own job"
+     * signal. Deliberately only ever 'pending', never a stale
+     * 'processing' row (a newer message whose own job already started,
+     * however long ago) — waiting on that could deadlock if that job
+     * crashed; the current (older) message should instead just proceed
+     * with whatever is genuinely eligible right now (see
+     * coalescedBatchIds()), and the stuck newer row gets reclaimed
+     * independently whenever the queue redelivers its own job.
+     */
+    public static function hasNewerPending(int $tenantId, string $conversationKey, int $afterMessageId): bool
+    {
+        return static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('conversation_key', $conversationKey)
+            ->where('messenger_message_id', '>', $afterMessageId)
+            ->where('status', 'pending')
+            ->exists();
+    }
+
+    /**
+     * The set of message IDs that make up one coalesced logical customer
+     * turn ending at $uptoMessageId (inclusive) — every 'pending' row for
+     * this exact tenant+conversation up to and including it, PLUS any
+     * 'processing' row stale enough that its own job attempt is
+     * considered abandoned (same window ::claim() already uses) so a
+     * crashed worker never permanently strands an earlier fragment out
+     * of the batch. Ordered oldest-first so callers can concatenate text
+     * in the order the customer actually typed it. Capped to the most
+     * recent $maxBatch entries as a sanity bound against a pathological
+     * burst — this is a safety ceiling, not a realistic normal-customer
+     * number.
+     *
+     * @return array<int, int>
+     */
+    public static function coalescedBatchIds(int $tenantId, string $conversationKey, int $uptoMessageId, int $maxBatch = 0): array
+    {
+        $staleBefore = now()->subSeconds((int) config('queue.connections.database.retry_after', 90));
+
+        $ids = static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('conversation_key', $conversationKey)
+            ->where('messenger_message_id', '<=', $uptoMessageId)
+            ->where(function ($query) use ($staleBefore) {
+                $query->where('status', 'pending')
+                    ->orWhere(function ($stale) use ($staleBefore) {
+                        $stale->where('status', 'processing')->where('updated_at', '<', $staleBefore);
+                    });
+            })
+            ->orderBy('messenger_message_id')
+            ->pluck('messenger_message_id')
+            ->all();
+
+        if ($maxBatch > 0 && count($ids) > $maxBatch) {
+            $ids = array_slice($ids, -$maxBatch);
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Batch counterpart of ::claim() — atomically claims every row in
+     * $messageIds (same 'pending' OR stale-'processing' eligibility), and
+     * only reports success if EVERY one of them was actually claimed by
+     * this call. A partial match (some other worker or a previous
+     * attempt already moved one of them) fails the whole batch rather
+     * than risk processing/marking-complete a subset — the caller must
+     * treat that exactly like a lost single-message claim() race and do
+     * nothing further.
+     */
+    public static function claimBatch(int $tenantId, array $messageIds): bool
+    {
+        if ($messageIds === []) {
+            return false;
+        }
+
+        $staleBefore = now()->subSeconds((int) config('queue.connections.database.retry_after', 90));
+
+        $affected = static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('messenger_message_id', $messageIds)
+            ->where(function ($query) use ($staleBefore) {
+                $query->where('status', 'pending')
+                    ->orWhere(function ($stale) use ($staleBefore) {
+                        $stale->where('status', 'processing')->where('updated_at', '<', $staleBefore);
+                    });
+            })
+            ->update(['status' => 'processing', 'updated_at' => now()]);
+
+        return $affected === count($messageIds);
+    }
+
+    /** Batch counterpart of ::markCompleted(). */
+    public static function markCompletedBatch(int $tenantId, array $messageIds): void
+    {
+        if ($messageIds === []) {
+            return;
+        }
+
+        static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('messenger_message_id', $messageIds)
+            ->update(['status' => 'completed', 'updated_at' => now()]);
+    }
+
+    /** Batch counterpart of ::markFailed(). */
+    public static function markFailedBatch(int $tenantId, array $messageIds): void
+    {
+        if ($messageIds === []) {
+            return;
+        }
+
+        static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('messenger_message_id', $messageIds)
+            ->update(['status' => 'failed', 'updated_at' => now()]);
+    }
 }

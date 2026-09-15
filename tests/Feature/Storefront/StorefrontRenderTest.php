@@ -4,8 +4,10 @@ namespace Tests\Feature\Storefront;
 
 use App\Models\Category;
 use App\Models\Inventory;
+use App\Models\Order;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\InteractsWithCommerceSchema;
 use Tests\TestCase;
 
@@ -68,6 +70,43 @@ class StorefrontRenderTest extends TestCase
         $this->makeSellableVariant($tenant->id);
 
         $this->get($this->storeUrl($tenant, 'products?category='.$category->slug))->assertOk();
+    }
+
+    /** New `q` name-search param (storefront redesign) — additive to ProductController::index(), must not match an unrelated product. */
+    public function test_products_listing_search_filters_by_name(): void
+    {
+        $tenant = $this->makeTenant();
+        app()->instance('currentTenant', $tenant);
+        $this->makeSellableVariant($tenant->id); // "Test Product"
+        $other = \App\Models\Product::create(['tenant_id' => $tenant->id, 'name' => 'Unrelated Widget', 'is_active' => 1]);
+
+        $response = $this->get($this->storeUrl($tenant, 'products?q=Test'));
+
+        $response->assertOk();
+        $response->assertSee('Test Product');
+        $response->assertDontSee('Unrelated Widget');
+    }
+
+    /** New `sort=price_asc`/`price_desc` param (storefront redesign) — sorts by each product's cheapest active variant. */
+    public function test_products_listing_sorts_by_price(): void
+    {
+        $tenant = $this->makeTenant();
+        $cheap = $this->makeSellableVariant($tenant->id, ['selling_price' => 100]);
+        app()->instance('currentTenant', $tenant);
+        $expensiveProduct = \App\Models\Product::create(['tenant_id' => $tenant->id, 'name' => 'Pricey Item', 'is_active' => 1]);
+        \App\Models\ProductVariant::create([
+            'tenant_id' => $tenant->id, 'product_id' => $expensiveProduct->id,
+            'variant_name' => 'Default', 'selling_price' => 900, 'purchase_price' => 500,
+        ]);
+
+        $response = $this->get($this->storeUrl($tenant, 'products?sort=price_asc'));
+
+        $response->assertOk();
+        $cheapPos = strpos($response->getContent(), $cheap->product->name);
+        $pricePos = strpos($response->getContent(), 'Pricey Item');
+        $this->assertNotFalse($cheapPos);
+        $this->assertNotFalse($pricePos);
+        $this->assertLessThan($pricePos, $cheapPos, 'cheapest product should render before the pricier one under price_asc sort');
     }
 
     /** Proves the new discount badge, compare-at price, and stock line all render from real data, not just "the page didn't crash". */
@@ -148,6 +187,58 @@ class StorefrontRenderTest extends TestCase
         $this->get($this->storeUrl($tenant, 'checkout'))->assertRedirect($this->storeUrl($tenant));
     }
 
+    /**
+     * The checkout page with real cart items was never actually rendered by
+     * any prior test (only the empty-cart redirect was). Added alongside the
+     * storefront redesign to prove the numbered-step layout actually
+     * compiles and still exposes every field/id the existing division→
+     * district cascading and incomplete-order-tracking JS depends on.
+     */
+    public function test_checkout_page_renders_with_items_in_cart(): void
+    {
+        $tenant = $this->makeTenant();
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 500]);
+        $this->withSession(['cart_'.$tenant->id => [$variant->id => 2]]);
+
+        $response = $this->get($this->storeUrl($tenant, 'checkout'));
+
+        $response->assertOk();
+        $response->assertSee('গ্রাহকের তথ্য');
+        $response->assertSee('ডেলিভারি তথ্য');
+        $response->assertSee('পেমেন্ট পদ্ধতি');
+        $response->assertSee('ক্যাশ অন ডেলিভারি (COD)');
+        $response->assertSee('id="divisionSelect"', false);
+        $response->assertSee('id="districtSelect"', false);
+        $response->assertSee('id="chargeShow"', false);
+        $response->assertSee('id="totalShow"', false);
+        $response->assertSee('1,000৳'); // 500 × 2 subtotal
+    }
+
+    /** The order-success page was likewise never rendered by an existing test. */
+    public function test_order_success_page_renders(): void
+    {
+        $tenant = $this->makeTenant();
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 500]);
+        Inventory::where('variant_id', $variant->id)->update(['quantity' => 10]);
+        $this->withSession(['cart_'.$tenant->id => [$variant->id => 1]]);
+
+        DB::table('bd_divisions')->insert(['id' => 3, 'name' => 'Dhaka', 'bn_name' => 'ঢাকা']);
+        DB::table('bd_districts')->insert(['id' => 1, 'division_id' => 3, 'name' => 'Dhaka', 'bn_name' => 'ঢাকা']);
+
+        $this->post($this->storeUrl($tenant, 'checkout'), [
+            'customer_name' => 'Karim', 'customer_phone' => '01712345678',
+            'customer_address' => 'Some address', 'division_id' => 3, 'district_id' => 1,
+        ]);
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+
+        $response = $this->get($this->storeUrl($tenant, 'order-success/'.$order->order_number));
+
+        $response->assertOk();
+        $response->assertSee('অর্ডার কনফার্মড');
+        $response->assertSee($order->order_number);
+    }
+
     // --- Offer section (redesigned: plain grid, capped to 2, no marquee) -----------------------
 
     public function test_homepage_offer_section_is_hidden_when_nothing_is_discounted(): void
@@ -212,5 +303,53 @@ class StorefrontRenderTest extends TestCase
         $response->assertOk();
         $response->assertSee('222৳', false);
         $response->assertDontSee('777৳', false);
+    }
+
+    // --- Microsoft Clarity (tenant-scoped, marketing_settings.clarity_project_id) --------------
+
+    public function test_storefront_head_includes_clarity_script_when_project_id_is_set(): void
+    {
+        $tenant = $this->makeTenant();
+        DB::table('marketing_settings')->insert([
+            'tenant_id' => $tenant->id,
+            'clarity_project_id' => 'abc123xyz9',
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->get($this->storeUrl($tenant));
+
+        $response->assertOk();
+        // The official snippet builds the request URL via JS concatenation
+        // (t.src=".../tag/"+i), so the literal id only ever appears as its
+        // own quoted argument in the static markup, never joined with the URL.
+        $response->assertSee('clarity.ms/tag/', false);
+        $response->assertSee('"clarity", "script", "abc123xyz9"', false);
+    }
+
+    public function test_storefront_head_omits_clarity_script_when_project_id_is_null(): void
+    {
+        $tenant = $this->makeTenant();
+
+        $response = $this->get($this->storeUrl($tenant));
+
+        $response->assertOk();
+        $response->assertDontSee('clarity.ms/tag', false);
+    }
+
+    /** Tenant isolation: tenant A's Clarity Project ID must never render on tenant B's storefront. */
+    public function test_storefront_never_leaks_another_tenants_clarity_project_id(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        DB::table('marketing_settings')->insert([
+            'tenant_id' => $tenantA->id,
+            'clarity_project_id' => 'tenant-a-id',
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->get($this->storeUrl($tenantB));
+
+        $response->assertOk();
+        $response->assertDontSee('tenant-a-id', false);
     }
 }

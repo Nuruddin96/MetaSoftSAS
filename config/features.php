@@ -26,5 +26,6 @@ return [
         'facebook_page_connection' => 'Facebook Page কানেকশন',
         'server_side_tracking' => 'সার্ভার-সাইড ট্র্যাকিং (CAPI)',
         'website_builder' => 'ওয়েবসাইট বিল্ডার',
+        'wordpress_connect' => 'WordPress কানেক্ট',
     ],
 ];

@@ -46,7 +46,14 @@ class FraudChecker
         return $phone;
     }
 
-    public function check(string $phone): array
+    /**
+     * $checkedBy defaults to the `tenant` session guard for the web panel's
+     * caller; the mobile API has no session guard (Sanctum-only — see
+     * BindTenantFromSanctumUser's docblock) so its controller must pass
+     * $request->user()->id explicitly or every mobile-originated log row
+     * silently loses attribution.
+     */
+    public function check(string $phone, ?int $checkedBy = null): array
     {
         $phone = $this->normalizePhone($phone);
 
@@ -104,7 +111,7 @@ class FraudChecker
             'phone' => $phone,
             'result' => $perCourier,
             'success_ratio' => $ratio,
-            'checked_by' => auth('tenant')->id(),
+            'checked_by' => $checkedBy ?? auth('tenant')->id(),
         ]);
 
         return [

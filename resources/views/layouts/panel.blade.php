@@ -134,6 +134,7 @@
                     'প্রোডাক্ট' => [
                         ['tenant.products.index', 'প্রোডাক্ট', 'package'],
                         ['tenant.categories.index', 'ক্যাটাগরি', 'folder-tree'],
+                        ['tenant.attributes.index', 'অ্যাট্রিবিউট', 'tag'],
                         ['tenant.inventory', 'ইনভেন্টরি', 'warehouse'],
                         ['tenant.inventory.low', 'লো স্টক', 'triangle-alert'],
                     ],
@@ -146,6 +147,8 @@
                         ['tenant.reports.sales', 'রিপোর্ট', 'bar-chart-3'],
                         ['tenant.product-source.index', 'প্রোডাক্ট সোর্স', 'search'],
                         ['tenant.website', 'ওয়েবসাইট সেটিংস', 'palette'],
+                        ['tenant.landing-pages.index', 'ল্যান্ডিং পেজ', 'rocket'],
+                        ['tenant.wordpress.index', 'WordPress কানেক্ট', 'plug'],
                         $adEnabled ? ['tenant.advertising.overview', 'অ্যাডভার্টাইজিং', 'megaphone'] : null,
                     ]),
                     'অন্যান্য' => [

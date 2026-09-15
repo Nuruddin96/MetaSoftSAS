@@ -79,4 +79,104 @@ class AiWhatsAppMessageJob extends Model
             ->where('whatsapp_message_id', $whatsAppMessageId)
             ->update(['status' => 'failed', 'updated_at' => now()]);
     }
+
+    /**
+     * Mirrors AiAgentMessageJob's coalescing additions one-for-one (see
+     * that class's docblocks for the full design) — database/sql/
+     * chunk51.sql adds the same conversation_key column to this table.
+     */
+    public static function conversationKeyColumnReady(): bool
+    {
+        return Schema::hasColumn('ai_whatsapp_message_jobs', 'conversation_key');
+    }
+
+    public static function conversationKeyFor(int $tenantId, int $whatsAppMessageId): ?string
+    {
+        return static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('whatsapp_message_id', $whatsAppMessageId)
+            ->value('conversation_key');
+    }
+
+    public static function hasNewerPending(int $tenantId, string $conversationKey, int $afterMessageId): bool
+    {
+        return static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('conversation_key', $conversationKey)
+            ->where('whatsapp_message_id', '>', $afterMessageId)
+            ->where('status', 'pending')
+            ->exists();
+    }
+
+    /** @return array<int, int> */
+    public static function coalescedBatchIds(int $tenantId, string $conversationKey, int $uptoMessageId, int $maxBatch = 0): array
+    {
+        $staleBefore = now()->subSeconds((int) config('queue.connections.database.retry_after', 90));
+
+        $ids = static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('conversation_key', $conversationKey)
+            ->where('whatsapp_message_id', '<=', $uptoMessageId)
+            ->where(function ($query) use ($staleBefore) {
+                $query->where('status', 'pending')
+                    ->orWhere(function ($stale) use ($staleBefore) {
+                        $stale->where('status', 'processing')->where('updated_at', '<', $staleBefore);
+                    });
+            })
+            ->orderBy('whatsapp_message_id')
+            ->pluck('whatsapp_message_id')
+            ->all();
+
+        if ($maxBatch > 0 && count($ids) > $maxBatch) {
+            $ids = array_slice($ids, -$maxBatch);
+        }
+
+        return $ids;
+    }
+
+    public static function claimBatch(int $tenantId, array $messageIds): bool
+    {
+        if ($messageIds === []) {
+            return false;
+        }
+
+        $staleBefore = now()->subSeconds((int) config('queue.connections.database.retry_after', 90));
+
+        $affected = static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('whatsapp_message_id', $messageIds)
+            ->where(function ($query) use ($staleBefore) {
+                $query->where('status', 'pending')
+                    ->orWhere(function ($stale) use ($staleBefore) {
+                        $stale->where('status', 'processing')->where('updated_at', '<', $staleBefore);
+                    });
+            })
+            ->update(['status' => 'processing', 'updated_at' => now()]);
+
+        return $affected === count($messageIds);
+    }
+
+    public static function markCompletedBatch(int $tenantId, array $messageIds): void
+    {
+        if ($messageIds === []) {
+            return;
+        }
+
+        static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('whatsapp_message_id', $messageIds)
+            ->update(['status' => 'completed', 'updated_at' => now()]);
+    }
+
+    public static function markFailedBatch(int $tenantId, array $messageIds): void
+    {
+        if ($messageIds === []) {
+            return;
+        }
+
+        static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('whatsapp_message_id', $messageIds)
+            ->update(['status' => 'failed', 'updated_at' => now()]);
+    }
 }

@@ -59,6 +59,7 @@ class CourierController extends Controller
             'courier_consignment_id' => $result['consignment_id'],
             'courier_tracking_code' => $result['tracking_code'],
             'courier_status' => 'pending',
+            'courier_status_checked_at' => now(),
             'status' => $order->status === 'pending' ? 'processing' : $order->status,
         ]);
 
@@ -74,28 +75,47 @@ class CourierController extends Controller
      * getStatus() existed on both providers but was never called from
      * anywhere in the app — courier_status was write-once at send time and
      * could never actually change.
+     *
+     * Serves two callers with the exact same logic: the order-detail page's
+     * plain HTML form (redirect + flash message, unchanged) and the order
+     * list's inline per-row refresh button (JSON, via fetch — detected by
+     * wantsJson() so no second endpoint/duplicate sync logic is needed).
      */
-    public function refreshStatus(Order $order)
+    public function refreshStatus(Request $request, Order $order)
     {
         abort_if(! app()->bound('currentTenant') || $order->tenant_id !== app('currentTenant')->id, 404);
 
         if (! $order->courier_provider || ! $order->courier_consignment_id) {
-            return back()->with('error', 'এই অর্ডার এখনো কুরিয়ারে পাঠানো হয়নি।');
+            $message = 'এই অর্ডার এখনো কুরিয়ারে পাঠানো হয়নি।';
+
+            return $request->wantsJson() ? response()->json(['ok' => false, 'message' => $message], 422) : back()->with('error', $message);
         }
 
         $service = CourierManager::forProvider($order->courier_provider);
 
         if (! $service) {
-            return back()->with('error', 'কুরিয়ারের API সেটিংস পাওয়া যায়নি — সেটিংস পেজে ক্রেডেনশিয়াল দিন।');
+            $message = 'কুরিয়ারের API সেটিংস পাওয়া যায়নি — সেটিংস পেজে ক্রেডেনশিয়াল দিন।';
+
+            return $request->wantsJson() ? response()->json(['ok' => false, 'message' => $message], 422) : back()->with('error', $message);
         }
 
         try {
             $status = $service->getStatus($order);
         } catch (\Throwable $e) {
-            return back()->with('error', 'স্ট্যাটাস রিফ্রেশ করা যায়নি: '.Str::limit($e->getMessage(), 120));
+            $message = 'স্ট্যাটাস রিফ্রেশ করা যায়নি: '.Str::limit($e->getMessage(), 120);
+
+            return $request->wantsJson() ? response()->json(['ok' => false, 'message' => $message], 422) : back()->with('error', $message);
         }
 
-        $order->update(['courier_status' => $status]);
+        $order->update(['courier_status' => $status, 'courier_status_checked_at' => now()]);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ok' => true,
+                'courier_status' => $status,
+                'courier_status_checked_at' => $order->courier_status_checked_at->toIso8601String(),
+            ]);
+        }
 
         return back()->with('success', 'কুরিয়ার স্ট্যাটাস আপডেট হয়েছে: '.$status);
     }
