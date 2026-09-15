@@ -226,7 +226,7 @@ class WhatsAppApiTest extends TestCase
 
         $response = $this->postJson('/api/mobile/v1/whatsapp/8801700000001/reply', ['message' => 'ধন্যবাদ']);
 
-        $response->assertCreated()->assertJsonPath('text', 'ধন্যবাদ')->assertJsonPath('direction', 'out');
+        $response->assertCreated()->assertJsonPath('data.0.text', 'ধন্যবাদ')->assertJsonPath('data.0.direction', 'out');
         $this->assertDatabaseHas('whatsapp_messages', ['wa_id' => '8801700000001', 'direction' => 'out', 'message_text' => 'ধন্যবাদ']);
     }
 
