@@ -2,36 +2,45 @@
 
 namespace App\Services\Notifications;
 
+use App\Models\DevicePushToken;
 use App\Models\NotificationLog;
 use App\Models\PushSubscription;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Sends Web Push notifications via VAPID and logs a durable record of each
- * one. MetaSoft is a PWA, not a native app (see the mobile audit, Part A/C)
- * — this is standard browser Web Push, not FCM-in-a-native-SDK.
+ * The single per-user "notify" entrypoint — writes the durable
+ * [NotificationLog] record once, then fans out across every channel a user
+ * has registered: browser Web Push (VAPID) AND, since the FCM push-
+ * notifications task, native Android/iOS app push via [FcmSendService].
+ * Deliberately ONE call site for both, not two independent services each
+ * writing their own log row: a caller (e.g. SendNewMessagePush) must never
+ * have to know or care which channels a given user has, and the in-app
+ * mobile notification list (Api\Mobile\NotificationController, backed by
+ * this same NotificationLog table) must only ever show one row per real
+ * event regardless of how many devices it reached.
  *
- * Delivery requires the `minishlink/web-push` composer package (RFC
- * 8291/8292 payload encryption + VAPID request signing) — deliberately NOT
- * installed as part of this pass, per the "don't add a new production
- * dependency without asking" stop condition. Everything that leads up to
- * send() — subscriptions, preferences, events, listeners, deep links,
- * dedup — is fully wired and already exercised by tests against this
- * service's public interface; send() itself detects the missing library,
- * logs a warning, and returns false rather than pretending delivery
- * succeeded. Install the package and this starts actually reaching
- * devices with no other code changes. See the implementation report's
- * "Remaining Work" section.
+ * Web Push delivery requires the `minishlink/web-push` composer package
+ * (RFC 8291/8292 payload encryption + VAPID request signing) — installed,
+ * but VAPID keys are not configured in every environment; send() detects
+ * either gap and logs a warning rather than pretending delivery succeeded.
+ * FCM delivery is similarly inert until a real Firebase project is wired
+ * in — see [FcmSendService]'s own docblock. Both degrade independently:
+ * one channel being unconfigured never blocks the other.
  *
  * $payload shape (all keys optional except title/body):
- *   title, body, url (deep link), tag (collapse key), icon, badge,
- *   requireInteraction (bool), silent (bool, suppresses sound/vibration
- *   for SUMMARY-tier notifications per the audit's Part 12 priority model).
+ *   title, body, url (deep link), tag (collapse key), channel/external_id
+ *   (WhatsApp/Messenger conversation deep-link — see CustomerMessageReceived),
+ *   order_id (order deep-link), icon, badge, requireInteraction (bool),
+ *   silent (bool, suppresses sound/vibration for SUMMARY-tier notifications
+ *   per the audit's Part 12 priority model).
  */
 class WebPushService
 {
-    public function __construct(private NotificationPreferenceService $preferences) {}
+    public function __construct(
+        private NotificationPreferenceService $preferences,
+        private FcmSendService $fcm,
+    ) {}
 
     public function sendToUser(User $user, array $payload, ?string $category = null): void
     {
@@ -71,6 +80,46 @@ class WebPushService
 
         foreach ($subscriptions as $subscription) {
             $this->send($subscription, $payload);
+        }
+
+        $this->sendFcm($user, $payload, $category);
+    }
+
+    /**
+     * chunk63.sql's own additive-table guard (DevicePushToken::tablesReady())
+     * — a missing table (or zero registered devices, the overwhelmingly
+     * common case until the mobile app actually registers one) is a clean
+     * no-op, never an error; NotificationLog/web-push above already
+     * happened regardless.
+     */
+    private function sendFcm(User $user, array $payload, ?string $category): void
+    {
+        if (! DevicePushToken::tablesReady()) {
+            return;
+        }
+
+        $tokens = DevicePushToken::where('user_id', $user->id)->where('is_active', true)->pluck('token');
+        if ($tokens->isEmpty()) {
+            return;
+        }
+
+        // FCM's data payload requires every value to be a string — absent
+        // optional fields become '' rather than being omitted, so the
+        // Flutter side can always safely read them without a null check.
+        $data = [
+            'category' => $category ?? 'technical',
+            'title' => (string) ($payload['title'] ?? 'MetaSoft'),
+            'body' => (string) ($payload['body'] ?? ''),
+            'tag' => (string) ($payload['tag'] ?? ''),
+            'channel' => (string) ($payload['channel'] ?? ''),
+            'external_id' => (string) ($payload['external_id'] ?? ''),
+            'order_id' => (string) ($payload['order_id'] ?? ''),
+        ];
+
+        $invalidTokens = $this->fcm->sendToTokens($tokens->all(), $data);
+
+        if (! empty($invalidTokens)) {
+            DevicePushToken::whereIn('token', $invalidTokens)->update(['is_active' => false]);
         }
     }
 

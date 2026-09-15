@@ -78,6 +78,12 @@ class SendNewMessagePush implements ShouldQueue
                 'body' => $body,
                 'tag' => $tag,
                 'url' => $url,
+                // Structured deep-link data for the mobile app (which can't
+                // navigate off $url above — that's a web panel route, see
+                // TenantDeepLink's docblock) — the exact (channel,
+                // externalId) ConversationScreen needs.
+                'channel' => $event->channel,
+                'external_id' => $event->externalId,
             ], category: 'messages');
         }
     }

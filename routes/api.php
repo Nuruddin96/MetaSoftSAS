@@ -330,6 +330,15 @@ Route::prefix('mobile/v1')->group(function () {
         Route::get('notifications/preferences', [NotificationController::class, 'preferences']);
         Route::post('notifications/preferences', [NotificationController::class, 'updatePreferences']);
 
+        // FCM device-token registration — real production push
+        // notifications task. Deliberately in the ordinary login-token
+        // group (not the device-credential group devices/fcm-token below
+        // uses), so push works for every tenant, not only ones with
+        // Remote Support enabled — see NotificationController::
+        // registerDeviceToken()'s docblock.
+        Route::post('notifications/device-token', [NotificationController::class, 'registerDeviceToken']);
+        Route::delete('notifications/device-token', [NotificationController::class, 'unregisterDeviceToken']);
+
         // Messenger — mirrors Tenant\MessengerInboxController's real
         // capability (list via the same UnifiedInboxService the web
         // unified inbox uses, show, reply [text/image/audio, see
