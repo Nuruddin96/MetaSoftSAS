@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\Mobile\ProductAttributeController;
 use App\Http\Controllers\Api\Mobile\ProductCatalogController;
 use App\Http\Controllers\Api\Mobile\ProductController;
 use App\Http\Controllers\Api\Mobile\ProductImageMemoryController;
+use App\Http\Controllers\Api\Mobile\ProductImportController;
 use App\Http\Controllers\Api\Mobile\ProductSourceController;
 use App\Http\Controllers\Api\Mobile\ReferenceDataController;
 use App\Http\Controllers\Api\Mobile\ReportController;
@@ -273,6 +274,12 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('product-catalog/{product}/images', [ProductCatalogController::class, 'storeImages'])->whereNumber('product');
         Route::delete('product-catalog/{product}/images/{image}', [ProductCatalogController::class, 'destroyImage'])->whereNumber('product')->whereNumber('image');
         Route::post('product-catalog/{product}/images/reorder', [ProductCatalogController::class, 'reorderImages'])->whereNumber('product');
+
+        // CSV product import — Web/Flutter parity task, mirrors
+        // Tenant\ProductImportController::store() exactly via the shared
+        // ProductCsvImportService (see Api\Mobile\ProductImportController's
+        // docblock).
+        Route::post('product-catalog/import', [ProductImportController::class, 'store']);
 
         // Categories — mirrors Tenant\CategoryController's real capability
         // (list/create/update/delete, see CategoryController's docblock;
