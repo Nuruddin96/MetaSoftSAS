@@ -157,11 +157,15 @@ class WhatsAppController extends Controller
         $message = $result->message;
 
         return response()->json([
-            'id' => $message->id,
-            'text' => $message->message_text,
-            'direction' => $message->direction,
-            'sent_by' => $message->sent_by ?? null,
-            'created_at' => $message->created_at?->toIso8601String(),
+            'data' => [[
+                'id' => $message->id,
+                'text' => $message->message_text,
+                'attachment_url' => $message->attachment_url,
+                'attachment_type' => $message->attachment_type,
+                'direction' => $message->direction,
+                'sent_by' => $message->sent_by ?? null,
+                'created_at' => $message->created_at?->toIso8601String(),
+            ]],
         ], 201);
     }
 
