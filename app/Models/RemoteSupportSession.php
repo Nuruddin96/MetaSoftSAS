@@ -20,6 +20,8 @@ class RemoteSupportSession extends Model
     protected $casts = [
         'include_microphone' => 'boolean',
         'include_camera' => 'boolean',
+        'include_screen' => 'boolean',
+        'include_device_audio' => 'boolean',
         'started_at' => 'datetime',
         'connected_at' => 'datetime',
         'ended_at' => 'datetime',

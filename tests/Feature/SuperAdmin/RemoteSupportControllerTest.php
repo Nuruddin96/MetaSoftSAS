@@ -86,7 +86,7 @@ class RemoteSupportControllerTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Samsung A14');
-        $response->assertSee('লাইভ স্ক্রিন দেখুন');
+        $response->assertSee('🎥 Screen');
         $response->assertSee(route('super.remote-support.session.start', [$tenant, $ready]), escape: false);
         // No approval workflow anywhere on this page — see
         // RemoteSupportService::registerDevice()'s doc comment on why
@@ -361,7 +361,7 @@ class RemoteSupportControllerTest extends TestCase
         // viewer URL (".../session" vs ".../session/{id}/view"), so it
         // always "contains" it — assert on the Start button's label
         // instead, which the Resume link never uses.
-        $response->assertDontSee('লাইভ স্ক্রিন দেখুন');
+        $response->assertDontSee('🎥 Screen');
     }
 
     /**
@@ -397,7 +397,7 @@ class RemoteSupportControllerTest extends TestCase
      * be stuck showing a stale Resume link, "বাতিল", or no action at all
      * once that session naturally ends (admin clicked "সেশন বন্ধ করুন", or
      * the device sent 'bye') — the list must fall straight back through to
-     * a fresh "লাইভ স্ক্রিন দেখুন" the very next page load, exactly like a
+     * a fresh "🎥 Screen" the very next page load, exactly like a
      * device that never had a session. $openSessions already excludes
      * `status = ended` at the query level (RemoteSupportController::show()),
      * so this locks that behavior in from the rendered HTML, not just the
@@ -422,7 +422,7 @@ class RemoteSupportControllerTest extends TestCase
         $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
 
         $response->assertOk();
-        $response->assertSee('লাইভ স্ক্রিন দেখুন');
+        $response->assertSee('🎥 Screen');
         $response->assertSee(route('super.remote-support.session.start', [$tenant, $device]), escape: false);
         $response->assertDontSee(route('super.remote-support.session.viewer', [$tenant, $device, $endedSessionId]), escape: false);
         $response->assertDontSee('বাতিল');
@@ -452,7 +452,7 @@ class RemoteSupportControllerTest extends TestCase
         $response->assertOk();
         $response->assertSee('বাতিল');
         $response->assertSee('lost phone');
-        $response->assertDontSee('লাইভ স্ক্রিন দেখুন');
+        $response->assertDontSee('🎥 Screen');
         $response->assertDontSee('লাইভ স্ক্রিন অনুপলব্ধ');
         $response->assertDontSee(route('super.remote-support.session.start', [$tenant, $device]), escape: false);
     }
@@ -606,16 +606,24 @@ class RemoteSupportControllerTest extends TestCase
             escape: false,
         );
 
-        // Camera requested but device does NOT hold the permission → must
-        // show the real "permission required" state; microphone requested
-        // AND permitted → must NOT show that same state — asserted by
-        // isolating each control's own <p id="...State"> block rather than
-        // a page-wide assertSee, so this can't pass by matching the wrong
-        // control's text.
-        $micBlock = $this->extractBetween($response->getContent(), 'id="micState"', '</p>');
-        $cameraBlock = $this->extractBetween($response->getContent(), 'id="cameraState"', '</p>');
-        $this->assertStringNotContainsString('ডিভাইসে অনুমতি নেই', $micBlock);
-        $this->assertStringContainsString('ডিভাইসে অনুমতি নেই', $cameraBlock);
+        // Independent capabilities (see WebRtcSessionController.dart's own
+        // class doc comment): whether Android actually holds the
+        // permission is now a REAL-TIME concern driven entirely by
+        // capability-status signals + actual WebRTC ontrack events on the
+        // client, never baked into the server-rendered HTML (Android
+        // access can change at any moment during a live session, unlike a
+        // one-time page render) — so this asserts what the server
+        // actually still controls: each of the 4 capability tiles is
+        // present with the correct data attributes, and the embedded
+        // `initialCapabilities` JSON accurately reflects which
+        // capabilities this session was created with.
+        $this->assertStringContainsString('data-capability-tile="screen"', $response->getContent());
+        $this->assertStringContainsString('data-capability-tile="camera"', $response->getContent());
+        $this->assertStringContainsString('data-capability-tile="microphone"', $response->getContent());
+        $this->assertStringContainsString('data-capability-tile="device_audio"', $response->getContent());
+        $response->assertSee('"microphone":true', escape: false);
+        $response->assertSee('"camera":true', escape: false);
+        $response->assertSee('"device_audio":false', escape: false);
     }
 
     /**

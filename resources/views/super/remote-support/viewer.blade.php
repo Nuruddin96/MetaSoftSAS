@@ -47,59 +47,61 @@
     <audio id="remoteAudio" autoplay class="hidden"></audio>
 </div>
 
-{{-- Real media controls — every badge here reflects an ACTUAL WebRTC track
-     state (requested-for-this-session, device permission as last reported
-     by heartbeat, or an actual RTCTrackEvent received), never a UI-only
-     toggle. See docs/permission-flow.md — MediaProjection/camera/mic are
-     never pre-granted; a track only exists here once the device's own
-     user actually consented on-device. --}}
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-    <div class="bg-white rounded-xl border border-ink/5 p-4">
-        <p class="text-xs text-mute mb-1">🎥 স্ক্রিন</p>
-        <p id="screenState" class="font-medium text-sm">সংযোগ হচ্ছে…</p>
-    </div>
-    <div class="bg-white rounded-xl border border-ink/5 p-4">
-        <div class="flex items-center justify-between">
-            <p class="text-xs text-mute mb-1">🎙 মাইক্রোফোন</p>
-            <button id="micToggleBtn" class="hidden text-[11px] px-2 py-1 rounded bg-ink/5 hover:bg-ink/10">শোনা বন্ধ করুন</button>
+{{-- Independent Remote Support capabilities — see
+     docs/remote-support-architecture.md §Independent capabilities. Every
+     tile reflects an ACTUAL WebRTC/capability-status signal, never a
+     UI-only toggle. Whichever capability(ies) this session was created
+     with (see show.blade.php) starts negotiating immediately; the other
+     three get their own Start button here, sending a `capability-start`
+     signal the device answers by adding that ONE capability's track(s)
+     to the SAME already-connected PeerConnection — never a new session,
+     never re-asking for already-granted Android access. --}}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+    <div class="bg-white rounded-xl border border-ink/5 p-4" data-capability-tile="screen">
+        <div class="flex items-center justify-between mb-1">
+            <p class="text-xs text-mute">🎥 Screen</p>
+            <button data-toggle-btn="screen" class="hidden text-[11px] px-2 py-1 rounded bg-ink/5 hover:bg-ink/10"></button>
         </div>
-        <p id="micState" class="font-medium text-sm">
-            @if (! $session->include_microphone)
-                এই সেশনে অনুরোধ করা হয়নি
-            @elseif (! $micPermitted)
-                ডিভাইসে অনুমতি নেই
-            @else
-                সংযোগ হচ্ছে…
-            @endif
-        </p>
+        <p data-state="screen" class="font-medium text-sm">{{ $session->include_screen ? 'সংযোগ হচ্ছে…' : 'বন্ধ' }}</p>
     </div>
-    <div class="bg-white rounded-xl border border-ink/5 p-4">
-        <div class="flex items-center justify-between">
-            <p class="text-xs text-mute mb-1">📷 ক্যামেরা</p>
-            <button id="cameraToggleBtn" class="hidden text-[11px] px-2 py-1 rounded bg-ink/5 hover:bg-ink/10">দেখা বন্ধ করুন</button>
+    <div class="bg-white rounded-xl border border-ink/5 p-4" data-capability-tile="camera">
+        <div class="flex items-center justify-between mb-1">
+            <p class="text-xs text-mute">📷 Camera</p>
+            <button data-toggle-btn="camera" class="hidden text-[11px] px-2 py-1 rounded bg-ink/5 hover:bg-ink/10"></button>
         </div>
-        <p id="cameraState" class="font-medium text-sm">
-            @if (! $session->include_camera)
-                এই সেশনে অনুরোধ করা হয়নি
-            @elseif (! $cameraPermitted)
-                ডিভাইসে অনুমতি নেই
-            @else
-                সংযোগ হচ্ছে…
-            @endif
-        </p>
+        <p data-state="camera" class="font-medium text-sm">{{ $session->include_camera ? 'সংযোগ হচ্ছে…' : 'বন্ধ' }}</p>
+    </div>
+    <div class="bg-white rounded-xl border border-ink/5 p-4" data-capability-tile="microphone">
+        <div class="flex items-center justify-between mb-1">
+            <p class="text-xs text-mute">🎙 Microphone</p>
+            <button data-toggle-btn="microphone" class="hidden text-[11px] px-2 py-1 rounded bg-ink/5 hover:bg-ink/10"></button>
+        </div>
+        <p data-state="microphone" class="font-medium text-sm">{{ $session->include_microphone ? 'সংযোগ হচ্ছে…' : 'বন্ধ' }}</p>
+    </div>
+    <div class="bg-white rounded-xl border border-ink/5 p-4" data-capability-tile="device_audio">
+        <div class="flex items-center justify-between mb-1">
+            <p class="text-xs text-mute">🔊 Device Audio</p>
+            <button data-toggle-btn="device_audio" class="hidden text-[11px] px-2 py-1 rounded bg-ink/5 hover:bg-ink/10"></button>
+        </div>
+        <p data-state="device_audio" class="font-medium text-sm">{{ $session->include_device_audio ? 'সংযোগ হচ্ছে…' : 'বন্ধ' }}</p>
     </div>
 </div>
 
 <p class="text-mute text-xs mt-3">
-    ডিভাইসে Android-এর নিজস্ব স্ক্রিন-ক্যাপচার সম্মতি ডায়ালগ ও রেকর্ডিং ইন্ডিকেটর দেখানো বাধ্যতামূলক — এটি এড়িয়ে যাওয়া যায় না
-    (দেখুন docs/permission-flow.md)। ডিভাইসের ব্যবহারকারী অনুমতি না দিলে ভিডিও কখনো শুরু হবে না। "শোনা/দেখা বন্ধ করুন" শুধু
-    এই ব্রাউজারে প্লেব্যাক বন্ধ করে — ডিভাইসের ক্যাপচার বন্ধ করতে পুরো সেশনই বন্ধ করতে হবে।
+    ডিভাইসে Android-এর নিজস্ব সিস্টেম সম্মতি ডায়ালগ ও রেকর্ডিং/মাইক্রোফোন ইন্ডিকেটর দেখানো বাধ্যতামূলক — এটি এড়িয়ে যাওয়া যায় না
+    (দেখুন docs/permission-flow.md)। ডিভাইসের ব্যবহারকারী অনুমতি না দিলে কোনো ট্র্যাক কখনো শুরু হবে না।
 </p>
 
 @php
     $signalSendUrl = route('super.remote-support.session.signal.send', [$tenant, $device, $session]);
     $signalPollUrl = route('super.remote-support.session.signal.poll', [$tenant, $device, $session]);
     $stopUrl = route('super.remote-support.session.stop', [$tenant, $device, $session]);
+    $initialCapabilitiesJson = [
+        'screen' => (bool) $session->include_screen,
+        'camera' => (bool) $session->include_camera,
+        'microphone' => (bool) $session->include_microphone,
+        'device_audio' => (bool) $session->include_device_audio,
+    ];
 @endphp
 
 <script>
@@ -110,6 +112,7 @@
     const pollUrl = @json($signalPollUrl);
     const stopUrl = @json($stopUrl);
     const iceServers = @json($iceServers);
+    const initialCapabilities = @json($initialCapabilitiesJson);
 
     const video = document.getElementById('remoteVideo');
     const cameraVideo = document.getElementById('cameraVideo');
@@ -118,33 +121,70 @@
     const connStatus = document.getElementById('connStatus');
     const stopBtn = document.getElementById('stopBtn');
     const reconnectBtn = document.getElementById('reconnectBtn');
-    const screenState = document.getElementById('screenState');
-    const micState = document.getElementById('micState');
-    const cameraState = document.getElementById('cameraState');
-    const micToggleBtn = document.getElementById('micToggleBtn');
-    const cameraToggleBtn = document.getElementById('cameraToggleBtn');
+
+    const CAPABILITY_LABELS = { screen: '🎥 Screen', camera: '📷 Camera', microphone: '🎙 Microphone', device_audio: '🔊 Device Audio' };
+    const STATE_LABELS_BN = {
+        off: 'বন্ধ', starting: 'সংযোগ হচ্ছে…', active: 'স্ট্রিমিং হচ্ছে ✅',
+        unavailable: 'অনুপলব্ধ', stopped: 'বন্ধ করা হয়েছে', error: 'ত্রুটি',
+    };
 
     let since = 0;
     let polling = true;
     let pc = null;
-    let videoTracksSeen = 0; // device adds tracks screen-first, then mic, then camera (WebRtcSessionController.start()) — used to tell the screen video track apart from the camera one, both `kind: 'video'`.
+
+    /**
+     * FIFO correlation, not positional/ordinal guessing (the FRAGILE
+     * heuristic this replaces assumed screen-then-mic-then-camera track
+     * order, which four independently-toggleable capabilities breaks) —
+     * WebRtcSessionController.dart always sends a
+     * `capability-status: starting` signal BEFORE it ever adds that
+     * capability's track(s), and signals are polled/processed strictly in
+     * id order (same as every other signal type here), so the front of
+     * each kind-specific queue reliably names the very next `ontrack`
+     * event's capability.
+     */
+    const pendingVideoCapabilities = [];
+    const pendingAudioCapabilities = [];
+    let secondVideoTileAssigned = false; // screen already owns the main <video>; the next video track is camera's own tile.
 
     function setStatus(text, cls) {
         connStatus.textContent = text;
         connStatus.className = 'px-3 py-1.5 rounded-full font-medium ' + cls;
     }
 
-    /** Never leave a stale "স্ট্রিমিং হচ্ছে" badge once the connection actually ends — reflects real track state, not just the initial event. */
-    function markTracksStopped() {
-        if (videoTracksSeen > 0) screenState.textContent = 'সংযোগ বিচ্ছিন্ন';
-        if (!micToggleBtn.classList.contains('hidden')) micState.textContent = 'সংযোগ বিচ্ছিন্ন';
-        if (!cameraToggleBtn.classList.contains('hidden')) cameraState.textContent = 'সংযোগ বিচ্ছিন্ন';
-        micToggleBtn.classList.add('hidden');
-        cameraToggleBtn.classList.add('hidden');
+    function tileEls(capability) {
+        return {
+            state: document.querySelector(`[data-state="${capability}"]`),
+            button: document.querySelector(`[data-toggle-btn="${capability}"]`),
+        };
     }
 
-    /** Toggles LOCAL playback only (event.track.enabled on the already-received track) — see the page's own note on why this can't stop the device's actual capture without a new signal type. */
-    function wireLocalMuteToggle(button, mediaElement, onLabel, offLabel) {
+    function setCapabilityState(capability, state) {
+        const { state: stateEl } = tileEls(capability);
+        if (stateEl) stateEl.textContent = STATE_LABELS_BN[state] ?? state;
+    }
+
+    /** The Start/Stop button for a capability NOT part of the initial set — toggles via capability-start/capability-stop signals on the SAME live session, never a new one. */
+    function wireCapabilityToggle(capability) {
+        const { button } = tileEls(capability);
+        if (!button) return;
+        let active = false;
+        const render = () => {
+            button.classList.remove('hidden');
+            button.textContent = active ? 'বন্ধ করুন' : 'চালু করুন';
+        };
+        button.onclick = async () => {
+            active = !active;
+            render();
+            await postSignal(active ? 'capability-start' : 'capability-stop', capability);
+        };
+        render();
+    }
+
+    /** Local-playback-only mute for an already-received track — mirrors the original mic/camera toggle exactly (see the page's own note: stopping the device's actual capture needs a real capability-stop signal, not just muting local playback). */
+    function wireLocalMuteToggle(capability, mediaElement, onLabel, offLabel) {
+        const { button } = tileEls(capability);
+        if (!button) return;
         button.classList.remove('hidden');
         button.textContent = onLabel;
         button.onclick = () => {
@@ -155,14 +195,21 @@
         };
     }
 
+    /** Never leave a stale "স্ট্রিমিং হচ্ছে" badge once the connection actually ends. */
+    function markAllTracksStopped() {
+        for (const capability of Object.keys(CAPABILITY_LABELS)) {
+            const { state } = tileEls(capability);
+            if (state && state.textContent === STATE_LABELS_BN.active) {
+                setCapabilityState(capability, 'stopped');
+            }
+        }
+    }
+
     /**
-     * The device is the offering side (it owns the media — the screen
-     * capture track). This admin viewer is purely the answering side: it
-     * only ever creates an RTCPeerConnection once an 'offer' signal
-     * actually arrives, so opening this page never itself triggers any
-     * capture on the device — see permission-flow.md, MediaProjection
-     * consent is requested on-device only once the device agent decides
-     * to answer this session.
+     * The device is the offering side (it owns the media). This admin
+     * viewer is purely the answering side: it only ever creates an
+     * RTCPeerConnection once an 'offer' signal actually arrives, so
+     * opening this page never itself triggers any capture on the device.
      */
     function ensurePeerConnection() {
         if (pc) return pc;
@@ -179,25 +226,22 @@
             const track = event.track;
 
             if (track.kind === 'video') {
-                videoTracksSeen += 1;
-                if (videoTracksSeen === 1) {
-                    // First video track = the screen capture (device always
-                    // adds it first, before mic/camera) — this IS the real
-                    // MediaProjection-backed track, never a screenshot.
+                const capability = pendingVideoCapabilities.shift() ?? (secondVideoTileAssigned ? 'camera' : 'screen');
+                if (capability === 'screen' && !secondVideoTileAssigned) {
                     video.srcObject = event.streams[0];
                     waitingNote.style.display = 'none';
-                    screenState.textContent = 'স্ট্রিমিং হচ্ছে ✅';
+                    secondVideoTileAssigned = true;
                 } else {
-                    // Second video track = camera.
                     cameraVideo.srcObject = event.streams[0];
                     cameraVideo.classList.remove('hidden');
-                    cameraState.textContent = 'স্ট্রিমিং হচ্ছে ✅';
-                    wireLocalMuteToggle(cameraToggleBtn, cameraVideo, 'দেখা বন্ধ করুন', 'আবার দেখুন');
+                    wireLocalMuteToggle('camera', cameraVideo, 'দেখা বন্ধ করুন', 'আবার দেখুন');
                 }
+                setCapabilityState(capability, 'active');
             } else if (track.kind === 'audio') {
+                const capability = pendingAudioCapabilities.shift() ?? 'microphone';
                 remoteAudio.srcObject = event.streams[0];
-                micState.textContent = 'শোনা যাচ্ছে ✅';
-                wireLocalMuteToggle(micToggleBtn, remoteAudio, 'শোনা বন্ধ করুন', 'আবার শুনুন');
+                setCapabilityState(capability, 'active');
+                wireLocalMuteToggle(capability, remoteAudio, 'শোনা বন্ধ করুন', 'আবার শুনুন');
             }
         };
 
@@ -206,24 +250,16 @@
                 setStatus('সংযুক্ত', 'bg-leaf/10 text-leafdk');
                 reconnectBtn.disabled = false;
                 // `ontrack` does not reliably re-fire for a track that
-                // simply survives a renegotiation (confirmed via real
-                // on-device testing, 2026-09-05: after a genuine network-
-                // change reconnect, connectionState correctly recovered to
-                // 'connected' but the per-track badges below stayed stuck
-                // on "সংযোগ বিচ্ছিন্ন" forever, since nothing else ever
-                // reset them) — restore any badge whose element already
-                // has a track playing, rather than waiting on an event
-                // that may never come again for an already-established
-                // track.
-                if (video.srcObject) screenState.textContent = 'স্ট্রিমিং হচ্ছে ✅';
-                if (remoteAudio.srcObject) micState.textContent = 'শোনা যাচ্ছে ✅';
-                if (cameraVideo.srcObject) cameraState.textContent = 'স্ট্রিমিং হচ্ছে ✅';
+                // simply survives a renegotiation — restore any badge
+                // whose element already has a track playing.
+                if (video.srcObject) setCapabilityState('screen', 'active');
+                if (remoteAudio.srcObject) setCapabilityState('microphone', 'active');
+                if (cameraVideo.srcObject) setCapabilityState('camera', 'active');
             } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
                 setStatus('সংযোগ বিচ্ছিন্ন — পুনঃসংযোগের চেষ্টা হচ্ছে', 'bg-amber/10 text-amber');
-                markTracksStopped();
             } else if (pc.connectionState === 'closed') {
                 setStatus('বন্ধ', 'bg-ink/5 text-mute');
-                markTracksStopped();
+                markAllTracksStopped();
             }
         };
 
@@ -238,32 +274,11 @@
         });
     }
 
-    /**
-     * `skip` is true only for a historical 'offer' that a LATER offer in
-     * the same poll batch already superseded — see pollLoop's own comment
-     * for why this matters on a page reload/tab reopen mid-session. Every
-     * other signal type is unaffected: this never changes behavior for the
-     * common single-offer session, only guards the reload-after-ICE-restart
-     * replay case.
-     */
     async function handleSignal(signal, skip = false) {
         const conn = ensurePeerConnection();
 
         if (signal.type === 'offer') {
             if (skip) return;
-            // Every offer after the very first now comes from a BRAND NEW
-            // device-side RTCPeerConnection (WebRtcSessionController's ICE
-            // restart recreates it — see that class's _performIceRestart
-            // doc comment), so its tracks carry new ids/ssrcs and `ontrack`
-            // genuinely re-fires for the screen video on each reconnect.
-            // Without resetting this counter first, that re-fire looked
-            // like the SECOND video track ever seen and got routed to
-            // cameraVideo instead of the main screen `video` element —
-            // Admin showed "connected" with the live screen frozen/blank.
-            // Device still adds tracks screen-first, then mic, then camera
-            // on every (re)negotiation, so restarting the count here keeps
-            // the ordering assumption correct per-renegotiation.
-            videoTracksSeen = 0;
             await conn.setRemoteDescription(JSON.parse(signal.payload));
             const answer = await conn.createAnswer();
             await conn.setLocalDescription(answer);
@@ -277,8 +292,29 @@
         } else if (signal.type === 'bye') {
             polling = false;
             setStatus('ডিভাইস সংযোগ শেষ করেছে', 'bg-ink/5 text-mute');
-            markTracksStopped();
+            markAllTracksStopped();
             pc?.close();
+        } else if (signal.type === 'capability-status') {
+            let data;
+            try {
+                data = JSON.parse(signal.payload);
+            } catch (e) {
+                return;
+            }
+            const capability = data.capability;
+            const state = data.state;
+            if (!(capability in CAPABILITY_LABELS)) return;
+            if (state === 'starting') {
+                if (capability === 'screen' || capability === 'camera') pendingVideoCapabilities.push(capability);
+                if (capability === 'microphone' || capability === 'device_audio') pendingAudioCapabilities.push(capability);
+            }
+            // 'active' is set by ontrack itself once the track actually
+            // arrives (more trustworthy than the device's own optimistic
+            // report) — every OTHER state (unavailable/stopped/error/off)
+            // is exactly what the device reported, shown as-is.
+            if (state !== 'active') {
+                setCapabilityState(capability, state);
+            }
         }
     }
 
@@ -289,21 +325,11 @@
                 if (res.ok) {
                     const data = await res.json();
                     // A page reload (or reopening this tab mid-session)
-                    // starts `since` back at 0, so this batch can contain
-                    // the ENTIRE signal history, not just what's new — for
-                    // an ordinary single-offer session that's harmless
-                    // (there's only one offer to answer), but a session
-                    // that already went through an ICE restart before the
-                    // reload has TWO 'offer' signals in that history: the
-                    // original one and the device's renegotiation offer.
-                    // Answering the stale first one here would POST a
-                    // second, now-obsolete 'answer' signal after the
-                    // device has already moved its own peer connection
-                    // past that round — only the latest offer in this
-                    // batch is still the device's actual current state, so
-                    // only it gets answered; the rest of the batch (every
-                    // ice-candidate, 'bye', and the answer itself) is
-                    // unaffected and still processed in order.
+                    // starts `since` back at 0 — only the LATEST offer in
+                    // a re-fetched batch is still the device's actual
+                    // current state; a stale earlier one (superseded by a
+                    // later renegotiation already in this same batch)
+                    // must never be re-answered.
                     const latestOfferId = data.signals.reduce(
                         (max, s) => (s.type === 'offer' ? Math.max(max, s.id) : max),
                         -1,
@@ -315,7 +341,7 @@
                     if (data.session_status === 'ended') {
                         polling = false;
                         setStatus('সেশন শেষ হয়েছে', 'bg-ink/5 text-mute');
-                        markTracksStopped();
+                        markAllTracksStopped();
                         pc?.close();
                     }
                 }
@@ -326,24 +352,6 @@
         }
     }
 
-    /**
-     * Manual recovery for a connection stuck disconnected/reconnecting —
-     * sends a lightweight request signal the device answers by re-running
-     * its OWN existing ICE-restart path (same session, same
-     * RTCPeerConnection, same already-live screen capture): never a new
-     * session, never a fresh MediaProjection/Allow Access prompt, never a
-     * second foreground service. This page doesn't create its own new
-     * offer — the resulting device-generated offer arrives through the
-     * normal poll loop and is answered by the existing 'offer' case in
-     * handleSignal(), identical to an automatic reconnect.
-     *
-     * Disabled for a cooldown after each click (independent of connection
-     * state, which may never reach 'connected' if the network is still
-     * down) — paired with WebRtcSessionController._performIceRestart()'s
-     * own 3-second debounce on the device side, so neither a rapid double
-     * click here nor a race with the device's own automatic restart timer
-     * can fire two overlapping renegotiations.
-     */
     reconnectBtn.addEventListener('click', async () => {
         reconnectBtn.disabled = true;
         setStatus('সংযোগ বিচ্ছিন্ন — পুনঃসংযোগের চেষ্টা হচ্ছে', 'bg-amber/10 text-amber');
@@ -364,6 +372,13 @@
         });
         window.location = @json(route('super.remote-support.show', $tenant));
     });
+
+    // Every capability NOT part of the initial set gets its own Start
+    // toggle immediately (never waits for a track — there may never be
+    // one until the admin actually asks for it).
+    for (const capability of Object.keys(CAPABILITY_LABELS)) {
+        if (!initialCapabilities[capability]) wireCapabilityToggle(capability);
+    }
 
     pollLoop();
 })();

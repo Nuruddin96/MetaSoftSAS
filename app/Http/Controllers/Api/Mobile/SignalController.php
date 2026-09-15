@@ -33,8 +33,14 @@ class SignalController extends Controller
     {
         $session = $this->authorizedSession($request, $sessionToken);
 
+        // 'capability-status' is the device reporting a per-capability
+        // state change (see WebRtcSessionController.dart's
+        // _setCapabilityState) — payload is a small JSON blob
+        // {capability, state}, relayed verbatim like every other signal
+        // type, never parsed/validated server-side (the admin's own JS
+        // does that, same as every other signal payload here).
         $data = $request->validate([
-            'type' => 'required|string|in:offer,answer,ice-candidate,bye',
+            'type' => 'required|string|in:offer,answer,ice-candidate,bye,capability-status',
             'payload' => 'required|string',
         ]);
 

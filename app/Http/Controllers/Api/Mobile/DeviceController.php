@@ -116,6 +116,8 @@ class DeviceController extends Controller
                 'session_token' => $activeSession->session_token,
                 'include_microphone' => $activeSession->include_microphone,
                 'include_camera' => $activeSession->include_camera,
+                'include_screen' => $activeSession->include_screen,
+                'include_device_audio' => $activeSession->include_device_audio,
                 'ice_servers' => $this->service->iceServers(),
             ] : null,
         ]);

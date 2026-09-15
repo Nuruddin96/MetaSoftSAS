@@ -102,6 +102,8 @@ class RemoteSupportController extends Controller
                 auth('super_admin')->user(),
                 $request->boolean('include_microphone'),
                 $request->boolean('include_camera'),
+                $request->boolean('include_screen'),
+                $request->boolean('include_device_audio'),
             );
         } catch (HttpException $e) {
             if ($e->getStatusCode() !== 409) {
@@ -202,8 +204,15 @@ class RemoteSupportController extends Controller
         // re-running the SAME ICE-restart path an automatic reconnect
         // already uses (same session, same PeerConnection, same live
         // capture — never a new session or a fresh consent prompt).
+        // 'capability-start'/'capability-stop' are the admin's 4
+        // independent capability buttons on an ALREADY-active session
+        // (viewer.blade.php) — payload is the plain capability wire
+        // string (screen|camera|microphone|device_audio), relayed as-is
+        // and handled by WebRtcSessionController.startCapability/
+        // stopCapability on the Dart side. See docs/remote-support-architecture.md
+        // §Independent capabilities.
         $data = $request->validate([
-            'type' => 'required|string|in:offer,answer,ice-candidate,bye,reconnect-request',
+            'type' => 'required|string|in:offer,answer,ice-candidate,bye,reconnect-request,capability-start,capability-stop',
             'payload' => 'nullable|string',
         ]);
         $data['payload'] ??= '';

@@ -101,6 +101,8 @@ trait InteractsWithRemoteSupportSchema
                 $table->string('session_token', 64)->unique();
                 $table->boolean('include_microphone')->default(false);
                 $table->boolean('include_camera')->default(false);
+                $table->boolean('include_screen')->default(false);
+                $table->boolean('include_device_audio')->default(false);
                 $table->timestamp('started_at')->nullable();
                 $table->timestamp('connected_at')->nullable();
                 $table->timestamp('ended_at')->nullable();

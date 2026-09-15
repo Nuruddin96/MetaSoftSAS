@@ -168,12 +168,37 @@
                                     🎥 লাইভ স্ক্রিন — ডিভাইস প্রস্তুত হচ্ছে…
                                 </span>
                             @else
-                                <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}" class="flex items-center gap-2">
-                                    @csrf
-                                    <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_microphone" value="1"> 🎙 মাইক্রোফোন</label>
-                                    <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_camera" value="1"> 📷 ক্যামেরা</label>
-                                    <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🎥 লাইভ স্ক্রিন দেখুন</button>
-                                </form>
+                                {{-- Independent Remote Support capabilities — see
+                                     docs/remote-support-architecture.md §Independent
+                                     capabilities. Screen is no longer a prerequisite
+                                     for Camera/Microphone/Device Audio: each button
+                                     here starts a session with ONLY its own
+                                     capability. Once a session is live, the OTHER
+                                     three are added independently from inside the
+                                     viewer (viewer.blade.php) via capability-start
+                                     signals, never a second session. --}}
+                                <div class="flex items-center gap-1.5 flex-wrap">
+                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}">
+                                        @csrf
+                                        <input type="hidden" name="include_screen" value="1">
+                                        <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🎥 Screen</button>
+                                    </form>
+                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}">
+                                        @csrf
+                                        <input type="hidden" name="include_camera" value="1">
+                                        <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">📷 Camera</button>
+                                    </form>
+                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}">
+                                        @csrf
+                                        <input type="hidden" name="include_microphone" value="1">
+                                        <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🎙 Microphone</button>
+                                    </form>
+                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}">
+                                        @csrf
+                                        <input type="hidden" name="include_device_audio" value="1">
+                                        <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🔊 Device Audio</button>
+                                    </form>
+                                </div>
                             @endif
                         </div>
                     @endif

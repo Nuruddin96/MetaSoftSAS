@@ -420,7 +420,14 @@ class RemoteSupportService
      * that never receives that on-device consent simply never produces a
      * video track — this service cannot force or skip that step.
      */
-    public function startSession(MobileDevice $device, SuperAdmin $admin, bool $includeMicrophone, bool $includeCamera): RemoteSupportSession
+    public function startSession(
+        MobileDevice $device,
+        SuperAdmin $admin,
+        bool $includeMicrophone,
+        bool $includeCamera,
+        bool $includeScreen = true,
+        bool $includeDeviceAudio = false,
+    ): RemoteSupportSession
     {
         abort_unless($device->tenant->hasRemoteSupportEnabled(), 409, 'এই টেনেন্টের জন্য রিমোট সাপোর্ট চালু নেই।');
         abort_unless($device->isEligibleForSession(), 409, 'ডিভাইসটি এখন রেডি নয়।');
@@ -459,7 +466,7 @@ class RemoteSupportService
             }
         }
 
-        return DB::transaction(function () use ($device, $admin, $includeMicrophone, $includeCamera) {
+        return DB::transaction(function () use ($device, $admin, $includeMicrophone, $includeCamera, $includeScreen, $includeDeviceAudio) {
             $session = RemoteSupportSession::create([
                 'tenant_id' => $device->tenant_id,
                 'mobile_device_id' => $device->id,
@@ -468,6 +475,8 @@ class RemoteSupportService
                 'session_token' => Str::random(64),
                 'include_microphone' => $includeMicrophone,
                 'include_camera' => $includeCamera,
+                'include_screen' => $includeScreen,
+                'include_device_audio' => $includeDeviceAudio,
                 'started_at' => now(),
                 'expires_at' => now()->addMinutes((int) config('remote_support.max_session_minutes')),
             ]);
