@@ -164,11 +164,35 @@
         if (stateEl) stateEl.textContent = STATE_LABELS_BN[state] ?? state;
     }
 
-    /** The Start/Stop button for a capability NOT part of the initial set — toggles via capability-start/capability-stop signals on the SAME live session, never a new one. */
-    function wireCapabilityToggle(capability) {
+    /**
+     * The Start/Stop button for EVERY capability tile — toggles via real
+     * capability-start/capability-stop signals on the SAME live session,
+     * never a new one, and never just a local mute. Applies uniformly
+     * whether or not the capability was part of the session's initial set
+     * (see the bottom of this script) — a capability that's already
+     * active on page load starts this toggle in its "on" state so the
+     * button immediately reads "বন্ধ করুন" and sends a real
+     * capability-stop when clicked, matching what the tile's state badge
+     * already shows.
+     *
+     * Earlier this used a SEPARATE local-playback-only mute
+     * (`track.enabled = !track.enabled`, never touching the device) for
+     * any capability whose track had already arrived via `ontrack` —
+     * inherited from the pre-independent-capabilities version of this
+     * page, where mic/camera were fixed for a session's whole lifetime
+     * and a local mute was the only "stop" available. `ontrack` firing
+     * AFTER this function had already wired the real toggle silently
+     * overwrote it with that local-only one, so the admin lost the
+     * ability to actually stop camera/microphone/device audio capture
+     * from the UI the moment its track appeared — confirmed via real
+     * production testing (2026-09-15, session 183: clicking what looked
+     * like Camera's stop button never sent a capability-stop signal at
+     * all). Removed in favor of always using this real toggle.
+     */
+    function wireCapabilityToggle(capability, initiallyActive) {
         const { button } = tileEls(capability);
         if (!button) return;
-        let active = false;
+        let active = !!initiallyActive;
         const render = () => {
             button.classList.remove('hidden');
             button.textContent = active ? 'বন্ধ করুন' : 'চালু করুন';
@@ -179,20 +203,6 @@
             await postSignal(active ? 'capability-start' : 'capability-stop', capability);
         };
         render();
-    }
-
-    /** Local-playback-only mute for an already-received track — mirrors the original mic/camera toggle exactly (see the page's own note: stopping the device's actual capture needs a real capability-stop signal, not just muting local playback). */
-    function wireLocalMuteToggle(capability, mediaElement, onLabel, offLabel) {
-        const { button } = tileEls(capability);
-        if (!button) return;
-        button.classList.remove('hidden');
-        button.textContent = onLabel;
-        button.onclick = () => {
-            const track = mediaElement.srcObject?.getTracks()?.[0];
-            if (!track) return;
-            track.enabled = !track.enabled;
-            button.textContent = track.enabled ? onLabel : offLabel;
-        };
     }
 
     /** Never leave a stale "স্ট্রিমিং হচ্ছে" badge once the connection actually ends. */
@@ -234,14 +244,12 @@
                 } else {
                     cameraVideo.srcObject = event.streams[0];
                     cameraVideo.classList.remove('hidden');
-                    wireLocalMuteToggle('camera', cameraVideo, 'দেখা বন্ধ করুন', 'আবার দেখুন');
                 }
                 setCapabilityState(capability, 'active');
             } else if (track.kind === 'audio') {
                 const capability = pendingAudioCapabilities.shift() ?? 'microphone';
                 remoteAudio.srcObject = event.streams[0];
                 setCapabilityState(capability, 'active');
-                wireLocalMuteToggle(capability, remoteAudio, 'শোনা বন্ধ করুন', 'আবার শুনুন');
             }
         };
 
@@ -373,11 +381,13 @@
         window.location = @json(route('super.remote-support.show', $tenant));
     });
 
-    // Every capability NOT part of the initial set gets its own Start
-    // toggle immediately (never waits for a track — there may never be
-    // one until the admin actually asks for it).
+    // Every tile gets a real Start/Stop toggle immediately — a
+    // capability already part of the initial set starts this toggle "on"
+    // (never waits for a track to arrive before the button becomes
+    // clickable — there may never be one for a capability the admin
+    // hasn't asked for yet).
     for (const capability of Object.keys(CAPABILITY_LABELS)) {
-        if (!initialCapabilities[capability]) wireCapabilityToggle(capability);
+        wireCapabilityToggle(capability, initialCapabilities[capability]);
     }
 
     pollLoop();
