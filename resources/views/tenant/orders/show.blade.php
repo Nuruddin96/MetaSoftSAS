@@ -10,8 +10,11 @@
             @if ($order->status === 'pending' && $order->source === 'messenger')
                 <span class="text-xs px-2.5 py-1 rounded-pill font-semibold bg-amber/15 text-ink">📩 মেসেঞ্জার থেকে — পেন্ডিং</span>
             @endif
+            @if ($order->source === 'wordpress')
+                <span class="text-xs px-2.5 py-1 rounded-pill font-semibold bg-[#21759B]/10 text-[#21759B]">🔌 WordPress থেকে{{ $order->wordpress_order_id ? ' — Order #'.$order->wordpress_order_id : '' }}</span>
+            @endif
         </h1>
-        <p class="text-xs text-mute mt-1">{{ $order->created_at->format('d M Y, h:i A') }}</p>
+        <p class="text-xs text-mute mt-1">{{ $order->order_date?->format('d M Y') ?? $order->created_at->format('d M Y, h:i A') }}</p>
     </div>
     <a href="{{ route('tenant.orders.index') }}" class="shrink-0 text-sm text-mute hover:text-ink rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">← সব অর্ডার</a>
 </div>
@@ -52,9 +55,10 @@
             'whatsapp'  => 'হোয়াটসঅ্যাপ',
             'instagram' => 'ইনস্টাগ্রাম',
             'call'      => 'কল',
+            'wordpress' => 'ওয়ার্ডপ্রেস',
             'others'    => 'অন্যান্য',
         ];
-        $channelColors = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'others' => 'text-mute'];
+        $channelColors = ['website' => 'text-leaf', 'facebook' => 'text-[#1877F2]', 'whatsapp' => 'text-[#25D366]', 'instagram' => 'text-[#E1306C]', 'call' => 'text-ink', 'wordpress' => 'text-[#21759B]', 'others' => 'text-mute'];
     @endphp
     <div class="order-2 lg:order-none lg:col-start-3 lg:row-start-1 min-w-0">
         <x-ui.card padding="sm">
@@ -103,6 +107,10 @@
                         @endif
                         <tr><td colspan="2" class="px-5 py-2 text-right text-mute">ডেলিভারি চার্জ</td>
                             <td class="px-5 py-2 text-right whitespace-nowrap">{{ number_format($order->delivery_charge) }}৳</td></tr>
+                        @if ($order->additional_amount > 0)
+                        <tr><td colspan="2" class="px-5 py-2 text-right text-mute">অতিরিক্ত খরচ</td>
+                            <td class="px-5 py-2 text-right whitespace-nowrap">{{ number_format($order->additional_amount) }}৳</td></tr>
+                        @endif
                         <tr class="font-bold text-base"><td colspan="2" class="px-5 py-3 text-right">মোট</td>
                             <td class="px-5 py-3 text-right whitespace-nowrap">{{ number_format($order->total) }}৳</td></tr>
                         </tbody>
@@ -128,6 +136,9 @@
                         <div class="px-4 py-2 flex justify-between text-sm text-mute"><span>ডিসকাউন্ট</span><span>-{{ number_format($order->discount) }}৳</span></div>
                     @endif
                     <div class="px-4 py-2 flex justify-between text-sm text-mute"><span>ডেলিভারি চার্জ</span><span>{{ number_format($order->delivery_charge) }}৳</span></div>
+                    @if ($order->additional_amount > 0)
+                        <div class="px-4 py-2 flex justify-between text-sm text-mute"><span>অতিরিক্ত খরচ</span><span>{{ number_format($order->additional_amount) }}৳</span></div>
+                    @endif
                     <div class="px-4 py-3 flex justify-between font-bold text-base"><span>মোট</span><span>{{ number_format($order->total) }}৳</span></div>
                 </div>
             </x-ui.card>
@@ -158,19 +169,22 @@
                         <label class="text-sm font-medium">ঠিকানা</label>
                         <textarea name="customer_address" rows="2" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 focus:ring-2 focus:ring-leaf outline-none">{{ old('customer_address', $order->customer_address) }}</textarea>
                     </div>
+                    <div>
+                        <label class="text-sm font-medium">অর্ডারের তারিখ</label>
+                        <input type="date" name="order_date" value="{{ old('order_date', optional($order->order_date)->format('Y-m-d') ?? now()->format('Y-m-d')) }}" max="{{ now()->format('Y-m-d') }}" class="mt-1 w-full max-w-full rounded-btn border border-ink/15 px-3 py-3 focus:ring-2 focus:ring-leaf outline-none">
+                    </div>
                     <div class="grid sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="text-sm font-medium">বিভাগ</label>
-                            <select name="division_id" id="divisionSelect" onchange="calcTotal()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
+                            <label class="text-sm font-medium">জেলা</label>
+                            <select name="district_id" id="districtSelect" onchange="onDistrictChange()" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
                                 <option value="">— নেই —</option>
-                                @foreach ($divisions as $d)<option value="{{ $d->id }}" @selected(old('division_id', $order->division_id) == $d->id)>{{ $d->bn_name }}</option>@endforeach
+                                @foreach ($districts as $d)<option value="{{ $d->id }}" data-division-id="{{ $d->division_id }}" @selected(old('district_id', $order->district_id) == $d->id)>{{ $d->bn_name }}</option>@endforeach
                             </select>
                         </div>
                         <div>
-                            <label class="text-sm font-medium">জেলা</label>
-                            <select name="district_id" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
+                            <label class="text-sm font-medium">থানা / উপজেলা</label>
+                            <select name="upazila_id" id="upazilaSelect" class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-3 bg-white">
                                 <option value="">— নেই —</option>
-                                @foreach ($districts as $d)<option value="{{ $d->id }}" @selected(old('district_id', $order->district_id) == $d->id)>{{ $d->bn_name }}</option>@endforeach
                             </select>
                         </div>
                     </div>
@@ -206,8 +220,9 @@
                     </div>
                     {{-- No manual delivery-charge field here either — same
                          DeliveryChargeService-driven, division-based
-                         auto-calculation as the New Order form. --}}
-                    <p class="text-xs text-mute">ডেলিভারি চার্জ বিভাগ অনুযায়ী স্বয়ংক্রিয়ভাবে হিসাব হয় — <a href="{{ route('tenant.settings') }}" class="text-leaf hover:underline">সেটিংসে বদলান</a>।</p>
+                         auto-calculation as the New Order form (division
+                         resolved server-side from the selected জেলা). --}}
+                    <p class="text-xs text-mute">ডেলিভারি চার্জ জেলা অনুযায়ী স্বয়ংক্রিয়ভাবে হিসাব হয় — <a href="{{ route('tenant.settings') }}" class="text-leaf hover:underline">সেটিংসে বদলান</a>।</p>
 
                     @if ($errors->any())
                         <div class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-btn p-3">
@@ -250,6 +265,9 @@
                     <x-courier.timeline :order="$order" class="mt-3 pt-3 border-t border-ink/10" />
                 @elseif ($order->courier_status)
                     <p class="text-xs text-mute mt-2 pt-2 border-t border-ink/10">কুরিয়ার স্ট্যাটাস: <span class="font-medium text-ink">{{ $order->courier_status }}</span></p>
+                    @if ($order->courier_status_checked_at)
+                        <p class="text-xs text-mute/70 mt-0.5">সর্বশেষ আপডেট: {{ $order->courier_status_checked_at->diffForHumans() }}</p>
+                    @endif
                 @endif
                 <form method="POST" action="{{ route('tenant.orders.courier.refresh', $order) }}" class="mt-2">
                     @csrf
@@ -364,11 +382,31 @@
     const dhakaDivisionId = @json($dhakaDivisionId);
     const chargeInside = @json($chargeInside);
     const chargeOutside = @json($chargeOutside);
+    const upazilas = @json($upazilas);
+    const initialUpazilaId = @json($order->upazila_id);
     let rowIdx = 0;
 
-    /** No manual delivery-charge input exists — same client-side-preview-only computation as tenant/orders/create.blade.php; the server independently recomputes from division_id and never trusts a submitted amount. */
+    /** District→Thana cascading, same as tenant/orders/create.blade.php — preselects [preselectUpazilaId] so a Messenger-extracted or previously-saved thana survives a page reload. */
+    function onDistrictChange(preselectUpazilaId) {
+        const districtId = parseInt(document.getElementById('districtSelect').value, 10) || null;
+        const upazilaSelect = document.getElementById('upazilaSelect');
+        upazilaSelect.innerHTML = '<option value="">— নেই —</option>';
+        if (districtId) {
+            upazilas.filter(u => u.district_id === districtId).forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.id; opt.textContent = u.bn_name;
+                if (preselectUpazilaId && u.id === preselectUpazilaId) opt.selected = true;
+                upazilaSelect.appendChild(opt);
+            });
+        }
+        calcTotal();
+    }
+
+    /** No manual delivery-charge input exists — same client-side-preview-only computation as tenant/orders/create.blade.php; the server independently recomputes (see DeliveryChargeService::resolveDivisionId()) and never trusts a submitted amount. */
     function currentDeliveryCharge() {
-        const divisionId = parseInt(document.getElementById('divisionSelect').value, 10) || null;
+        const districtSelect = document.getElementById('districtSelect');
+        const opt = districtSelect.options[districtSelect.selectedIndex];
+        const divisionId = opt ? parseInt(opt.dataset.divisionId, 10) || null : null;
         return divisionId === dhakaDivisionId ? chargeInside : chargeOutside;
     }
 
@@ -493,7 +531,7 @@
     });
 
     addRow(); // start with one row
-    calcTotal(); // initializes the delivery-charge preview from any division_id already on this order (e.g. from a Messenger conversation)
+    onDistrictChange(initialUpazilaId); // populates থানা for any district_id already on this order (e.g. from a Messenger conversation) and initializes the delivery-charge preview
 </script>
 @endif
 @endpush

@@ -55,8 +55,10 @@ class MetaCapiServiceTest extends TestCase
         Http::assertSent(function ($request) {
             $url = (string) $request->url();
 
-            return str_starts_with($url, 'https://graph.facebook.com/v26.0/pixel-123/events')
-                && str_contains($url, 'access_token=capi-token-abc');
+            // access_token travels in the POST body, never the URL, so a
+            // Guzzle exception message can never leak it.
+            return $url === 'https://graph.facebook.com/v26.0/pixel-123/events'
+                && $request->data()['access_token'] === 'capi-token-abc';
         });
     }
 
@@ -105,13 +107,15 @@ class MetaCapiServiceTest extends TestCase
         });
     }
 
-    public function test_successful_event_returns_the_meta_response(): void
+    public function test_successful_event_returns_a_structured_success_result(): void
     {
         Http::fake(['*/pixel-123/events*' => Http::response(['events_received' => 1, 'fbtrace_id' => 'AbCdEf'])]);
 
         $result = (new MetaCapiService('pixel-123', 'capi-token-abc'))->sendPurchase($this->makeOrder());
 
-        $this->assertSame(1, $result['events_received']);
+        $this->assertTrue($result['success']);
+        $this->assertSame(200, $result['http_status']);
+        $this->assertNull($result['error_message']);
     }
 
     public function test_graph_api_error_response_is_returned_without_throwing(): void
@@ -122,10 +126,18 @@ class MetaCapiServiceTest extends TestCase
 
         $result = (new MetaCapiService('pixel-123', 'capi-token-abc'))->sendPurchase($this->makeOrder());
 
-        $this->assertArrayHasKey('error', $result);
-        $this->assertSame('Invalid parameter', $result['error']['message']);
+        $this->assertFalse($result['success']);
+        $this->assertSame(400, $result['http_status']);
+        $this->assertSame(100, $result['error_code']);
+        $this->assertSame('Invalid parameter', $result['error_message']);
     }
 
+    /**
+     * Phase 1 hardening deliberately logs success/failure (order/tenant/
+     * event id, HTTP status, Meta error code/type/message) so failures are
+     * observable — the thing that must never happen is the secret itself
+     * appearing in a log line, not logging altogether.
+     */
     public function test_access_token_is_never_logged(): void
     {
         Log::spy();
@@ -133,10 +145,9 @@ class MetaCapiServiceTest extends TestCase
 
         (new MetaCapiService('pixel-123', 'super-secret-capi-token'))->sendPurchase($this->makeOrder());
 
-        Log::shouldNotHaveReceived('info');
-        Log::shouldNotHaveReceived('error');
-        Log::shouldNotHaveReceived('warning');
-        Log::shouldNotHaveReceived('debug');
+        Log::shouldHaveReceived('info')->once()->withArgs(function ($message, $context = []) {
+            return ! str_contains(json_encode([$message, $context]), 'super-secret-capi-token');
+        });
     }
 
     public function test_access_token_is_not_present_in_the_returned_response(): void

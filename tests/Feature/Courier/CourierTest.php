@@ -253,6 +253,82 @@ class CourierTest extends TestCase
         Http::assertNothingSent();
     }
 
+    // --- JSON branch (web order list's inline per-row refresh button, Tenant\CourierController::refreshStatus() extended to serve both callers) ---
+
+    public function test_refresh_status_returns_json_with_the_real_status_when_called_via_fetch(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeSteadfastSetting($tenant->id);
+        $order = $this->makeOrder($tenant->id, [
+            'status' => 'processing', 'courier_provider' => 'steadfast',
+            'courier_consignment_id' => 'SF-201', 'courier_tracking_code' => 'TRK-201', 'courier_status' => 'pending',
+        ]);
+
+        Http::fake([
+            'https://portal.packzy.com/api/v1/status_by_invoice/'.$order->order_number => Http::response(['delivery_status' => 'delivered']),
+        ]);
+
+        $response = $this->actingAs($user, 'tenant')
+            ->postJson($this->panelUrl($tenant, 'orders/'.$order->id.'/courier/refresh'));
+
+        $response->assertOk()->assertJsonPath('ok', true)->assertJsonPath('courier_status', 'delivered');
+        $this->assertNotNull($response->json('courier_status_checked_at'));
+        $this->assertSame('delivered', $order->refresh()->courier_status);
+    }
+
+    public function test_refresh_status_json_on_an_unsent_order_returns_422_not_a_redirect(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $order = $this->makeOrder($tenant->id);
+
+        $response = $this->actingAs($user, 'tenant')
+            ->postJson($this->panelUrl($tenant, 'orders/'.$order->id.'/courier/refresh'));
+
+        $response->assertStatus(422)->assertJsonPath('ok', false);
+        Http::assertNothingSent();
+    }
+
+    public function test_refresh_status_json_returns_a_friendly_error_on_courier_api_failure_and_leaves_status_untouched(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $this->makeSteadfastSetting($tenant->id);
+        $order = $this->makeOrder($tenant->id, [
+            'status' => 'processing', 'courier_provider' => 'steadfast',
+            'courier_consignment_id' => 'SF-202', 'courier_status' => 'pending',
+        ]);
+
+        Http::fake(['https://portal.packzy.com/*' => Http::response(['message' => 'Server error'], 500)]);
+
+        $response = $this->actingAs($user, 'tenant')
+            ->postJson($this->panelUrl($tenant, 'orders/'.$order->id.'/courier/refresh'));
+
+        $response->assertStatus(422)->assertJsonPath('ok', false);
+        $this->assertSame('pending', $order->refresh()->courier_status, 'a failed refresh must never overwrite the last known real status');
+    }
+
+    public function test_refresh_status_json_never_reaches_another_tenants_order(): void
+    {
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userB = $this->makeUser($tenantB->id);
+        $this->makeSteadfastSetting($tenantB->id);
+        $orderA = $this->makeOrder($tenantA->id, [
+            'courier_provider' => 'steadfast', 'courier_consignment_id' => 'SF-A-2', 'courier_status' => 'pending',
+        ]);
+
+        Http::fake(['https://portal.packzy.com/*' => Http::response(['delivery_status' => 'delivered'])]);
+
+        $response = $this->actingAs($userB, 'tenant')
+            ->postJson($this->panelUrl($tenantB, 'orders/'.$orderA->id.'/courier/refresh'));
+
+        $response->assertStatus(404);
+        Http::assertNothingSent();
+        $this->assertSame('pending', $orderA->refresh()->courier_status);
+    }
+
     public function test_tenant_cannot_refresh_status_on_another_tenants_order(): void
     {
         $tenantA = $this->makeTenant();

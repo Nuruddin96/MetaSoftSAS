@@ -6,6 +6,7 @@ use App\Models\AiTenantMemory;
 use App\Models\AiWhatsAppMessageJob;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
+use App\Models\TenantProductImage;
 use App\Models\WhatsAppMessage;
 use App\Models\WhatsAppPhoneNumber;
 use App\Services\AI\AiAgentService;
@@ -15,6 +16,8 @@ use App\Services\AI\AiCreditService;
 use App\Services\AI\AiCustomerEmotionService;
 use App\Services\AI\AiCustomerMemoryService;
 use App\Services\AI\AiHandoffService;
+use App\Services\AI\AiPostPurchaseContextService;
+use App\Services\AI\AiProductImageMemoryService;
 use App\Services\AI\AiProductKnowledgeService;
 use App\Services\AI\AiTenantKnowledgeService;
 use App\Services\AI\AiTenantMemoryService;
@@ -64,18 +67,54 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
     // entry needed).
     public int $timeout = 30;
 
+    /** Mirrors ProcessAiAgentMessage::PRODUCT_IMAGE_CAPTIONS — see its docblock. */
+    protected const PRODUCT_IMAGE_CAPTIONS = [
+        'এই যে ছবিটা 😊',
+        'অবশ্যই, ছবি পাঠালাম 😊',
+        'নিন, ছবিটা দেখে নিন 😊',
+    ];
+
     public function __construct(
         public readonly int $tenantId,
         public readonly int $whatsAppMessageId,
     ) {}
 
-    public function handle(AiAgentService $ai, AiCreditService $credit, WhatsAppSendService $whatsapp, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiConversationStyleService $style, AiCustomerEmotionService $emotion, WhatsAppMediaService $media, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories): void
+    public function handle(AiAgentService $ai, AiCreditService $credit, WhatsAppSendService $whatsapp, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiConversationStyleService $style, AiCustomerEmotionService $emotion, WhatsAppMediaService $media, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories, AiProductImageMemoryService $productImages, AiPostPurchaseContextService $postPurchase): void
     {
         if (! AiWhatsAppMessageJob::tablesReady()) {
             return;
         }
 
-        if (! AiWhatsAppMessageJob::claim($this->tenantId, $this->whatsAppMessageId)) {
+        // Part 12/13 — message coalescing, mirrors ProcessAiAgentMessage
+        // one-for-one (see its handle() docblock comments for the full
+        // reasoning). Only possible once database/sql/chunk51.sql's
+        // conversation_key column exists; on an older schema $batchIds
+        // stays [$this->whatsAppMessageId] and behavior is unchanged.
+        $batchIds = [$this->whatsAppMessageId];
+
+        if (AiWhatsAppMessageJob::conversationKeyColumnReady()) {
+            $conversationKey = AiWhatsAppMessageJob::conversationKeyFor($this->tenantId, $this->whatsAppMessageId);
+
+            if ($conversationKey) {
+                if (AiWhatsAppMessageJob::hasNewerPending($this->tenantId, $conversationKey, $this->whatsAppMessageId)) {
+                    return;
+                }
+
+                $batchIds = AiWhatsAppMessageJob::coalescedBatchIds(
+                    $this->tenantId,
+                    $conversationKey,
+                    $this->whatsAppMessageId,
+                    (int) config('ai.message_coalesce_max_batch', 8)
+                );
+
+                if (! in_array($this->whatsAppMessageId, $batchIds, true)) {
+                    $batchIds[] = $this->whatsAppMessageId;
+                    sort($batchIds);
+                }
+            }
+        }
+
+        if (! AiWhatsAppMessageJob::claimBatch($this->tenantId, $batchIds)) {
             // Already claimed by a prior attempt (retry), already
             // completed/failed, or somehow never recorded — in every
             // case, generating or sending anything here would risk a
@@ -84,10 +123,10 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
         }
 
         try {
-            $sent = $this->process($ai, $credit, $whatsapp, $knowledge, $products, $memory, $style, $emotion, $media, $transcription, $handoff, $memories);
+            $sent = $this->process($ai, $credit, $whatsapp, $knowledge, $products, $memory, $style, $emotion, $media, $transcription, $handoff, $memories, $productImages, $postPurchase, $batchIds);
 
             if ($sent) {
-                AiWhatsAppMessageJob::markCompleted($this->tenantId, $this->whatsAppMessageId);
+                AiWhatsAppMessageJob::markCompletedBatch($this->tenantId, $batchIds);
             } else {
                 // process() returned early without throwing — tenant/
                 // message no longer eligible, AI got turned back off,
@@ -95,10 +134,10 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
                 // failed. None of these are exceptions (each is an
                 // expected, already-logged-if-relevant outcome), but none
                 // of them sent a reply either, so this is not 'completed'.
-                AiWhatsAppMessageJob::markFailed($this->tenantId, $this->whatsAppMessageId);
+                AiWhatsAppMessageJob::markFailedBatch($this->tenantId, $batchIds);
             }
         } catch (\Throwable $e) {
-            AiWhatsAppMessageJob::markFailed($this->tenantId, $this->whatsAppMessageId);
+            AiWhatsAppMessageJob::markFailedBatch($this->tenantId, $batchIds);
 
             Log::warning('WhatsApp AI agent job: processing failed.', [
                 'tenant_id' => $this->tenantId,
@@ -107,9 +146,9 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
             ]);
 
             // Deliberately not rethrown — same reasoning as
-            // ProcessAiAgentMessage: markFailed() above already makes any
-            // further Laravel-level retry a safe no-op via the claim()
-            // guard.
+            // ProcessAiAgentMessage: markFailedBatch() above already
+            // makes any further Laravel-level retry a safe no-op via the
+            // claim guard.
         }
     }
 
@@ -120,7 +159,7 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
      *              OpenAI failure, WhatsApp send failure) returns false without
      *              throwing, and the caller marks the job 'failed' for any of them.
      */
-    protected function process(AiAgentService $ai, AiCreditService $credit, WhatsAppSendService $whatsapp, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiConversationStyleService $style, AiCustomerEmotionService $emotion, WhatsAppMediaService $media, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories): bool
+    protected function process(AiAgentService $ai, AiCreditService $credit, WhatsAppSendService $whatsapp, AiTenantKnowledgeService $knowledge, AiProductKnowledgeService $products, AiCustomerMemoryService $memory, AiConversationStyleService $style, AiCustomerEmotionService $emotion, WhatsAppMediaService $media, AiAudioTranscriptionService $transcription, AiHandoffService $handoff, AiTenantMemoryService $memories, AiProductImageMemoryService $productImages, AiPostPurchaseContextService $postPurchase, array $batchIds = []): bool
     {
         $tenant = Tenant::withoutGlobalScopes()->find($this->tenantId);
 
@@ -210,18 +249,29 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
             return false;
         }
 
+        // Part 12 — message coalescing, mirrors ProcessAiAgentMessage::
+        // combinedCustomerText() one-for-one. For the common non-bursty
+        // case (batch of exactly this one message) this is byte-
+        // identical to (string) $message->message_text.
+        $combinedText = $this->combinedCustomerText($batchIds, $message);
+
         // Phase 13 — deterministic, high-precision phrase match on
-        // whatever text this turn ends up with (post-transcription) —
-        // never AI-decided, see AiHandoffService's docblock. isActive()
-        // above already confirmed no handoff exists yet for this
-        // conversation, so trigger() here always creates a fresh row.
-        $justTriggeredHandoff = $handoff->customerRequestedHuman($message->message_text);
+        // whatever text this turn ends up with (post-transcription,
+        // post-coalescing) — never AI-decided, see AiHandoffService's
+        // docblock. isActive() above already confirmed no handoff exists
+        // yet for this conversation, so trigger() here always creates a
+        // fresh row.
+        $justTriggeredHandoff = $handoff->customerRequestedHuman($combinedText);
 
         if ($justTriggeredHandoff) {
             $handoff->trigger($this->tenantId, 'whatsapp', $waId, AiHandoffService::REASON_CUSTOMER_REQUESTED, $message->id);
         }
 
-        $history = $this->recentHistory($this->tenantId, $waId, $message->id);
+        // Excludes every message in this coalesced batch, not just the
+        // triggering one — see ProcessAiAgentMessage::process()'s
+        // identical comment for why.
+        $historyBoundaryId = $batchIds === [] ? $message->id : min($batchIds);
+        $history = $this->recentHistory($this->tenantId, $waId, $historyBoundaryId);
 
         // "AI মেমোরী" voice answers — a confident match is sent directly
         // via the existing WhatsApp media-send path, entirely bypassing
@@ -229,11 +279,36 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
         // bestAudioMatch()'s docblock.
         $audioMemory = $memories->bestAudioMatch(
             $this->tenantId,
-            [...array_column($history, 'content'), (string) $message->message_text]
+            [...array_column($history, 'content'), $combinedText]
         );
 
         if ($audioMemory) {
             return $this->sendAudioMemoryReply($audioMemory, $tenant, $waId, $whatsapp);
+        }
+
+        // "পণ্যের ছবি" — resolved the same way, BEFORE any OpenAI call,
+        // deterministically — see AiProductImageMemoryService::resolve()'s
+        // docblock and AiImageRequestResolution's docblock.
+        $imageResolution = $productImages->resolve(
+            $this->tenantId,
+            $combinedText,
+            array_column($history, 'content')
+        );
+
+        if ($imageResolution->isClarify()) {
+            return $this->sendImageClarificationReply($tenant, $waId, $whatsapp);
+        }
+
+        if ($imageResolution->isSendAndStop()) {
+            return $this->sendProductImageReply($imageResolution->image, $tenant, $waId, $whatsapp);
+        }
+
+        if ($imageResolution->isSendAndContinue()) {
+            // Image sent as a plain attachment (no caption) here; the
+            // customer's other question(s) still get a real text answer
+            // from the normal OpenAI flow below — see
+            // AiImageRequestResolution::sendAndContinue()'s docblock.
+            $this->sendProductImageAttachmentOnly($imageResolution->image, $tenant, $waId, $whatsapp);
         }
 
         // Phase 7 — real historical human-written WhatsApp replies for this
@@ -245,19 +320,33 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
         $businessKnowledge = $knowledge->businessKnowledge($this->tenantId);
         $productData = $products->relevantProducts(
             $this->tenantId,
-            [...array_column($history, 'content'), $message->message_text]
+            [...array_column($history, 'content'), $combinedText]
         );
         // "Teach Your AI Agent" — best-matching saved Q&A for this exact
         // message, same shape Messenger's job resolves — see
         // AiTenantMemoryService's docblock.
         $tenantMemories = $memories->relevantMemories(
             $this->tenantId,
-            [...array_column($history, 'content'), $message->message_text]
+            [...array_column($history, 'content'), $combinedText]
         );
         // Phase 6 — wa_id is Meta's own authenticated sender identity for
         // this webhook call, never a value the conversation text supplied
         // — see AiCustomerMemoryService's docblock.
         $customerMemory = $memory->forWhatsAppCustomer($this->tenantId, $waId);
+        // Generic, category-agnostic complaint/post-purchase-concern
+        // detection — mirrors ProcessAiAgentMessage's identical block,
+        // see AiPostPurchaseContextService's docblock. Only ever looks at
+        // this customer's own real order_items, never assumes a purchase
+        // happened when nothing verifies it.
+        $postPurchaseConcernContext = null;
+
+        if ($postPurchase->isPostPurchaseConcern($combinedText)) {
+            $postPurchaseConcernContext = $postPurchase->forWhatsAppCustomer(
+                $this->tenantId,
+                $waId,
+                [...array_column($history, 'content'), $combinedText]
+            ) ?? 'No verified purchase record was found for the specific product this customer seems to be referring to — do not assume or claim they purchased it; ask a brief clarifying question instead if genuinely needed.';
+        }
         // Phase 8 — a verified elapsed-wait fact, never a guessed mood —
         // see AiCustomerEmotionService's docblock.
         $customerEmotion = $emotion->forWhatsAppCustomer($this->tenantId, $waId, $message->id);
@@ -268,7 +357,7 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
             ? 'The customer just asked to speak with a real person, so this conversation has been flagged for your team to take over from here.'
             : null;
 
-        $result = $ai->generateReply($tenant->store_name, $history, (string) $message->message_text, styleExamples: $styleExamples, customerName: null, tenantInstructions: $tenantInstructions, businessKnowledge: $businessKnowledge, productData: $productData, customerMemory: $customerMemory, customerEmotion: $customerEmotion, imageUrl: $imageUrl, handoffNotice: $handoffNotice, tenantMemories: $tenantMemories);
+        $result = $ai->generateReply($tenant->store_name, $history, $combinedText, styleExamples: $styleExamples, customerName: null, tenantInstructions: $tenantInstructions, businessKnowledge: $businessKnowledge, productData: $productData, customerMemory: $customerMemory, customerEmotion: $customerEmotion, imageUrl: $imageUrl, handoffNotice: $handoffNotice, tenantMemories: $tenantMemories, postPurchaseConcernContext: $postPurchaseConcernContext);
 
         if (! $result) {
             // AiAgentService already logged why.
@@ -432,6 +521,40 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
         };
     }
 
+    /** Mirrors ProcessAiAgentMessage::combinedCustomerText() — see its docblock. */
+    protected function combinedCustomerText(array $batchIds, WhatsAppMessage $triggeringMessage): string
+    {
+        if (count($batchIds) <= 1) {
+            return (string) $triggeringMessage->message_text;
+        }
+
+        $others = WhatsAppMessage::withoutGlobalScopes()
+            ->whereIn('id', array_diff($batchIds, [$triggeringMessage->id]))
+            ->orderBy('id')
+            ->get()
+            ->keyBy('id');
+
+        $parts = [];
+
+        foreach ($batchIds as $id) {
+            $m = $id === $triggeringMessage->id ? $triggeringMessage : $others->get($id);
+
+            if (! $m) {
+                continue;
+            }
+
+            $text = $m->message_text;
+
+            if ($text !== null && trim($text) !== '') {
+                $parts[] = trim($text);
+            } elseif ($m->message_type) {
+                $parts[] = $this->attachmentPlaceholder($m->message_type);
+            }
+        }
+
+        return trim(implode(' ', $parts));
+    }
+
     /**
      * Phase 9 — WhatsApp counterpart of ProcessAiAgentMessage::
      * resolveImageUrl(), only ever for the CURRENT message (same "never
@@ -495,6 +618,82 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
 
         if (! $sendResult->successful) {
             Log::warning('WhatsApp AI agent job: saved voice-memory WhatsApp send failed.', [
+                'tenant_id' => $this->tenantId,
+                'error_code' => $sendResult->errorCode,
+            ]);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * "পণ্যের ছবি" — a confident, unambiguous image match where the
+     * message asked for nothing else. Unlike Messenger's two-call shape
+     * (ProcessAiAgentMessage::sendProductImageReply()), WhatsApp's Cloud
+     * API accepts an image caption in the SAME send
+     * (WhatsAppSendService::CAPTION_SUPPORTED_TYPES includes 'image'), so
+     * this is one call, image + short canned caption together — entirely
+     * bypassing OpenAI, zero AI credit deducted.
+     */
+    protected function sendProductImageReply(TenantProductImage $productImage, Tenant $tenant, string $waId, WhatsAppSendService $whatsapp): bool
+    {
+        $this->humanDelay();
+
+        $url = asset('storage/'.$productImage->image_path);
+        $caption = self::PRODUCT_IMAGE_CAPTIONS[$productImage->id % count(self::PRODUCT_IMAGE_CAPTIONS)];
+        $sendResult = $whatsapp->sendMedia($tenant, $waId, 'image', $url, caption: $caption, sentBy: 'ai');
+
+        if (! $sendResult->successful) {
+            Log::warning('WhatsApp AI agent job: saved product-image WhatsApp send failed.', [
+                'tenant_id' => $this->tenantId,
+                'error_code' => $sendResult->errorCode,
+            ]);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * "পণ্যের ছবি" — sends just the image, no caption. Used by
+     * sendAndContinue in process() above, where the upcoming normal
+     * OpenAI text reply addresses the rest of the customer's message —
+     * see AiImageRequestResolution::sendAndContinue()'s docblock.
+     */
+    protected function sendProductImageAttachmentOnly(TenantProductImage $productImage, Tenant $tenant, string $waId, WhatsAppSendService $whatsapp): bool
+    {
+        $this->humanDelay();
+
+        $url = asset('storage/'.$productImage->image_path);
+        $sendResult = $whatsapp->sendMedia($tenant, $waId, 'image', $url, sentBy: 'ai');
+
+        if (! $sendResult->successful) {
+            Log::warning('WhatsApp AI agent job: saved product-image WhatsApp send failed.', [
+                'tenant_id' => $this->tenantId,
+                'error_code' => $sendResult->errorCode,
+            ]);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * "পণ্যের ছবি" — two or more saved images are comparably plausible
+     * (AiImageRequestResolution::clarify()). Sends one short,
+     * deterministic clarifying question — never OpenAI, never a guessed
+     * image — see AiProductImageMemoryService::pickWinner()'s docblock.
+     */
+    protected function sendImageClarificationReply(Tenant $tenant, string $waId, WhatsAppSendService $whatsapp): bool
+    {
+        $sendResult = $whatsapp->sendText($tenant, $waId, 'অবশ্যই 😊 কোন পণ্যটির ছবি চান?', sentBy: 'ai');
+
+        if (! $sendResult->successful) {
+            Log::warning('WhatsApp AI agent job: image-clarification WhatsApp send failed.', [
                 'tenant_id' => $this->tenantId,
                 'error_code' => $sendResult->errorCode,
             ]);

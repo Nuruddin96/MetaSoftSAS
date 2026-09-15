@@ -15,7 +15,12 @@ class HomeController extends Controller
         return view('storefront.home', [
             'tenant' => app('currentTenant'),
             'banners' => Banner::where('is_active', 1)->orderBy('sort_order')->get(),
-            'categories' => Category::where('is_active', 1)->limit(12)->get(),
+            // Top-level only (subcategories belong under a parent, not in this
+            // flat nav) and explicitly ordered — an unordered query with a
+            // LIMIT has no guaranteed row order in MySQL, which could
+            // silently drop a newly-created category from the visible 12 on
+            // one page load and bring it back on the next.
+            'categories' => Category::where('is_active', 1)->whereNull('parent_id')->orderBy('id')->limit(12)->get(),
             'featured' => Product::with('variants')->where('is_active', 1)
                 ->latest()->limit(8)->get(),
             // Same "real, higher reference price" rule as ProductVariant::hasOffer() —

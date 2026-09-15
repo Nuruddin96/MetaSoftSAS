@@ -483,6 +483,25 @@ class MessengerInboxController extends Controller
     }
 
     /**
+     * New — the per-customer "AI [toggle]" control (previously this
+     * conversation-level AI state could only ever be turned back ON via
+     * resumeAi(); there was no manual "turn it off for this one customer"
+     * action at all, only the automatic triggers in ProcessAiAgentMessage).
+     * Reuses the exact same AiHandoff row/isActive() gate — see
+     * AiHandoffService::REASON_MANUALLY_DISABLED's docblock — so the AI
+     * job's existing checks stop auto-replying to this psid with zero
+     * pipeline changes. trigger() is itself idempotent (a no-op if a
+     * handoff is already active), so toggling this off twice in a row is
+     * harmless.
+     */
+    public function pauseAi(string $psid, AiHandoffService $handoff)
+    {
+        $handoff->trigger(app('currentTenant')->id, 'messenger', $psid, AiHandoffService::REASON_MANUALLY_DISABLED);
+
+        return back()->with('success', 'এই কনভারসেশনের জন্য AI Agent বন্ধ করা হয়েছে।');
+    }
+
+    /**
      * Polling endpoint for the "feels real-time" inbox — Hostinger shared
      * hosting has no confirmed queue worker/scheduler running, so this is
      * plain request/response polled from the browser rather than

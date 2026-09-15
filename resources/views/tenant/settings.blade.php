@@ -247,6 +247,12 @@
                 <input name="gtm_container_id" value="{{ $marketing->gtm_container_id }}" placeholder="GTM-XXXXXXX"
                        class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
             </div>
+            <div>
+                <label class="text-xs text-mute">Microsoft Clarity Project ID</label>
+                <input name="clarity_project_id" value="{{ $marketing->clarity_project_id }}" maxlength="20" placeholder="abcdefghij"
+                       class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                <p class="text-xs text-mute mt-1">Project ID দিলে Clarity সেশন রেকর্ডিং চালু হয়ে যাবে — খালি রাখলে বন্ধ থাকবে।</p>
+            </div>
             <div class="md:col-span-2">
                 <label class="text-xs text-mute">Conversion API Access Token {{ $marketing->fb_capi_token ? '(সেভ করা আছে — বদলাতে চাইলে নতুন টোকেন দিন)' : '' }}</label>
                 <input name="fb_capi_token" type="password" placeholder="EAAG..."
@@ -256,6 +262,10 @@
                 <label class="text-xs text-mute">Test Event Code (টেস্টের সময়)</label>
                 <input name="fb_test_event_code" value="{{ $marketing->fb_test_event_code }}" placeholder="TEST12345"
                        class="mt-1 w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                <label class="flex items-center gap-2 text-xs mt-2">
+                    <input type="checkbox" name="capi_test_mode" value="1" @checked($marketing->capi_test_mode)>
+                    Test Mode চালু (চালু থাকলেই শুধু Test Event Code পাঠানো হবে — বন্ধ থাকলে আসল অর্ডারে কখনো যাবে না)
+                </label>
             </div>
             <div>
                 <label class="text-xs text-mute">Meta Ad Account ID</label>
@@ -266,7 +276,65 @@
                 <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
             </div>
         </form>
+
+        <div class="mt-5 pt-4 border-t border-ink/10 text-sm space-y-1.5">
+            <p class="font-semibold text-xs text-mute uppercase tracking-wide mb-2">Meta CAPI স্ট্যাটাস</p>
+            <p>CAPI কনফিগার্ড: <b>{{ ($marketing->fb_pixel_id && $marketing->fb_capi_token) ? 'হ্যাঁ' : 'না' }}</b></p>
+            <p>Test Mode: <b class="{{ $marketing->capi_test_mode ? 'text-amber-600' : 'text-green-700' }}">{{ $marketing->capi_test_mode ? 'ON' : 'OFF' }}</b></p>
+            <p>
+                সর্বশেষ CAPI ইভেন্ট:
+                <b>
+                    @if ($marketing->capi_last_status === 'success') সফল
+                    @elseif ($marketing->capi_last_status === 'failed') ব্যর্থ
+                    @else পাঠানো হয়নি
+                    @endif
+                </b>
+                @if ($marketing->capi_last_event_at)
+                    — {{ $marketing->capi_last_event_at->format('d M Y, h:i A') }}
+                @endif
+            </p>
+            @if ($marketing->capi_last_http_status)
+                <p class="text-mute text-xs">HTTP স্ট্যাটাস: {{ $marketing->capi_last_http_status }}</p>
+            @endif
+            @if ($marketing->capi_last_error)
+                <p class="text-red-600 text-xs">সর্বশেষ এরর: {{ $marketing->capi_last_error }}</p>
+            @endif
+
+            <div class="pt-2">
+                <button type="button" id="test-capi-btn"
+                        class="rounded-btn border border-ink/15 px-3 py-1.5 text-xs font-semibold hover:bg-ink/5">
+                    Test CAPI Connection
+                </button>
+                <span id="test-capi-result" class="text-xs ml-2"></span>
+            </div>
+        </div>
     </x-ui.collapsible-card>
+
+    <script>
+        document.getElementById('test-capi-btn')?.addEventListener('click', async function () {
+            const btn = this;
+            const out = document.getElementById('test-capi-result');
+            btn.disabled = true;
+            out.textContent = 'চেক করা হচ্ছে...';
+            out.className = 'text-xs ml-2 text-mute';
+
+            const res = await fetch('{{ route('tenant.settings.marketing.test-capi') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+            }).then(r => r.json()).catch(() => null);
+
+            btn.disabled = false;
+
+            if (!res) {
+                out.textContent = 'চেক করা যায়নি।';
+                out.className = 'text-xs ml-2 text-red-600';
+                return;
+            }
+
+            out.textContent = res.message;
+            out.className = 'text-xs ml-2 ' + (res.success ? 'text-green-700' : 'text-red-600');
+        });
+    </script>
 
     <x-ui.collapsible-card title="🌐 কাস্টম ডোমেইন">
         @php $tenant = app('currentTenant'); $domainStatus = $tenant->customDomainDisplayStatus(); @endphp
@@ -373,10 +441,10 @@
             <div class="border-t border-ink/10 pt-3 mb-3">
                 <label class="text-sm font-semibold block mb-1">AI-কে আপনার ব্যবসার বিষয়ে কী কী জানা দরকার?</label>
                 <p class="text-xs text-mute mb-2">যেমন — ব্যবহারের ধরন, delivery charge, পেমেন্ট মেথড, discount policy, কাস্টমারের সাথে কথা বলার ধরন, কোন জিনিস কখনো বলা যাবে না — যা লিখবেন AI সবসময় সেটা মাথায় রেখে রিপ্লাই দেবে। তবে এটা AI-এর মূল নিরাপত্তা নিয়ম override করতে পারবে না (যেমন — না জানা দাম বানিয়ে বলা)।</p>
-                <textarea name="ai_custom_instructions" rows="5" maxlength="2000"
+                <textarea name="ai_custom_instructions" rows="8" maxlength="5000"
                     placeholder="উদাহরণ:&#10;আমাদের কাস্টমারদের সাথে বন্ধুসুলভভাবে কথা বলবে।&#10;ঢাকার ভিতরে delivery charge ৮০ টাকা, বাইরে ১৫০ টাকা।&#10;ক্যাশ অন ডেলিভারি আছে।&#10;কোনো discount নিজে থেকে দিবে না।&#10;কাস্টমার রাগ করলে argument করবে না।"
                     class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">{{ $store['ai_custom_instructions'] ?? '' }}</textarea>
-                <p class="text-xs text-mute mt-1 text-right">সর্বোচ্চ ২০০০ অক্ষর</p>
+                <p class="text-xs text-mute mt-1 text-right">সর্বোচ্চ ৫০০০ অক্ষর</p>
             </div>
 
             <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
@@ -435,6 +503,56 @@
                 </details>
             @else
                 <p class="text-xs text-mute">এখনো কোনো মেমোরী সেভ করা হয়নি।</p>
+            @endif
+        </div>
+
+        <div class="border-t border-ink/10 pt-4 mt-4">
+            <label class="text-sm font-semibold block mb-1">🖼️ পণ্যের ছবি</label>
+            <p class="text-xs text-mute mb-3">পণ্যের নাম আর ছবি সেভ করুন — কাস্টমার "ছবি দেন" / "pic den" লিখলে AI সঠিক পণ্যের আসল ছবিটাই পাঠাবে (আলাদা করে কিছু লিখতে হবে না)। একাধিক পণ্যের নাম কাছাকাছি হলে, বা কথোপকথনে কোন পণ্যের কথা হচ্ছে স্পষ্ট না হলে, AI ভুল ছবি না পাঠিয়ে জিজ্ঞেস করবে কোনটা চান।</p>
+            <form method="POST" action="{{ route('tenant.product-image-memory.store') }}" enctype="multipart/form-data" class="space-y-2 mb-4">
+                @csrf
+                <input name="product_name" required maxlength="255" placeholder="পণ্যের নাম — যেমন: Brilliant Skin Rejuvenating Set"
+                       class="w-full rounded-btn border border-ink/15 px-3 py-2.5 text-sm focus:ring-2 focus:ring-leaf outline-none">
+                <input type="file" name="image" required accept="image/jpeg,image/png,image/webp"
+                       class="w-full text-sm">
+                <x-ui.button type="submit" variant="accent" size="sm">সেভ করুন</x-ui.button>
+            </form>
+
+            @if ($productImageMemories->isNotEmpty())
+                <details class="rounded-lg border border-ink/10">
+                    <summary class="px-3 py-2.5 text-xs font-semibold text-mute cursor-pointer select-none">সেভ করা ছবি ({{ $productImageMemories->count() }})</summary>
+                    <div class="border-t border-ink/10 p-2 space-y-2">
+                        @foreach ($productImageMemories as $productImage)
+                            <details class="rounded-lg border border-ink/10 bg-white">
+                                <summary class="px-3 py-2.5 text-sm font-semibold cursor-pointer select-none flex items-center gap-2">
+                                    <img src="{{ asset('storage/'.$productImage->image_path) }}" alt="" class="w-8 h-8 rounded object-cover">
+                                    {{ $productImage->product_name }}
+                                </summary>
+                                <div class="px-3 pb-3">
+                                    <div class="flex items-center gap-3 mt-2">
+                                        <details class="inline-block">
+                                            <summary class="text-xs text-leaf hover:underline cursor-pointer">এডিট</summary>
+                                            <form method="POST" action="{{ route('tenant.product-image-memory.update', $productImage) }}" enctype="multipart/form-data" class="space-y-2 mt-2">
+                                                @csrf @method('PUT')
+                                                <input name="product_name" required maxlength="255" value="{{ $productImage->product_name }}"
+                                                       class="w-full rounded-btn border border-ink/15 px-3 py-2 text-sm">
+                                                <input type="file" name="image" accept="image/jpeg,image/png,image/webp" class="w-full text-sm">
+                                                <p class="text-xs text-mute">নতুন ছবি না দিলে আগের ছবিটাই থাকবে।</p>
+                                                <x-ui.button type="submit" variant="accent" size="sm">আপডেট করুন</x-ui.button>
+                                            </form>
+                                        </details>
+                                        <form method="POST" action="{{ route('tenant.product-image-memory.destroy', $productImage) }}" onsubmit="return confirm('এই পণ্যের ছবিটি মুছে ফেলবেন?')">
+                                            @csrf @method('DELETE')
+                                            <button class="text-xs text-red-600 hover:underline">ডিলিট</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </details>
+                        @endforeach
+                    </div>
+                </details>
+            @else
+                <p class="text-xs text-mute">এখনো কোনো পণ্যের ছবি সেভ করা হয়নি।</p>
             @endif
         </div>
     </x-ui.collapsible-card>

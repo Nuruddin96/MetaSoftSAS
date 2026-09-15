@@ -9,7 +9,7 @@
     <p class="text-mute mt-2">অর্ডার নাম্বার: <b class="text-ink">{{ $order->order_number }}</b></p>
     <p class="text-sm text-mute mt-1">আমরা শিগগিরই ফোনে যোগাযোগ করবো।</p>
 
-    <div class="bg-white rounded-xl border border-ink/5 p-5 mt-6 text-left text-sm">
+    <div class="bg-white rounded-card border border-ink/5 p-5 mt-6 text-left text-sm">
         @foreach ($order->items as $item)
             <div class="flex justify-between py-1">
                 <span>{{ $item->product_name }} × {{ $item->quantity }}</span>

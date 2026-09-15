@@ -44,6 +44,23 @@ class FacebookOAuthService
         ]);
     }
 
+    /**
+     * auth_type=rerequest is the fix for "the previous tenant's Page keeps
+     * coming back": once a Facebook user has granted this app pages_*
+     * access for ANY tenant, Meta's OAuth dialog silently auto-approves
+     * every later /dialog/oauth visit for that same user+app+scopes —
+     * including the Page-picker sub-screen — and just replays the
+     * originally-granted Page set via /me/accounts, with no way for the
+     * user to choose a different Page for a second/third tenant. Passing
+     * auth_type=rerequest forces Meta to always re-render the full consent
+     * dialog (Page picker included) instead of auto-approving, so a
+     * different tenant connecting with the same Facebook account gets a
+     * real, fresh chance to pick a different Page. Confirmed via a
+     * production data audit (facebook_pages: one Facebook account had
+     * cycled through 6 different Pages against the same tenant, each
+     * previous one left permanently stuck — see FacebookConnectController's
+     * claimedByAnotherTenant fix for the other half of that same bug).
+     */
     public function authorizationUrl(FacebookOauthState $state): string
     {
         $params = [
@@ -52,6 +69,7 @@ class FacebookOAuthService
             'state' => $state->state,
             'scope' => implode(',', config('facebook.scopes')),
             'response_type' => 'code',
+            'auth_type' => 'rerequest',
         ];
 
         return 'https://www.facebook.com/'.config('facebook.graph_version').'/dialog/oauth?'.http_build_query($params);

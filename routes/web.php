@@ -12,6 +12,7 @@ use App\Http\Controllers\ServicesController;
 use App\Http\Controllers\Storefront\CartController;
 use App\Http\Controllers\Storefront\CheckoutController;
 use App\Http\Controllers\Storefront\HomeController as StorefrontHome;
+use App\Http\Controllers\Storefront\LandingPageController as StorefrontLandingPage;
 use App\Http\Controllers\Storefront\PageController as StorefrontPage;
 use App\Http\Controllers\Storefront\ProductController as StorefrontProduct;
 use App\Http\Controllers\SuperAdmin\AdvertisingController as SuperAdvertisingController;
@@ -24,6 +25,8 @@ use App\Http\Controllers\SuperAdmin\ClientPaymentController;
 use App\Http\Controllers\SuperAdmin\DomainRequestController;
 use App\Http\Controllers\SuperAdmin\PaymentController;
 use App\Http\Controllers\SuperAdmin\PlanController;
+use App\Http\Controllers\SuperAdmin\DeviceIntelligenceController as SuperDeviceIntelligenceController;
+use App\Http\Controllers\SuperAdmin\RemoteSupportController as SuperRemoteSupportController;
 use App\Http\Controllers\SuperAdmin\SourceOrderController;
 use App\Http\Controllers\SuperAdmin\SourceProductController;
 use App\Http\Controllers\SuperAdmin\TenantController;
@@ -43,12 +46,16 @@ use App\Http\Controllers\Tenant\FraudCheckController;
 use App\Http\Controllers\Tenant\InboxController;
 use App\Http\Controllers\Tenant\IncompleteOrderController;
 use App\Http\Controllers\Tenant\InventoryController;
+use App\Http\Controllers\Tenant\LandingPageController;
 use App\Http\Controllers\Tenant\MessengerInboxController;
 use App\Http\Controllers\Tenant\NotificationController;
 use App\Http\Controllers\Tenant\NotificationPreferenceController;
+use App\Http\Controllers\Tenant\OnboardingController;
 use App\Http\Controllers\Tenant\OrderController;
 use App\Http\Controllers\Tenant\PosController;
+use App\Http\Controllers\Tenant\ProductAttributeController;
 use App\Http\Controllers\Tenant\ProductController;
+use App\Http\Controllers\Tenant\ProductImageMemoryController;
 use App\Http\Controllers\Tenant\ProductImportController;
 use App\Http\Controllers\Tenant\ProductSourceController;
 use App\Http\Controllers\Tenant\PushSubscriptionController;
@@ -59,6 +66,7 @@ use App\Http\Controllers\Tenant\SteadfastCenterController;
 use App\Http\Controllers\Tenant\WebsiteController;
 use App\Http\Controllers\Tenant\WhatsAppConnectController;
 use App\Http\Controllers\Tenant\WhatsAppInboxController;
+use App\Http\Controllers\Tenant\WordPressConnectController;
 use App\Http\Controllers\TenantAuth\LoginController;
 use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -188,6 +196,46 @@ Route::domain(config('app.central_domain'))->group(function () {
                 Route::post('{tenant}/resume-ai', [SuperAiCreditController::class, 'resumeAi'])->name('resume-ai');
             });
 
+            // Remote Support — Super Admin only, never exposed to normal
+            // tenant nav/UI. See RemoteSupportController's docblock for why
+            // {device}/{session} are plain ints resolved manually rather
+            // than implicit route-model binding.
+            Route::prefix('remote-support')->name('remote-support.')->group(function () {
+                Route::get('/', [SuperRemoteSupportController::class, 'index'])->name('index');
+                Route::get('{tenant}', [SuperRemoteSupportController::class, 'show'])->name('show');
+                Route::post('{tenant}/toggle', [SuperRemoteSupportController::class, 'toggleTenant'])->name('toggle');
+                Route::post('{tenant}/devices/{device}/revoke', [SuperRemoteSupportController::class, 'revokeDevice'])
+                    ->whereNumber('device')->name('devices.revoke');
+                Route::post('{tenant}/devices/{device}/toggle', [SuperRemoteSupportController::class, 'toggleDevice'])
+                    ->whereNumber('device')->name('devices.toggle');
+                Route::post('{tenant}/devices/{device}/session', [SuperRemoteSupportController::class, 'startSession'])
+                    ->whereNumber('device')->name('session.start');
+                Route::post('{tenant}/devices/{device}/wake', [SuperRemoteSupportController::class, 'wakeAndStart'])
+                    ->whereNumber('device')->name('devices.wake');
+                Route::get('{tenant}/devices/{device}/session/{session}/view', [SuperRemoteSupportController::class, 'viewer'])
+                    ->whereNumber('device')->whereNumber('session')->name('session.viewer');
+                Route::delete('{tenant}/devices/{device}/session/{session}', [SuperRemoteSupportController::class, 'stopSession'])
+                    ->whereNumber('device')->whereNumber('session')->name('session.stop');
+                Route::post('{tenant}/devices/{device}/session/{session}/signal', [SuperRemoteSupportController::class, 'sendSignal'])
+                    ->whereNumber('device')->whereNumber('session')->name('session.signal.send');
+                Route::get('{tenant}/devices/{device}/session/{session}/signal', [SuperRemoteSupportController::class, 'pollSignal'])
+                    ->whereNumber('device')->whereNumber('session')->name('session.signal.poll');
+            });
+
+            // Device Intelligence — Super Admin only, a SEPARATE module
+            // from Remote Support above (see
+            // SuperDeviceIntelligenceController's docblock). Same
+            // manual-resolution convention for {device} as Remote
+            // Support's own group, for the same reason (no
+            // resolve.tenant middleware runs in this route space).
+            Route::prefix('device-intelligence')->name('device-intelligence.')->group(function () {
+                Route::get('/', [SuperDeviceIntelligenceController::class, 'index'])->name('index');
+                Route::get('{tenant}', [SuperDeviceIntelligenceController::class, 'show'])->name('show');
+                Route::post('{tenant}/toggle', [SuperDeviceIntelligenceController::class, 'toggleTenant'])->name('toggle');
+                Route::get('{tenant}/devices/{device}', [SuperDeviceIntelligenceController::class, 'deviceShow'])
+                    ->whereNumber('device')->name('devices.show');
+            });
+
             Route::get('source/products', [SourceProductController::class, 'index'])->name('source.products');
             Route::get('source/products/create', [SourceProductController::class, 'create'])->name('source.products.create');
             Route::post('source/products', [SourceProductController::class, 'store'])->name('source.products.store');
@@ -243,9 +291,29 @@ $tenantRoutes = function () {
         Route::get('manifest.json', [TenantPwaController::class, 'manifest'])->name('pwa.manifest');
         Route::get('sw.js', [TenantPwaController::class, 'serviceWorker'])->name('pwa.sw');
 
-        Route::middleware(['auth:tenant', 'check.subscription'])->group(function () {
+        Route::middleware(['auth:tenant', 'check.subscription', 'require.onboarding'])->group(function () {
 
             Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+            // Tenant Onboarding Wizard — shown once right after signup
+            // instead of an empty dashboard (see RequireOnboarding and
+            // TenantOnboardingService). Sits inside this same
+            // auth:tenant+check.subscription group (a brand-new trial is
+            // always valid) but is exempted from require.onboarding itself
+            // via RequireOnboarding::$allowed, so visiting these routes
+            // never redirect-loops back to themselves.
+            Route::prefix('onboarding')->name('onboarding.')->group(function () {
+                Route::get('/', [OnboardingController::class, 'redirect'])->name('redirect');
+                Route::get('{step}', [OnboardingController::class, 'show'])->name('show');
+                Route::post('business-type', [OnboardingController::class, 'storeBusinessType'])->name('business_type.store');
+                Route::post('business-info', [OnboardingController::class, 'storeBusinessInfo'])->name('business_info.store');
+                Route::post('categories/continue', [OnboardingController::class, 'continueCategories'])->name('categories.continue');
+                Route::post('store-settings', [OnboardingController::class, 'storeStoreSettings'])->name('store_settings.store');
+                Route::post('first-product', [OnboardingController::class, 'storeFirstProduct'])->name('first_product.store');
+                Route::post('first-product/skip', [OnboardingController::class, 'skipFirstProduct'])->name('first_product.skip');
+                Route::post('describe-image', [OnboardingController::class, 'describeImage'])->name('describe_image');
+                Route::post('complete', [OnboardingController::class, 'complete'])->name('complete');
+            });
 
             // AI Agent panel chat (Phase 4) — the first live consumer of
             // the AI tool registry; see Tenant\AiChatController's docblock
@@ -277,7 +345,18 @@ $tenantRoutes = function () {
             // Catalog
             Route::get('categories', [CategoryController::class, 'index'])->name('categories.index');
             Route::post('categories', [CategoryController::class, 'store'])->name('categories.store');
+            Route::put('categories/{category}', [CategoryController::class, 'update'])->name('categories.update');
             Route::delete('categories/{category}', [CategoryController::class, 'destroy'])->name('categories.destroy');
+
+            // Product Attributes — new, additive vocabulary layer (Color/
+            // Size/Storage + values) reusable when building variants.
+            Route::get('attributes', [ProductAttributeController::class, 'index'])->name('attributes.index');
+            Route::post('attributes', [ProductAttributeController::class, 'store'])->name('attributes.store');
+            Route::put('attributes/{attribute}', [ProductAttributeController::class, 'update'])->name('attributes.update');
+            Route::delete('attributes/{attribute}', [ProductAttributeController::class, 'destroy'])->name('attributes.destroy');
+            Route::post('attributes/{attribute}/values', [ProductAttributeController::class, 'addValue'])->name('attributes.values.store');
+            Route::put('attribute-values/{value}', [ProductAttributeController::class, 'updateValue'])->name('attributes.values.update');
+            Route::delete('attribute-values/{value}', [ProductAttributeController::class, 'destroyValue'])->name('attributes.values.destroy');
 
             Route::get('products', [ProductController::class, 'index'])->name('products.index');
             Route::get('products/create', [ProductController::class, 'create'])->name('products.create');
@@ -285,6 +364,7 @@ $tenantRoutes = function () {
             Route::get('products/{product}/edit', [ProductController::class, 'edit'])->name('products.edit');
             Route::put('products/{product}', [ProductController::class, 'update'])->name('products.update');
             Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('products.destroy');
+            Route::delete('products/{product}/variants/{variant}', [ProductController::class, 'destroyVariant'])->name('products.variants.destroy');
             Route::get('products/{product}/barcodes', [BarcodeController::class, 'print'])->name('products.barcodes');
             Route::delete('products/images/{image}', [ProductController::class, 'destroyImage'])->name('products.images.destroy');
             Route::post('products/{product}/images/reorder', [ProductController::class, 'reorderImages'])->name('products.images.reorder');
@@ -332,6 +412,7 @@ $tenantRoutes = function () {
             Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
             Route::post('customers/{customer}/due', [CustomerController::class, 'receiveDue'])->name('customers.due.receive');
             Route::post('customers/{customer}/due/add', [CustomerController::class, 'addDue'])->name('customers.due.add');
+            Route::post('customers/bulk-messenger', [CustomerController::class, 'bulkMessenger'])->name('customers.bulk-messenger');
 
             // Incomplete orders
             Route::get('incomplete-orders', [IncompleteOrderController::class, 'index'])->name('incomplete');
@@ -365,6 +446,31 @@ $tenantRoutes = function () {
             Route::put('website/review/{review}', [WebsiteController::class, 'updateReview'])->name('website.review.update');
             Route::delete('website/review/{review}', [WebsiteController::class, 'destroyReview'])->name('website.review.destroy');
 
+            // Single Product Landing Page Builder (Phase 2) — each section is
+            // its own independent save/delete/move action, see
+            // LandingPageController's class docblock for why.
+            Route::prefix('landing-pages')->name('landing-pages.')->group(function () {
+                Route::get('/', [LandingPageController::class, 'index'])->name('index');
+                Route::get('create', [LandingPageController::class, 'create'])->name('create');
+                Route::post('/', [LandingPageController::class, 'store'])->name('store');
+                Route::get('{landingPage}/edit', [LandingPageController::class, 'edit'])->name('edit');
+                Route::put('{landingPage}', [LandingPageController::class, 'update'])->name('update');
+                Route::post('{landingPage}/publish', [LandingPageController::class, 'publish'])->name('publish');
+                Route::post('{landingPage}/unpublish', [LandingPageController::class, 'unpublish'])->name('unpublish');
+                Route::delete('{landingPage}', [LandingPageController::class, 'destroy'])->name('destroy');
+
+                Route::get('{landingPage}/design', [LandingPageController::class, 'design'])->name('design');
+                Route::put('{landingPage}/design', [LandingPageController::class, 'updateDesign'])->name('design.update');
+
+                Route::post('{landingPage}/sections', [LandingPageController::class, 'addSection'])->name('sections.add');
+                Route::put('{landingPage}/sections/{sectionId}', [LandingPageController::class, 'updateSection'])->name('sections.update');
+                Route::delete('{landingPage}/sections/{sectionId}', [LandingPageController::class, 'destroySection'])->name('sections.destroy');
+                Route::post('{landingPage}/sections/{sectionId}/move', [LandingPageController::class, 'moveSection'])->name('sections.move');
+                Route::post('{landingPage}/sections/reorder', [LandingPageController::class, 'reorderSections'])->name('sections.reorder');
+                Route::post('{landingPage}/sections/{sectionId}/toggle', [LandingPageController::class, 'toggleSection'])->name('sections.toggle');
+                Route::post('{landingPage}/sections/{sectionId}/duplicate', [LandingPageController::class, 'duplicateSection'])->name('sections.duplicate');
+            });
+
             // Product Source
             Route::get('product-source', [ProductSourceController::class, 'index'])->name('product-source.index');
             Route::get('product-source/my-orders', [ProductSourceController::class, 'myOrders'])->name('product-source.orders');
@@ -384,6 +490,7 @@ $tenantRoutes = function () {
             Route::post('messenger/{psid}/reply', [MessengerInboxController::class, 'reply'])->name('messenger.reply');
             Route::post('messenger/{psid}/status', [MessengerInboxController::class, 'updateStatus'])->name('messenger.status');
             Route::post('messenger/{psid}/resume-ai', [MessengerInboxController::class, 'resumeAi'])->name('messenger.resume-ai');
+            Route::post('messenger/{psid}/pause-ai', [MessengerInboxController::class, 'pauseAi'])->name('messenger.pause-ai');
 
             // Advertising / Ads Billing — read-only for tenants, gated by
             // AdvertisingBalanceService::isEnabled() inside the controller
@@ -397,6 +504,7 @@ $tenantRoutes = function () {
             // Settings
             Route::get('settings', [SettingController::class, 'index'])->name('settings');
             Route::post('settings/marketing', [SettingController::class, 'marketing'])->name('settings.marketing');
+            Route::post('settings/marketing/test-capi', [SettingController::class, 'testCapiConnection'])->name('settings.marketing.test-capi');
             Route::post('settings/domain', [SettingController::class, 'requestDomain'])->name('settings.domain');
             Route::delete('settings/domain', [SettingController::class, 'cancelDomainRequest'])->name('settings.domain.cancel');
             Route::post('settings/messenger', [SettingController::class, 'messenger'])->name('settings.messenger');
@@ -411,6 +519,14 @@ $tenantRoutes = function () {
             Route::post('ai-memory', [AiMemoryController::class, 'store'])->name('ai-memory.store');
             Route::put('ai-memory/{aiMemory}', [AiMemoryController::class, 'update'])->name('ai-memory.update');
             Route::delete('ai-memory/{aiMemory}', [AiMemoryController::class, 'destroy'])->name('ai-memory.destroy');
+
+            // "পণ্যের ছবি" (Product Image Memory) — tenant-authored
+            // product-name -> image mapping (App\Models\
+            // TenantProductImage). Same tenant-isolated route-binding
+            // pattern as {aiMemory} above.
+            Route::post('product-image-memory', [ProductImageMemoryController::class, 'store'])->name('product-image-memory.store');
+            Route::put('product-image-memory/{productImage}', [ProductImageMemoryController::class, 'update'])->name('product-image-memory.update');
+            Route::delete('product-image-memory/{productImage}', [ProductImageMemoryController::class, 'destroy'])->name('product-image-memory.destroy');
 
             // Facebook OAuth "Connect Facebook" (Phase 1). The callback these
             // redirect out to is registered separately, outside this tenant
@@ -455,6 +571,22 @@ $tenantRoutes = function () {
                 Route::post('whatsapp/{waId}/reply', [WhatsAppInboxController::class, 'reply'])->name('whatsapp.reply');
                 Route::post('whatsapp/{waId}/status', [WhatsAppInboxController::class, 'updateStatus'])->name('whatsapp.status');
                 Route::post('whatsapp/{waId}/resume-ai', [WhatsAppInboxController::class, 'resumeAi'])->name('whatsapp.resume-ai');
+                Route::post('whatsapp/{waId}/pause-ai', [WhatsAppInboxController::class, 'pauseAi'])->name('whatsapp.pause-ai');
+            });
+
+            // "Connect WordPress" (Phase 2 of the WordPress integration
+            // plan). No OAuth redirect (see WordPressConnectController's
+            // docblock) — index/generate-key/verify stay open to every
+            // tenant so the status page and instructions are always
+            // reachable; only the actual key generation is plan-gated,
+            // same "index open, the connect action gated" posture as
+            // WhatsApp above.
+            Route::prefix('wordpress')->name('wordpress.')->group(function () {
+                Route::get('/', [WordPressConnectController::class, 'index'])->name('index');
+                Route::post('generate-key', [WordPressConnectController::class, 'generateKey'])->middleware('feature:wordpress_connect')->name('generate-key');
+                Route::post('verify', [WordPressConnectController::class, 'verify'])->name('verify');
+                Route::post('disconnect', [WordPressConnectController::class, 'disconnect'])->name('disconnect');
+                Route::get('plugin-download', [WordPressConnectController::class, 'downloadPlugin'])->name('plugin-download');
             });
         });
     });
@@ -465,6 +597,8 @@ $tenantRoutes = function () {
         Route::get('/products', [StorefrontProduct::class, 'index'])->name('products');
         Route::get('/product/{slug}', [StorefrontProduct::class, 'show'])->name('product');
         Route::get('/page/{slug}', [StorefrontPage::class, 'show'])->name('page');
+        Route::get('/l/{slug}', [StorefrontLandingPage::class, 'show'])->name('landing');
+        Route::post('/l/{slug}/order', [StorefrontLandingPage::class, 'order'])->name('landing.order');
 
         Route::get('/cart', [CartController::class, 'index'])->name('cart');
         Route::post('/cart/add', [CartController::class, 'add'])->name('cart.add');

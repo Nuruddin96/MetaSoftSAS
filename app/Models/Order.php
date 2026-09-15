@@ -16,6 +16,8 @@ class Order extends Model
         'fraud_summary' => 'array',
         'confirmed_at' => 'datetime',
         'delivered_at' => 'datetime',
+        'order_date' => 'date',
+        'courier_status_checked_at' => 'datetime',
     ];
 
     protected static function booted(): void

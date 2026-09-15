@@ -35,6 +35,24 @@ class AiHandoffService
 {
     public const REASON_CUSTOMER_REQUESTED = 'customer_requested';
 
+    public const REASON_UNSUPPORTED_AUDIO = 'unsupported_audio';
+
+    public const REASON_UNSUPPORTED_IMAGE = 'unsupported_image';
+
+    /**
+     * Per-customer manual "AI OFF" toggle (Messenger inbox — Tenant\
+     * MessengerInboxController::pauseAi() / Api\Mobile\MessengerController::
+     * pauseAi()). Deliberately reuses this SAME handoff mechanism rather
+     * than a second column/table: turning the toggle off calls trigger()
+     * with this reason (an explicit staff action, not an AI/customer-
+     * triggered one), and turning it back on calls the existing resolve()
+     * — the exact same "isActive() gates every auto-reply" check in
+     * ProcessAiAgentMessage already covers this reason with zero pipeline
+     * changes, since it doesn't distinguish reasons, only "is there any
+     * unresolved handoff at all for this conversation."
+     */
+    public const REASON_MANUALLY_DISABLED = 'manually_disabled';
+
     protected const REQUEST_PHRASES = [
         'talk to a human', 'speak to a human', 'human agent', 'live agent',
         'talk to a person', 'speak to a person', 'talk to someone', 'speak to someone',

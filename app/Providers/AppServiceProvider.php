@@ -2,6 +2,14 @@
 
 namespace App\Providers;
 
+use App\Models\Category;
+use App\Models\Inventory;
+use App\Models\Product;
+use App\Models\ProductVariant;
+use App\Observers\CategoryWordPressObserver;
+use App\Observers\InventoryWordPressObserver;
+use App\Observers\ProductVariantWordPressObserver;
+use App\Observers\ProductWordPressObserver;
 use App\Services\AI\Providers\AiProviderInterface;
 use App\Services\AI\Providers\OpenAiProvider;
 use App\Services\AI\Tools\AiToolRegistry;
@@ -43,6 +51,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // WordPress integration Phase 4 — push products/categories/stock to
+        // a connected WordPress site. Unconditional registration is safe
+        // for every tenant, including ones with no WordPress connection at
+        // all or on an environment where chunk59.sql isn't imported yet —
+        // see each observer's docblock and SyncProductToWordPress's
+        // WordPressConnection::tablesReady() guard.
+        Product::observe(ProductWordPressObserver::class);
+        ProductVariant::observe(ProductVariantWordPressObserver::class);
+        Category::observe(CategoryWordPressObserver::class);
+        Inventory::observe(InventoryWordPressObserver::class);
     }
 }

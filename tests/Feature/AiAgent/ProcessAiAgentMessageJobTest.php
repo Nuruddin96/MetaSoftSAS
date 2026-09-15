@@ -4,9 +4,12 @@ namespace Tests\Feature\AiAgent;
 
 use App\Jobs\ProcessAiAgentMessage;
 use App\Models\MessengerMessage;
+use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Tenant;
+use App\Models\TenantProductImage;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -69,6 +72,18 @@ class ProcessAiAgentMessageJobTest extends TestCase
         ]);
 
         return $product;
+    }
+
+    /** "পণ্যের ছবি" — mirrors makeProduct() above. */
+    protected function makeProductImage(int $tenantId, string $productName): TenantProductImage
+    {
+        app()->instance('currentTenant', Tenant::find($tenantId));
+
+        return TenantProductImage::create([
+            'tenant_id' => $tenantId,
+            'product_name' => $productName,
+            'image_path' => 'product-image-memory/'.$tenantId.'/test.jpg',
+        ]);
     }
 
     public function test_a_successful_run_sends_one_reply_and_records_it(): void
@@ -1089,6 +1104,63 @@ class ProcessAiAgentMessageJobTest extends TestCase
         $this->assertNull(DB::table('messenger_messages')->where('id', $messageId)->value('message_text'));
     }
 
+    public function test_a_failed_transcription_triggers_a_customer_specific_handoff(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-voice-handoff', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $messageId = $this->seedPendingVoiceMessage($tenant->id, 'page-voice-handoff', 'cust-voice-handoff', 'mid-voice-handoff');
+
+        Http::fake([
+            'https://example.test/storage/*' => Http::response('fake-audio-bytes', 200, ['Content-Type' => 'audio/mpeg']),
+            '*/audio/transcriptions' => Http::response(['error' => ['message' => 'could not transcribe']], 400),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        $this->assertDatabaseHas('ai_handoffs', [
+            'tenant_id' => $tenant->id, 'channel' => 'messenger', 'external_id' => 'cust-voice-handoff',
+            'reason' => 'unsupported_audio',
+        ]);
+
+        // A second inbound message for the SAME customer must not
+        // auto-reply either (isActive() gate), but another customer for
+        // this same tenant must be completely unaffected.
+        $messageId2 = $this->seedPendingInboundMessage($tenant->id, 'cust-voice-handoff', 'mid-voice-handoff-2', 'আছেন?');
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId2);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+    }
+
+    public function test_an_unresolvable_image_triggers_a_customer_specific_handoff(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-image-handoff', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $messageId = DB::table('messenger_messages')->insertGetId([
+            'tenant_id' => $tenant->id, 'sender_psid' => 'cust-image-handoff', 'mid' => 'mid-image-handoff',
+            'message_text' => null, 'attachment_url' => null, 'attachment_type' => 'image',
+            'direction' => 'in', 'status' => 'new', 'created_at' => now(),
+        ]);
+        DB::table('ai_agent_message_jobs')->insert([
+            'tenant_id' => $tenant->id, 'messenger_message_id' => $messageId, 'status' => 'pending',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        $this->assertDatabaseHas('ai_handoffs', [
+            'tenant_id' => $tenant->id, 'channel' => 'messenger', 'external_id' => 'cust-image-handoff',
+            'reason' => 'unsupported_image',
+        ]);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+    }
+
     // --- Phase 12: response humanization -------------------------------------------------------
 
     public function test_human_delay_seconds_stays_within_the_configured_bounds(): void
@@ -1396,5 +1468,221 @@ class ProcessAiAgentMessageJobTest extends TestCase
         ProcessAiAgentMessage::dispatch($tenantB->id, $messageId);
 
         Http::assertSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+    }
+
+    // --- "পণ্যের ছবি" (Product Image Memory) ------------------------------------------
+
+    public function test_a_pure_image_request_sends_the_image_and_a_caption_and_never_calls_openai(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-img-1', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+        $image = $this->makeProductImage($tenant->id, 'COSRX Snail Cream');
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-img-1', 'mid-img-1', 'COSRX Snail Cream এর ছবি দেন');
+
+        Http::fake([
+            '*/me/messages*' => Http::sequence()
+                ->push([]) // sendTypingOn — content irrelevant, this call is best-effort/cosmetic
+                ->push(['message_id' => 'mid-img-attachment-1'])
+                ->push(['message_id' => 'mid-img-caption-1']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+
+        $attachment = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-img-attachment-1')->first();
+        $this->assertNotNull($attachment, 'the stored product image must be sent as an attachment');
+        $this->assertSame('image', $attachment->attachment_type);
+        $this->assertStringContainsString($image->image_path, $attachment->attachment_url);
+
+        $caption = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-img-caption-1')->first();
+        $this->assertNotNull($caption, 'a short canned caption must follow the image');
+        $this->assertNotNull($caption->message_text);
+
+        // Zero AI cost — no credit was deducted for a deterministically-resolved image.
+        $this->assertSame(100.0, (float) DB::table('ai_credit_accounts')->where('tenant_id', $tenant->id)->value('balance'));
+
+        $this->assertSame(
+            'completed',
+            DB::table('ai_agent_message_jobs')->where('messenger_message_id', $messageId)->value('status')
+        );
+    }
+
+    public function test_an_image_request_combined_with_a_real_question_sends_the_image_and_still_answers_via_openai(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-img-2', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+        $this->makeProductImage($tenant->id, 'COSRX Snail Cream');
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-img-2', 'mid-img-2', 'COSRX Snail Cream এর দাম কত আর ছবি দেন');
+
+        Http::fake([
+            '*/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => 'দাম ৮৫০ টাকা।']]],
+                'usage' => ['prompt_tokens' => 40, 'completion_tokens' => 10, 'total_tokens' => 50],
+            ]),
+            '*/me/messages*' => Http::sequence()
+                ->push([]) // sendTypingOn (image attachment path)
+                ->push(['message_id' => 'mid-img-attachment-2'])
+                ->push([]) // sendTypingOn (normal reply path)
+                ->push(['message_id' => 'mid-img-textreply-2']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+
+        $attachment = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-img-attachment-2')->first();
+        $this->assertNotNull($attachment, 'the image must still be sent alongside the OpenAI-generated answer');
+        $this->assertSame('image', $attachment->attachment_type);
+
+        $reply = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-img-textreply-2')->first();
+        $this->assertNotNull($reply);
+        $this->assertSame('দাম ৮৫০ টাকা।', $reply->message_text);
+
+        // Exactly one text reply was recorded from OpenAI (plus the image
+        // attachment above), never a second, separate canned caption too.
+        $this->assertSame(
+            1,
+            MessengerMessage::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('direction', 'out')->whereNotNull('message_text')->count()
+        );
+    }
+
+    public function test_an_ambiguous_image_request_sends_a_clarifying_question_and_never_calls_openai(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-img-3', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+        $this->makeProductImage($tenant->id, 'Snail Cream');
+        $this->makeProductImage($tenant->id, 'Snail Serum');
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-img-3', 'mid-img-3', 'snail এর ছবি দেন');
+
+        Http::fake([
+            '*/me/messages*' => Http::response(['message_id' => 'mid-img-clarify-3']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'chat/completions'));
+
+        $reply = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-img-clarify-3')->first();
+        $this->assertNotNull($reply);
+        $this->assertNull($reply->attachment_url, 'an ambiguous request must never send a (possibly wrong) image');
+        $this->assertStringContainsString('কোন পণ্যটির ছবি চান', $reply->message_text);
+
+        $this->assertSame(100.0, (float) DB::table('ai_credit_accounts')->where('tenant_id', $tenant->id)->value('balance'));
+    }
+
+    public function test_a_product_images_saved_image_is_never_sent_to_a_different_tenant(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $this->makeMessengerPage($tenantB->id, 'page-img-4', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenantB->id);
+        $this->allocateAiCredit($tenantB->id, 100);
+        $this->makeProductImage($tenantA->id, 'Rose Serum');
+        $messageId = $this->seedPendingInboundMessage($tenantB->id, 'cust-img-4', 'mid-img-4', 'Rose Serum এর ছবি দেন');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'দুঃখিত, নিশ্চিত না।']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-img-reply-4']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenantB->id, $messageId);
+
+        $reply = MessengerMessage::withoutGlobalScopes()->where('mid', 'mid-img-reply-4')->first();
+        $this->assertNotNull($reply);
+        $this->assertNull($reply->attachment_url, 'tenant B must never receive tenant A\'s saved product image');
+    }
+
+    // --- Part 7-9: post-purchase concern / complaint context -------------------------------
+
+    public function test_a_verified_post_purchase_concern_reaches_the_provider_as_a_confirmed_fact(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-pp-1', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $order = Order::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id, 'order_number' => 'ORD-000077', 'messenger_psid' => 'cust-pp-1',
+            'customer_name' => 'Test Customer', 'customer_phone' => '01700000000', 'status' => 'delivered',
+        ]);
+        OrderItem::withoutGlobalScopes()->create(['tenant_id' => $tenant->id, 'order_id' => $order->id, 'product_name' => 'Winter Jacket']);
+
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-pp-1', 'mid-pp-1', 'আপু Winter Jacket টা ধোয়ার পর রং উঠে গেছে');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'দুঃখিত শুনে, একটু বিস্তারিত জানাবেন।']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-pp-reply-1']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(function ($request) {
+            $content = $request->data()['messages'][0]['content'] ?? '';
+
+            return str_contains($content, 'Verified')
+                && str_contains($content, 'ORD-000077')
+                && str_contains($content, 'Winter Jacket');
+        });
+    }
+
+    public function test_an_unverified_post_purchase_concern_never_claims_the_customer_purchased_anything(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-pp-2', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        // No order at all for this customer.
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-pp-2', 'mid-pp-2', 'এইটা ব্যবহার করার পর সমস্যা হচ্ছে');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => 'দুঃখিত, কোন পণ্যের কথা বলছেন?']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-pp-reply-2']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(function ($request) {
+            $content = $request->data()['messages'][0]['content'] ?? '';
+
+            return str_contains($content, 'No verified purchase record was found')
+                && ! str_contains($content, 'Verified: this customer\'s order');
+        });
+    }
+
+    public function test_an_ordinary_message_never_adds_a_post_purchase_concern_section(): void
+    {
+        config(['ai.openai_api_key' => 'test-key']);
+        $tenant = $this->makeTenant();
+        $this->makeMessengerPage($tenant->id, 'page-pp-3', ['is_active' => 1]);
+        $this->enableAiAgentAndMessengerAutoReply($tenant->id);
+        $this->allocateAiCredit($tenant->id, 100);
+
+        $messageId = $this->seedPendingInboundMessage($tenant->id, 'cust-pp-3', 'mid-pp-3', 'দাম কত?');
+
+        Http::fake([
+            '*/chat/completions' => Http::response(['choices' => [['message' => ['content' => '৫০০ টাকা।']]]]),
+            '*/me/messages*' => Http::response(['message_id' => 'mid-pp-reply-3']),
+        ]);
+
+        ProcessAiAgentMessage::dispatch($tenant->id, $messageId);
+
+        Http::assertSent(fn ($request) => ! str_contains(
+            $request->data()['messages'][0]['content'] ?? '',
+            'This message may be a complaint'
+        ));
     }
 }

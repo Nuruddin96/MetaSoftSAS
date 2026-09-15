@@ -193,7 +193,7 @@ class AiAgentSettingTest extends TestCase
 
         $response = $this->actingAs($user, 'tenant')
             ->post('/shop/'.$tenant->subdomain.'/panel/settings/ai-agent', [
-                'ai_custom_instructions' => str_repeat('ক', 2001),
+                'ai_custom_instructions' => str_repeat('ক', 5001),
             ]);
 
         $response->assertSessionHasErrors('ai_custom_instructions');

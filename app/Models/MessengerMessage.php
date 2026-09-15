@@ -59,6 +59,33 @@ class MessengerMessage extends Model
         return Schema::hasColumn('messenger_messages', 'sent_by');
     }
 
+    public const HUMAN_PAUSE_MINUTES = 15;
+
+    /**
+     * True while a genuine staff reply (sent_by='human', never 'ai' — see
+     * sentByColumnReady()'s docblock) sent within the last
+     * HUMAN_PAUSE_MINUTES minutes exists for this exact tenant+psid
+     * conversation. The AI must not auto-reply during this window.
+     * Deliberately lazy/derived from this table's own existing rows
+     * instead of a stored pause_until column: once the latest human
+     * reply falls outside the window this simply returns false on the
+     * next call — no cron/cleanup job needed.
+     */
+    public static function isHumanPaused(int $tenantId, string $psid): bool
+    {
+        if (! static::sentByColumnReady()) {
+            return false;
+        }
+
+        return static::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('sender_psid', $psid)
+            ->where('direction', 'out')
+            ->where('sent_by', 'human')
+            ->where('created_at', '>', now()->subMinutes(self::HUMAN_PAUSE_MINUTES))
+            ->exists();
+    }
+
     /**
      * The resolved Facebook display name for a conversation, if one has
      * ever been captured on any message row for this psid — not just the

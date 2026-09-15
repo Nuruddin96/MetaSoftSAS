@@ -5,8 +5,10 @@ namespace Tests\Feature\Order;
 use App\Models\Order;
 use App\Models\StoreSetting;
 use App\Models\Tenant;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\Concerns\InteractsWithCommerceSchema;
 use Tests\TestCase;
 
@@ -30,9 +32,27 @@ class OrderStoreDeliveryChargeTest extends TestCase
         $this->setUpCommerceSchema();
         $this->withoutMiddleware(ValidateCsrfToken::class);
 
+        // Pre-existing gap in InteractsWithCommerceSchema's hand-built
+        // `orders` table (predates schema.sql's real order_date column) —
+        // OrderController::store() has always set this field, so this fix
+        // was already load-bearing for this test class before Priority 2's
+        // district/upazila changes. Same scoped-patch convention
+        // InteractsWithApiSchema already uses for the identical gap, kept
+        // local here rather than editing the shared trait.
+        if (! Schema::hasColumn('orders', 'order_date')) {
+            Schema::table('orders', fn (Blueprint $table) => $table->date('order_date')->nullable());
+        }
+
         DB::table('bd_divisions')->insert([
             ['id' => 1, 'name' => 'Barishal', 'bn_name' => 'বরিশাল'],
             ['id' => 3, 'name' => 'Dhaka', 'bn_name' => 'ঢাকা'],
+        ]);
+        DB::table('bd_districts')->insert([
+            ['id' => 30, 'division_id' => 3, 'name' => 'Dhaka', 'bn_name' => 'ঢাকা'],
+            ['id' => 31, 'division_id' => 1, 'name' => 'Barishal', 'bn_name' => 'বরিশাল'],
+        ]);
+        DB::table('bd_upazilas')->insert([
+            ['id' => 300, 'district_id' => 30, 'name' => 'Mirpur', 'bn_name' => 'মিরপুর'],
         ]);
         $this->dhakaDivisionId = 3;
         $this->otherDivisionId = 1;
@@ -128,6 +148,51 @@ class OrderStoreDeliveryChargeTest extends TestCase
         $response->assertRedirect();
         $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->latest()->first();
         $this->assertEquals(60.0, (float) $order->delivery_charge, 'must be the server-computed Dhaka charge, never the submitted 1');
+    }
+
+    /**
+     * The "New Order" form no longer collects বিভাগ at all (District→Thana
+     * UX) — proves district_id alone still drives the correct delivery
+     * charge and that division_id/upazila_id both get persisted on the
+     * order, not silently dropped.
+     */
+    public function test_district_id_alone_resolves_division_and_computes_the_correct_charge(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        StoreSetting::create(['tenant_id' => $tenant->id, 'key' => 'delivery_charge_inside_dhaka', 'value' => '80']);
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 500]);
+
+        $response = $this->actingAs($user, 'tenant')->post($this->panelUrl($tenant, 'orders'), $this->basePayload([
+            'district_id' => 30, // Dhaka district, no division_id submitted
+            'variant_ids' => [$variant->id],
+            'quantities' => [1],
+        ]));
+
+        $response->assertRedirect();
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->latest()->first();
+        $this->assertEquals(80.0, (float) $order->delivery_charge, 'district 30 belongs to the Dhaka division');
+        $this->assertEquals($this->dhakaDivisionId, $order->division_id, 'division_id must be derived and stored, not left null');
+        $this->assertEquals(30, $order->district_id);
+    }
+
+    public function test_upazila_id_is_stored_alongside_district_id(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        app()->instance('currentTenant', $tenant);
+        $variant = $this->makeSellableVariant($tenant->id, ['selling_price' => 500]);
+
+        $this->actingAs($user, 'tenant')->post($this->panelUrl($tenant, 'orders'), $this->basePayload([
+            'district_id' => 30,
+            'upazila_id' => 300,
+            'variant_ids' => [$variant->id],
+            'quantities' => [1],
+        ]))->assertRedirect();
+
+        $order = Order::withoutGlobalScopes()->where('tenant_id', $tenant->id)->latest()->first();
+        $this->assertEquals(300, $order->upazila_id);
     }
 
     public function test_total_equals_subtotal_plus_delivery_charge_minus_discount(): void

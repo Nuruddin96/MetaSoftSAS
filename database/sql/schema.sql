@@ -162,7 +162,8 @@ CREATE TABLE users (
     remember_token VARCHAR(100) DEFAULT NULL,
     created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-    UNIQUE KEY uq_tenant_email (tenant_id, email)
+    UNIQUE KEY uq_tenant_email (tenant_id, email),
+    INDEX idx_users_email (email)
 );
 
 CREATE TABLE warehouses (
@@ -310,6 +311,7 @@ CREATE TABLE orders (
     upazila_id INT UNSIGNED DEFAULT NULL,
     subtotal DECIMAL(12,2) NOT NULL DEFAULT 0,
     discount DECIMAL(12,2) DEFAULT 0,
+    additional_amount DECIMAL(12,2) DEFAULT 0,      -- chunk55.sql: mobile-only manual-entry surcharge, see that file
     delivery_charge DECIMAL(10,2) DEFAULT 0,
     total DECIMAL(12,2) NOT NULL DEFAULT 0,
     paid_amount DECIMAL(12,2) DEFAULT 0,

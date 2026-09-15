@@ -10,10 +10,12 @@ use App\Models\FacebookPage;
 use App\Models\MarketingSetting;
 use App\Models\MessengerSetting;
 use App\Models\StoreSetting;
+use App\Models\TenantProductImage;
 use App\Models\WhatsAppBusinessAccount;
 use App\Models\WhatsAppPhoneNumber;
 use App\Services\AI\AiCreditService;
 use App\Services\Domain\DomainManager;
+use App\Services\Marketing\MetaCapiService;
 use App\Services\WhatsApp\WhatsAppOAuthService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -77,6 +79,9 @@ class SettingController extends Controller
             // above so a deploy that lands before the chunk is imported
             // just shows an empty list instead of a 500.
             'aiMemories' => AiTenantMemory::tablesReady() ? AiTenantMemory::orderByDesc('id')->get() : collect(),
+            // "পণ্যের ছবি" (Product Image Memory) — additive table
+            // (database/sql/chunk50.sql), same tablesReady() guard.
+            'productImageMemories' => TenantProductImage::tablesReady() ? TenantProductImage::orderByDesc('id')->get() : collect(),
         ]);
     }
 
@@ -163,15 +168,20 @@ class SettingController extends Controller
             'fb_capi_token' => 'nullable|string',
             'fb_test_event_code' => 'nullable|string|max:50',
             'gtm_container_id' => 'nullable|string|max:20',
+            'clarity_project_id' => 'nullable|string|max:20',
             'meta_app_id' => 'nullable|string|max:50',
             'meta_app_secret' => 'nullable|string',
             'meta_access_token' => 'nullable|string',
             'meta_ad_account_id' => 'nullable|string|max:50',
+            'capi_test_mode' => 'nullable|boolean',
         ]);
 
         $setting = MarketingSetting::firstOrNew(['tenant_id' => app('currentTenant')->id]);
 
         foreach ($data as $key => $value) {
+            if ($key === 'capi_test_mode') {
+                continue; // checkbox, handled explicitly below
+            }
             // blank secret fields keep their saved value
             if (in_array($key, ['fb_capi_token', 'meta_app_secret', 'meta_access_token']) && $value === null) {
                 continue;
@@ -179,11 +189,36 @@ class SettingController extends Controller
             $setting->{$key} = $value;
         }
 
+        // Explicit ON/OFF: unchecked box means the key is absent from the
+        // request entirely, so this must default to false, not "unchanged".
+        $setting->capi_test_mode = $request->boolean('capi_test_mode');
+
         $setting->tenant_id = app('currentTenant')->id;
         $setting->updated_at = now();
         $setting->save();
 
         return back()->with('success', 'মার্কেটিং সেটিংস সেভ হয়েছে।');
+    }
+
+    /** Priority 4: validates the tenant's Pixel ID + CAPI token without sending any tracking event. */
+    public function testCapiConnection(Request $request)
+    {
+        $mk = MarketingSetting::first();
+
+        if (! $mk || ! $mk->fb_pixel_id || ! $mk->fb_capi_token) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pixel ID ও Conversion API Access Token দুটোই আগে সেভ করুন।',
+            ]);
+        }
+
+        $result = (new MetaCapiService($mk->fb_pixel_id, $mk->fb_capi_token))
+            ->testConnection();
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['message'],
+        ]);
     }
 
     public function store(Request $request)
@@ -232,14 +267,16 @@ class SettingController extends Controller
             'ai_agent_enabled' => 'nullable|boolean',
             'messenger_ai_auto_reply_enabled' => 'nullable|boolean',
             'whatsapp_ai_auto_reply_enabled' => 'nullable|boolean',
-            // Free-text tenant instructions (Phase 3) — capped well below
-            // ai_usage_ledger-cost-relevant territory; this text is
-            // injected into every single AI reply's prompt (see
+            // Free-text tenant instructions (Phase 3, raised 2000->5000 for
+            // the Customer Sales + Customer Care Agent upgrade) — capped
+            // well below ai_usage_ledger-cost-relevant territory; this text
+            // is injected into every single AI reply's prompt (see
             // AiAgentService::systemPrompt()), so an unbounded textarea
             // would let one tenant silently inflate their own per-message
-            // token cost with no limit. 2000 chars is generous for
-            // realistic business instructions while staying bounded.
-            'ai_custom_instructions' => 'nullable|string|max:2000',
+            // token cost with no limit. 5000 chars is generous for a full
+            // business profile (policies, tone, product categories, etc.)
+            // while staying bounded.
+            'ai_custom_instructions' => 'nullable|string|max:5000',
         ]);
 
         StoreSetting::updateOrCreate(

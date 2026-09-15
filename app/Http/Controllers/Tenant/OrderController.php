@@ -13,6 +13,8 @@ use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Services\Courier\CourierManager;
 use App\Services\DeliveryChargeService;
+use App\Services\Marketing\MetaCapiService;
+use App\Services\WordPress\WordPressOrderSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -24,8 +26,8 @@ class OrderController extends Controller
     {
         return view('tenant.orders.create', array_merge([
             'productsJson' => $this->productsJson(),
-            'divisions' => DB::table('bd_divisions')->orderBy('id')->get(),
             'districts' => DB::table('bd_districts')->orderBy('name')->get(),
+            'upazilas' => DB::table('bd_upazilas')->orderBy('name')->get(),
         ], $deliveryCharge->chargesForView()));
     }
 
@@ -60,14 +62,22 @@ class OrderController extends Controller
             'customer_address' => 'nullable|string|max:1000',
             'division_id' => 'nullable|integer|exists:bd_divisions,id',
             'district_id' => 'nullable|integer|exists:bd_districts,id',
+            'upazila_id' => 'nullable|integer|exists:bd_upazilas,id',
             'channel' => 'required|in:website,facebook,instagram,whatsapp,call,others',
             'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
+            'order_date' => 'nullable|date|before_or_equal:today',
             // delivery_charge is deliberately NOT an accepted input — the
             // New Order form no longer has a manual field for it at all
             // (see create.blade.php). The server always computes it from
             // division_id via DeliveryChargeService below; a client can no
             // longer influence the charged amount by submitting a value.
             'discount' => 'nullable|numeric|min:0',
+            // Mirrors Api\Mobile\OrderController's existing `additional_amount`
+            // field (chunk55.sql, OrderCreationService) — mobile already
+            // accepts and totals this; the web New Order form previously had
+            // no equivalent, so this column always saved as its 0 default
+            // for every web-created order.
+            'additional_amount' => 'nullable|numeric|min:0',
             'note' => 'nullable|string|max:500',
             'variant_ids' => 'required|array|min:1',
             'variant_ids.*' => 'required|exists:product_variants,id',
@@ -85,16 +95,20 @@ class OrderController extends Controller
             return back()->withErrors(['variant_ids' => 'একটি বা একাধিক প্রোডাক্ট পাওয়া যায়নি।'])->withInput();
         }
 
-        $order = DB::transaction(function () use ($data, $variants, $deliveryChargeService) {
+        $divisionId = $deliveryChargeService->resolveDivisionId($data['division_id'] ?? null, $data['district_id'] ?? null);
+
+        $order = DB::transaction(function () use ($data, $variants, $deliveryChargeService, $divisionId) {
             $customer = Customer::firstOrCreate(
                 ['phone' => $data['customer_phone']],
                 ['name' => $data['customer_name'], 'address' => $data['customer_address'] ?? null,
-                    'division_id' => $data['division_id'] ?? null, 'district_id' => $data['district_id'] ?? null]
+                    'division_id' => $divisionId, 'district_id' => $data['district_id'] ?? null,
+                    'upazila_id' => $data['upazila_id'] ?? null]
             );
 
             $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
             $discount = min((float) ($data['discount'] ?? 0), $subtotal);
-            $deliveryCharge = $deliveryChargeService->calculate($data['division_id'] ?? null);
+            $additionalAmount = (float) ($data['additional_amount'] ?? 0);
+            $deliveryCharge = $deliveryChargeService->calculate($divisionId);
 
             $order = Order::create([
                 'source' => 'manual',
@@ -103,15 +117,18 @@ class OrderController extends Controller
                 'customer_name' => $data['customer_name'],
                 'customer_phone' => $data['customer_phone'],
                 'customer_address' => $data['customer_address'] ?? null,
-                'division_id' => $data['division_id'] ?? null,
+                'division_id' => $divisionId,
                 'district_id' => $data['district_id'] ?? null,
+                'upazila_id' => $data['upazila_id'] ?? null,
                 'subtotal' => $subtotal,
                 'discount' => $discount,
+                'additional_amount' => $additionalAmount,
                 'delivery_charge' => $deliveryCharge,
-                'total' => $subtotal - $discount + $deliveryCharge,
+                'total' => $subtotal - $discount + $additionalAmount + $deliveryCharge,
                 'payment_method' => $data['payment_method'],
                 'status' => 'confirmed',
                 'confirmed_at' => now(),
+                'order_date' => $data['order_date'] ?? now()->toDateString(),
                 'note' => $data['note'] ?? null,
                 'fb_event_id' => (string) Str::uuid(),
             ]);
@@ -123,6 +140,10 @@ class OrderController extends Controller
 
             return $order;
         });
+
+        // Created directly as 'confirmed' (this form has no separate
+        // pending stage), so this is always a genuine first confirmation.
+        MetaCapiService::sendPurchaseForOrder($order, $request->ip(), $request->userAgent());
 
         return redirect()->route('tenant.orders.show', $order)->with('success', 'অর্ডার তৈরি হয়েছে — '.$order->order_number);
     }
@@ -155,7 +176,9 @@ class OrderController extends Controller
             'customer_address' => 'nullable|string|max:1000',
             'division_id' => 'nullable|integer|exists:bd_divisions,id',
             'district_id' => 'nullable|integer|exists:bd_districts,id',
+            'upazila_id' => 'nullable|integer|exists:bd_upazilas,id',
             'payment_method' => 'required|in:cod,cash,bkash,nagad,bank',
+            'order_date' => 'nullable|date|before_or_equal:today',
             // Same "no manual delivery_charge input" rule as store() — see
             // its comment. The confirm form no longer submits this field.
             'discount' => 'nullable|numeric|min:0',
@@ -184,12 +207,15 @@ class OrderController extends Controller
         DB::transaction(function () use ($order, $data, $variants, $deliveryChargeService) {
             $subtotal = $this->calcSubtotal($variants, $data['variant_ids'], $data['quantities']);
             $discount = min((float) ($data['discount'] ?? 0), $subtotal);
-            // Effective division: whatever was just submitted, falling back
-            // to whatever the order already had (e.g. from a Messenger
-            // conversation's extracted address) — so confirming without
-            // touching the division field still charges correctly rather
-            // than silently reverting to the "outside Dhaka" default.
-            $effectiveDivisionId = $data['division_id'] ?? $order->division_id;
+            // Effective division: resolved from whatever was just submitted
+            // (division_id directly, or derived from district_id — see
+            // resolveDivisionId()), falling back to whatever the order
+            // already had (e.g. from a Messenger conversation's extracted
+            // address) — so confirming without touching the address fields
+            // still charges correctly rather than silently reverting to the
+            // "outside Dhaka" default.
+            $resolvedDivisionId = $deliveryChargeService->resolveDivisionId($data['division_id'] ?? null, $data['district_id'] ?? null);
+            $effectiveDivisionId = $resolvedDivisionId ?? $order->division_id;
             $deliveryCharge = $deliveryChargeService->calculate($effectiveDivisionId);
 
             $order->update(array_filter([
@@ -200,8 +226,9 @@ class OrderController extends Controller
                 // these before — the confirm form only ever collected name/
                 // phone/address text. Nullable/optional, same as the three
                 // fields above: staff fills in whatever was missing.
-                'division_id' => $data['division_id'] ?? null,
+                'division_id' => $resolvedDivisionId,
                 'district_id' => $data['district_id'] ?? null,
+                'upazila_id' => $data['upazila_id'] ?? null,
             ]) + [
                 'subtotal' => $subtotal,
                 'discount' => $discount,
@@ -211,6 +238,7 @@ class OrderController extends Controller
                 'note' => $data['note'] ?? $order->note,
                 'status' => 'confirmed',
                 'confirmed_at' => now(),
+                'order_date' => $data['order_date'] ?? now()->toDateString(),
             ]);
 
             $this->attachItems($order, $variants, $data['variant_ids'], $data['quantities']);
@@ -219,6 +247,10 @@ class OrderController extends Controller
             $customer?->increment('total_orders');
             $customer?->increment('total_spent', $order->total);
         });
+
+        // Guarded by abort_if(status !== 'pending') above — every call that
+        // reaches here is a genuine first pending -> confirmed transition.
+        MetaCapiService::sendPurchaseForOrder($order, $request->ip(), $request->userAgent());
 
         return redirect()->route('tenant.orders.show', $order)->with('success', 'অর্ডার কনফার্ম হয়েছে — '.$order->order_number);
     }
@@ -308,16 +340,20 @@ class OrderController extends Controller
             // show.blade.php's @else branch) but harmless/unused otherwise —
             // cheaper to always pass than to conditionally build two
             // different view-data shapes for one controller action.
-            'divisions' => DB::table('bd_divisions')->orderBy('id')->get(),
             'districts' => DB::table('bd_districts')->orderBy('name')->get(),
+            'upazilas' => DB::table('bd_upazilas')->orderBy('name')->get(),
         ], $deliveryCharge->chargesForView()));
     }
 
-    public function updateStatus(Request $request, Order $order)
+    public function updateStatus(Request $request, Order $order, WordPressOrderSyncService $wpSync)
     {
         $data = $request->validate([
             'status' => 'required|in:pending,confirmed,processing,shipped,delivered,cancelled,returned',
         ]);
+
+        // Captured before update() so a save that leaves status unchanged
+        // (or already-confirmed) never re-fires Purchase CAPI.
+        $wasConfirmed = $order->status === 'confirmed';
 
         $order->update([
             'status' => $data['status'],
@@ -325,13 +361,25 @@ class OrderController extends Controller
             'delivered_at' => $data['status'] === 'delivered' ? now() : $order->delivered_at,
         ]);
 
+        if ($data['status'] === 'confirmed' && ! $wasConfirmed) {
+            MetaCapiService::sendPurchaseForOrder($order, $request->ip(), $request->userAgent());
+        }
+
+        // Phase 5 — a genuine staff-driven status change, so this is
+        // exactly the direction WordPressOrderSyncService::pushStatusUpdate()
+        // is meant to propagate. A silent no-op for every non-WordPress
+        // order (see that method's docblock) — never gated behind a
+        // source check here, same "call unconditionally, let the service
+        // decide" shape as MetaCapiService above.
+        $wpSync->pushStatusUpdate($order);
+
         return back()->with('success', 'অর্ডার স্ট্যাটাস আপডেট হয়েছে।');
     }
 
     public function updateChannel(Request $request, Order $order)
     {
         $data = $request->validate([
-            'channel' => 'required|in:website,facebook,instagram,whatsapp,call,others',
+            'channel' => 'required|in:website,facebook,instagram,whatsapp,call,wordpress,others',
         ]);
 
         $order->update(['channel' => $data['channel']]);
@@ -340,7 +388,7 @@ class OrderController extends Controller
     }
 
     /** Bulk: change status for many orders at once */
-    public function bulkStatus(Request $request)
+    public function bulkStatus(Request $request, WordPressOrderSyncService $wpSync)
     {
         $data = $request->validate([
             'order_ids' => 'required|array|min:1',
@@ -348,7 +396,20 @@ class OrderController extends Controller
             'status' => 'required|in:pending,confirmed,processing,shipped,delivered,cancelled,returned',
         ]);
 
+        // Loaded before the mass update() below (a query builder update,
+        // not individual model saves) so any WordPress-sourced order among
+        // them can still be identified afterward without a second query —
+        // see the loop below.
+        $orders = Order::whereIn('id', $data['order_ids'])->get(['id', 'tenant_id', 'source', 'wordpress_order_id']);
+
         $count = Order::whereIn('id', $data['order_ids'])->update(['status' => $data['status']]);
+
+        foreach ($orders as $order) {
+            if ($order->source === 'wordpress') {
+                $order->status = $data['status'];
+                $wpSync->pushStatusUpdate($order);
+            }
+        }
 
         return back()->with('success', "$count টি অর্ডারের স্ট্যাটাস আপডেট হয়েছে।");
     }
