@@ -160,10 +160,19 @@
     }
 
     function setCapabilityState(capability, state) {
-        const { state: stateEl } = tileEls(capability);
+        const { state: stateEl, button } = tileEls(capability);
         if (stateEl) {
             stateEl.textContent = STATE_LABELS_BN[state] ?? state;
             stateEl.dataset.stateKey = state;
+        }
+        // Keep the Start/Stop button's own label in sync on EVERY state
+        // change, not just when it's clicked — a signal-driven change
+        // (e.g. replaying signal history after a page reload, or the
+        // device reporting a capability stopped/erroring on its own)
+        // used to leave the button showing whatever it last rendered at
+        // wiring time, disagreeing with the badge right next to it.
+        if (button && !button.classList.contains('hidden')) {
+            button.textContent = ['starting', 'active'].includes(state) ? 'বন্ধ করুন' : 'চালু করুন';
         }
     }
 
