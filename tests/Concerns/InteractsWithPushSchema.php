@@ -112,6 +112,22 @@ trait InteractsWithPushSchema
                 $table->unique(['user_id', 'category']);
             });
         }
+
+        if (! Schema::hasTable('device_push_tokens')) {
+            Schema::create('device_push_tokens', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('user_id');
+                $table->string('token', 255);
+                $table->string('platform', 20)->default('android');
+                $table->string('app_version', 30)->nullable();
+                $table->timestamp('last_seen_at')->nullable();
+                $table->boolean('is_active')->default(1);
+                $table->timestamps();
+                $table->unique('token');
+                $table->index(['user_id', 'is_active']);
+            });
+        }
     }
 
     protected function makeTenant(array $attrs = []): Tenant

@@ -248,6 +248,26 @@ class WhatsAppWebhookController extends Controller
             // try/catch around its own create().
         }
 
+        // FCM/Web Push notifications task — CustomerMessageReceived +
+        // SendNewMessagePush already existed fully built and tested, but
+        // were never actually dispatched anywhere until now. Only for a
+        // genuinely new, non-duplicate inbound message ($stored !== null,
+        // see above) — every message type, not just AI-dispatchable ones
+        // below, since a staff member should be notified of any new
+        // customer message (a photo, a voice note, a location pin)
+        // whether or not the AI agent can act on it.
+        if ($stored) {
+            try {
+                event(new \App\Events\CustomerMessageReceived($owner->tenant_id, 'whatsapp', $waId, $name));
+            } catch (\Throwable $e) {
+                Log::warning('WhatsApp webhook: notification dispatch failed.', [
+                    'tenant_id' => $owner->tenant_id,
+                    'wa_id' => $waId,
+                    'exception' => get_class($e),
+                ]);
+            }
+        }
+
         // Phase 9 — an image with no caption is now dispatchable too (real
         // vision understanding, see AiAgentService/
         // ProcessWhatsAppAiAgentMessage::resolveImageUrl()), not just plain
@@ -290,20 +310,27 @@ class WhatsAppWebhookController extends Controller
      * all. See ProcessWhatsAppAiAgentMessage::process()'s own
      * direction==='in' re-check for the belt-and-suspenders layer anyway.
      *
-     * Gated by THREE independent checks, mirroring
-     * MessengerWebhookController::maybeDispatchAiAgent() exactly:
+     * Gated by the same checks as MessengerWebhookController::
+     * maybeDispatchAiAgent(), applied to this channel:
      *  - ai_agent_enabled: the tenant's master AI switch, shared with
      *    Messenger/the panel chat.
      *  - whatsapp_ai_auto_reply_enabled: WhatsApp-specific. A tenant can
      *    have the master switch on while leaving WhatsApp auto-reply off
      *    — inbound messages still arrive and sit in the inbox exactly as
      *    before, just without an automatic AI reply.
+     *  - Tenant::isAiPaused() / ai_paused_at: platform-imposed pause.
      *  - AiCreditService::hasCredit(): checked here (not just inside the
      *    job) purely as an optimization — skips queuing a job, and
      *    writing the 'pending' tracking row for it, that would only
      *    immediately no-op. The job re-checks all three again itself
      *    (defense in depth against a race between this check and a worker
      *    picking the job up) — see ProcessWhatsAppAiAgentMessage::process().
+     *  - AiHandoffService::isActive(): a permanent handoff for this
+     *    conversation.
+     *  - WhatsAppMessage::isHumanPaused(): the customer-specific, lazily-
+     *    expiring 15-minute pause that starts the moment a genuine staff
+     *    reply (sent_by='human') is sent — mirrors
+     *    MessengerMessage::isHumanPaused() exactly.
      *
      * Everything here is synchronous but cheap: two settings lookups, one
      * balance read, one insert. All AI processing — building context,
@@ -338,6 +365,15 @@ class WhatsAppWebhookController extends Controller
         // tracking row) that would only immediately no-op. The job
         // re-checks this itself too — see ProcessWhatsAppAiAgentMessage::process().
         if (app(AiHandoffService::class)->isActive($tenantId, 'whatsapp', $message->wa_id)) {
+            return;
+        }
+
+        // Same "purely an optimization, the job re-checks this itself
+        // too" reasoning as the two checks above — a human/admin reply
+        // within the last HUMAN_PAUSE_MINUTES minutes must not queue a
+        // job that would only immediately no-op. See
+        // WhatsAppMessage::isHumanPaused()'s docblock.
+        if (WhatsAppMessage::isHumanPaused($tenantId, $message->wa_id)) {
             return;
         }
 

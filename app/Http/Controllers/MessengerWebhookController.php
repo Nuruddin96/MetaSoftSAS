@@ -314,6 +314,25 @@ class MessengerWebhookController extends Controller
             return;
         }
 
+        // FCM/Web Push notifications task — CustomerMessageReceived +
+        // SendNewMessagePush already existed fully built and tested, but
+        // were never actually dispatched anywhere until now. Only for a
+        // genuine, non-echo, non-duplicate inbound message ($message !==
+        // null, see above and the $isEcho return above) — mirrors
+        // WhatsAppWebhookController::handleIncomingMessage()'s identical
+        // dispatch exactly.
+        if ($message) {
+            try {
+                event(new \App\Events\CustomerMessageReceived($owner->tenant_id, 'messenger', $psid, $name));
+            } catch (\Throwable $e) {
+                Log::warning('Messenger webhook: notification dispatch failed.', [
+                    'tenant_id' => $owner->tenant_id,
+                    'psid' => $psid,
+                    'exception' => get_class($e),
+                ]);
+            }
+        }
+
         try {
             $this->maybeCreatePendingOrder($owner->tenant_id, $psid);
         } catch (\Throwable $e) {

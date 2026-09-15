@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
+use App\Models\DevicePushToken;
 use App\Models\NotificationLog;
 use App\Services\Notifications\NotificationPreferenceService;
 use Illuminate\Http\Request;
@@ -100,6 +101,73 @@ class NotificationController extends Controller
         foreach (NotificationPreferenceService::CATEGORIES as $category => $meta) {
             $preferences->setEnabled($request->user(), $category, in_array($category, $enabled, true));
         }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * FCM push notifications task. Deliberately separate from
+     * DeviceController::updateFcmToken() (Remote Support's own device-
+     * credential-scoped proof-of-concept, see that method's docblock) —
+     * this registers under the ordinary login-token auth group so push
+     * works for every tenant, not only ones with Remote Support enabled.
+     *
+     * Upsert-by-token, not by (tenant_id, user_id): an FCM token identifies
+     * one specific app install, which belongs to exactly one logged-in
+     * user at a time — re-registering an already-known token (app
+     * restart, token refresh, or a different staff member logging into
+     * the same physical device) reassigns that same row rather than
+     * accumulating duplicates. See database/sql/chunk63.sql's own
+     * docblock for the full reasoning.
+     */
+    public function registerDeviceToken(Request $request)
+    {
+        $data = $request->validate([
+            'token' => 'required|string|max:255',
+            'platform' => 'nullable|string|max:20',
+            'app_version' => 'nullable|string|max:30',
+        ]);
+
+        if (! DevicePushToken::tablesReady()) {
+            return response()->json(['ok' => false, 'message' => 'পুশ নোটিফিকেশন টেবিল এখনো প্রস্তুত নয়।'], 503);
+        }
+
+        $user = $request->user();
+
+        DevicePushToken::withoutGlobalScopes()->updateOrCreate(
+            ['token' => $data['token']],
+            [
+                'tenant_id' => $user->tenant_id,
+                'user_id' => $user->id,
+                'platform' => $data['platform'] ?? 'android',
+                'app_version' => $data['app_version'] ?? null,
+                'is_active' => true,
+                'last_seen_at' => now(),
+            ]
+        );
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Called on logout so a signed-out device stops receiving this user's
+     * push notifications immediately, rather than waiting for FCM to
+     * eventually report the token dead. Deactivates (not deletes) — same
+     * "keep the row for diagnostics, never retry a dead target" posture
+     * as PushSubscription's own deactivation on an expired endpoint.
+     */
+    public function unregisterDeviceToken(Request $request)
+    {
+        $data = $request->validate(['token' => 'required|string|max:255']);
+
+        if (! DevicePushToken::tablesReady()) {
+            return response()->json(['ok' => true]);
+        }
+
+        DevicePushToken::withoutGlobalScopes()
+            ->where('token', $data['token'])
+            ->where('user_id', $request->user()->id)
+            ->update(['is_active' => false]);
 
         return response()->json(['ok' => true]);
     }

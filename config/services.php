@@ -61,4 +61,19 @@ return [
         'subject' => env('VAPID_SUBJECT', 'mailto:support@metasoftbd.com'),
     ],
 
+    // FCM (Firebase Cloud Messaging) — see App\Services\Notifications\
+    // FcmSendService. service_account_json is the FULL JSON contents of a
+    // Firebase service account key (Project Settings -> Service Accounts ->
+    // Generate new private key), not a file path — set it as one env var
+    // (the whole JSON, single-lined) so no extra file needs deploying
+    // alongside the app. project_id is that same JSON's "project_id" field,
+    // duplicated here since the FCM v1 send URL needs it directly and
+    // re-parsing the JSON just for that on every send is wasteful. Both
+    // missing/blank is the expected state until a real Firebase project is
+    // created and wired in — see FcmSendService::isConfigured().
+    'fcm' => [
+        'project_id' => env('FCM_PROJECT_ID'),
+        'service_account_json' => env('FCM_SERVICE_ACCOUNT_JSON'),
+    ],
+
 ];
