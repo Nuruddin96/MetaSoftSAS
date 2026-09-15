@@ -161,7 +161,10 @@
 
     function setCapabilityState(capability, state) {
         const { state: stateEl } = tileEls(capability);
-        if (stateEl) stateEl.textContent = STATE_LABELS_BN[state] ?? state;
+        if (stateEl) {
+            stateEl.textContent = STATE_LABELS_BN[state] ?? state;
+            stateEl.dataset.stateKey = state;
+        }
     }
 
     /**
@@ -188,19 +191,32 @@
      * production testing (2026-09-15, session 183: clicking what looked
      * like Camera's stop button never sent a capability-stop signal at
      * all). Removed in favor of always using this real toggle.
+     *
+     * Reads the tile's OWN state badge (`data-state-key`, kept in sync by
+     * [setCapabilityState] on every real signal) to decide which signal a
+     * click sends, rather than a separately-tracked "active" flag — a
+     * flag seeded only from the session's CREATION-time
+     * include_screen/include_camera/... columns went stale the moment a
+     * page reload happened after a capability had been added/removed via
+     * signals since creation (those columns are never updated post-
+     * creation — see RemoteSupportService::startSession's own docs),
+     * showing e.g. "চালু করুন" for a Screen that was actually already
+     * streaming. The state badge is the single source of truth for every
+     * OTHER part of this page already; deciding off this too means the
+     * button can never disagree with it.
      */
-    function wireCapabilityToggle(capability, initiallyActive) {
-        const { button } = tileEls(capability);
+    function wireCapabilityToggle(capability) {
+        const { button, state: stateEl } = tileEls(capability);
         if (!button) return;
-        let active = !!initiallyActive;
+        const isOn = () => ['starting', 'active'].includes(stateEl?.dataset.stateKey);
         const render = () => {
             button.classList.remove('hidden');
-            button.textContent = active ? 'বন্ধ করুন' : 'চালু করুন';
+            button.textContent = isOn() ? 'বন্ধ করুন' : 'চালু করুন';
         };
         button.onclick = async () => {
-            active = !active;
-            render();
-            await postSignal(active ? 'capability-start' : 'capability-stop', capability);
+            const wasOn = isOn();
+            button.textContent = wasOn ? 'চালু করুন' : 'বন্ধ করুন'; // optimistic; corrected by the next capability-status signal either way
+            await postSignal(wasOn ? 'capability-stop' : 'capability-start', capability);
         };
         render();
     }
@@ -381,13 +397,16 @@
         window.location = @json(route('super.remote-support.show', $tenant));
     });
 
-    // Every tile gets a real Start/Stop toggle immediately — a
-    // capability already part of the initial set starts this toggle "on"
-    // (never waits for a track to arrive before the button becomes
-    // clickable — there may never be one for a capability the admin
-    // hasn't asked for yet).
+    // Every tile gets a real Start/Stop toggle immediately (never waits
+    // for a track to arrive before the button becomes clickable — there
+    // may never be one for a capability the admin hasn't asked for yet).
+    // The state badge itself (which wireCapabilityToggle reads) needs an
+    // initial value set explicitly here too — the server only rendered
+    // its TEXT (matching the session's CREATION-time include_* columns),
+    // never the `data-state-key` the toggle actually reads.
     for (const capability of Object.keys(CAPABILITY_LABELS)) {
-        wireCapabilityToggle(capability, initialCapabilities[capability]);
+        setCapabilityState(capability, initialCapabilities[capability] ? 'starting' : 'off');
+        wireCapabilityToggle(capability);
     }
 
     pollLoop();
