@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Mobile\AdvertisingController;
 use App\Http\Controllers\Api\Mobile\AiAgentSettingController;
 use App\Http\Controllers\Api\Mobile\AiChatController;
 use App\Http\Controllers\Api\Mobile\AiMemoryController;
+use App\Http\Controllers\Api\Mobile\AppUpdateController;
 use App\Http\Controllers\Api\Mobile\AuthController;
 use App\Http\Controllers\Api\Mobile\BannerController;
 use App\Http\Controllers\Api\Mobile\BillingController;
@@ -50,6 +51,12 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('mobile/v1')->group(function () {
     Route::post('auth/login', [AuthController::class, 'login']);
     Route::post('auth/register', [AuthController::class, 'register']);
+
+    // Centralized Android APK update check — deliberately public/
+    // unauthenticated, unlike everything else in this group: the app must
+    // be able to force-update a build too old to safely reach the login
+    // screen at all. See Api\Mobile\AppUpdateController's docblock.
+    Route::get('app-version', [AppUpdateController::class, 'show']);
 
     Route::middleware(['auth:sanctum', 'bind.tenant.token', 'check.subscription.mobile'])->group(function () {
         Route::get('auth/me', [AuthController::class, 'me']);
