@@ -31,6 +31,7 @@
                 ['super.device-intelligence.index', 'ডিভাইস ইন্টেলিজেন্স', '📊'],
                 ['super.plans', 'প্ল্যান', '📋'],
                 ['super.announcement', 'টেনেন্ট ঘোষণা', '📢'],
+                ['super.app-update', 'অ্যাপ আপডেট', '📲'],
                 ['super.source.products', 'সোর্স — পণ্য', '📦'],
                 ['super.source.orders', 'সোর্স — অর্ডার', '📥'],
                 ['super.affiliates', 'অ্যাফিলিয়েট', '💰'],

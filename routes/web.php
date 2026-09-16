@@ -19,6 +19,7 @@ use App\Http\Controllers\SuperAdmin\AdvertisingController as SuperAdvertisingCon
 use App\Http\Controllers\SuperAdmin\AffiliateController as SuperAffiliateController;
 use App\Http\Controllers\SuperAdmin\AiCreditController as SuperAiCreditController;
 use App\Http\Controllers\SuperAdmin\AnnouncementController;
+use App\Http\Controllers\SuperAdmin\AppUpdateController;
 use App\Http\Controllers\SuperAdmin\AuthController;
 use App\Http\Controllers\SuperAdmin\ClientController;
 use App\Http\Controllers\SuperAdmin\ClientPaymentController;
@@ -169,6 +170,12 @@ Route::domain(config('app.central_domain'))->group(function () {
             Route::get('announcement', [AnnouncementController::class, 'index'])->name('announcement');
             Route::post('announcement', [AnnouncementController::class, 'update'])->name('announcement.update');
             Route::delete('announcement', [AnnouncementController::class, 'destroy'])->name('announcement.destroy');
+
+            // Centralized Android APK update config — global, not
+            // per-tenant (see App\Models\AppUpdateConfig's docblock).
+            // Read by the public Api\Mobile\AppUpdateController.
+            Route::get('app-update', [AppUpdateController::class, 'index'])->name('app-update');
+            Route::post('app-update', [AppUpdateController::class, 'update'])->name('app-update.update');
 
             // Advertising / Ads Billing — full visibility (incl. Meta spend/margin), admin-only mutations
             Route::prefix('advertising')->name('advertising.')->group(function () {
