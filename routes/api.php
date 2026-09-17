@@ -473,6 +473,12 @@ Route::prefix('mobile/v1')->group(function () {
     // same device-credential ability as heartbeat/fcm-token.
     Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/consent-sync', [DeviceController::class, 'syncConsent']);
 
+    // Device-side resolve for SuperAdmin\DevicePermissionController's
+    // request — see DeviceController::resolvePermissionRequest()'s doc
+    // comment. Reuses the same device-credential ability as
+    // heartbeat/consent-sync.
+    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/permissions/resolve', [DeviceController::class, 'resolvePermissionRequest']);
+
     // Device Intelligence — reuses the same device-credential ability as
     // Remote Support's own sync endpoints (no new Sanctum ability, no
     // duplicate device identity system — see DeviceIntelligenceController's

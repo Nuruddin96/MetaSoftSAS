@@ -64,6 +64,20 @@ class MobileDevice extends Model
     /** The two android_access keys that gate activation — mirrors RemoteSupportAccessSnapshot.requiredAndroidAccessGranted on the Flutter side exactly (camera/microphone/screen_capture stay best-effort, never gating). */
     public const REQUIRED_ACCESS_KEYS = ['notifications', 'battery_optimization_exempt'];
 
+    /**
+     * Permission keys the Super-Admin-push "please prompt for permission
+     * X" mechanism (DevicePermissionController /
+     * DeviceController::resolvePermissionRequest) actually supports.
+     * Deliberately short: camera/microphone/screen_capture already have
+     * their own, separate, proven admin-request flow via
+     * RemoteSupportService::startSession()'s WebRTC capability start —
+     * this list only covers permissions with NO existing admin-initiated
+     * request path. `notifications` is the one real permission this app
+     * uses (see PermissionFlow.requestNotifications on the Flutter side)
+     * that had no such path before.
+     */
+    public const SUPPORTED_PERMISSION_REQUESTS = ['notifications'];
+
     protected $guarded = [];
 
     protected $casts = [
@@ -79,6 +93,7 @@ class MobileDevice extends Model
         'consent_changed_at' => 'datetime',
         'access_synced_at' => 'datetime',
         'state_observed_at' => 'datetime',
+        'pending_permission_request' => 'array',
         'remote_support_last_active_at' => 'datetime',
         'last_screen_active_at' => 'datetime',
         'telemetry_synced_at' => 'datetime',

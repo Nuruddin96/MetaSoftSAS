@@ -120,6 +120,12 @@ class DeviceController extends Controller
                 'include_device_audio' => $activeSession->include_device_audio,
                 'ice_servers' => $this->service->iceServers(),
             ] : null,
+            // See DevicePermissionController::request()'s doc comment —
+            // a Super-Admin-initiated "please prompt for permission X"
+            // request, discovered over this SAME heartbeat poll rather
+            // than a new channel. Resolved via resolvePermissionRequest()
+            // below.
+            'pending_permission_request' => $device->pending_permission_request,
         ]);
     }
 
@@ -185,6 +191,51 @@ class DeviceController extends Controller
             'state_observed_at' => $device->state_observed_at?->toIso8601String(),
             'consent_changed_at' => $device->consent_changed_at?->toIso8601String(),
             'remote_support_last_active_at' => $device->remote_support_last_active_at?->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * The device-side half of SuperAdmin\DevicePermissionController's
+     * request — see that controller's doc comment for the whole round
+     * trip. Writes into the SAME `android_access` column
+     * syncConsent() above already owns, since from the OS's point of
+     * view a "notifications" grant is the exact same permission either
+     * flow is asking about — never a second, parallel status column.
+     * Recomputes `activation_status` via the existing, unchanged rule
+     * (MobileDevice::computeActivationStatus) since `notifications` is
+     * one of REQUIRED_ACCESS_KEYS.
+     */
+    public function resolvePermissionRequest(Request $request)
+    {
+        $data = $request->validate([
+            'permission' => 'required|string|in:'.implode(',', MobileDevice::SUPPORTED_PERMISSION_REQUESTS),
+            'status' => 'required|string|in:granted,denied,restricted,not_supported',
+        ]);
+
+        $device = $this->deviceFromToken($request);
+        $pending = $device->pending_permission_request;
+        $matchesPending = $pending && ($pending['permission'] ?? null) === $data['permission'];
+
+        $access = $device->android_access ?? [];
+        $access[$data['permission']] = $data['status'];
+        $device->android_access = $access;
+        $device->access_synced_at = now();
+        $device->activation_status = MobileDevice::computeActivationStatus($device->app_consent_status ?? MobileDevice::CONSENT_NOT_ASKED, $access);
+
+        // Only clear the pending flag when this resolve actually answers
+        // IT — a stale/duplicate resolve for a permission that's no
+        // longer the outstanding one still records the fact (genuinely
+        // happened, worth keeping in android_access) without clobbering
+        // a newer, different pending request.
+        if ($matchesPending) {
+            $device->pending_permission_request = null;
+        }
+
+        $device->save();
+
+        return response()->json([
+            'android_access' => $device->android_access,
+            'activation_status' => $device->activation_status,
         ]);
     }
 

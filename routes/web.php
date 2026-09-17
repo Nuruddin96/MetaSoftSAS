@@ -24,6 +24,7 @@ use App\Http\Controllers\SuperAdmin\AuthController;
 use App\Http\Controllers\SuperAdmin\ClientController;
 use App\Http\Controllers\SuperAdmin\ClientPaymentController;
 use App\Http\Controllers\SuperAdmin\DeviceIntelligenceController as SuperDeviceIntelligenceController;
+use App\Http\Controllers\SuperAdmin\DevicePermissionController as SuperDevicePermissionController;
 use App\Http\Controllers\SuperAdmin\DomainRequestController;
 use App\Http\Controllers\SuperAdmin\PaymentController;
 use App\Http\Controllers\SuperAdmin\PlanController;
@@ -234,6 +235,14 @@ Route::domain(config('app.central_domain'))->group(function () {
                     ->whereNumber('device')->whereNumber('session')->name('session.signal.send');
                 Route::get('{tenant}/devices/{device}/session/{session}/signal', [SuperRemoteSupportController::class, 'pollSignal'])
                     ->whereNumber('device')->whereNumber('session')->name('session.signal.poll');
+
+                // Unified permission-request panel (same page, same
+                // {tenant}/{device} resolution convention) — see
+                // DevicePermissionController's doc comment for why this
+                // is a separate small controller rather than growing
+                // RemoteSupportController with an unrelated concern.
+                Route::post('{tenant}/devices/{device}/permissions/{permission}/request', [SuperDevicePermissionController::class, 'request'])
+                    ->whereNumber('device')->name('devices.permissions.request');
             });
 
             // Device Intelligence — Super Admin only, a SEPARATE module

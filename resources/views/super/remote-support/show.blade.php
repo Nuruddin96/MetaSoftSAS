@@ -86,7 +86,13 @@
                             <span class="px-2 py-0.5 rounded text-[11px] {{ $activationCls }}" title="Activation">{{ $activationLabel }}</span>
                         </div>
                         <div class="flex flex-wrap items-center gap-1">
-                            @foreach (['notifications' => 'নোটিফিকেশন', 'battery_optimization_exempt' => 'ব্যাটারি'] as $key => $accessLabel)
+                            {{-- Unified permission-request panel — status only, sourced from the SAME
+                                 android_access column syncConsent()/resolvePermissionRequest() both
+                                 write. camera/microphone/screen_capture were already synced here before
+                                 this feature; only the row of badges was extended to show them. Their
+                                 "request" action stays the existing 🎥/📷/🎙 buttons in this row's own
+                                 actions column below — never duplicated here. --}}
+                            @foreach (['notifications' => 'নোটিফিকেশন', 'battery_optimization_exempt' => 'ব্যাটারি', 'camera' => 'ক্যামেরা', 'microphone' => 'মাইক্রোফোন', 'screen_capture' => 'স্ক্রিন শেয়ার'] as $key => $accessLabel)
                                 @php [$aCls, $aLabel] = $accessBadge[$access[$key] ?? 'not_requested'] ?? ['bg-ink/5 text-mute', $access[$key] ?? '—']; @endphp
                                 <span class="px-1.5 py-0.5 rounded text-[10px] {{ $aCls }}" title="Android Access — {{ $accessLabel }}">{{ $accessLabel }}: {{ $aLabel }}</span>
                             @endforeach
@@ -100,6 +106,9 @@
                                 · সর্বশেষ সক্রিয়: {{ $d->remote_support_last_active_at->diffForHumans() }}
                             @endif
                         </p>
+                        <p class="text-mute text-[10px]">
+                            🖼️ ছবি/মিডিয়া: প্রযোজ্য নয় · 📁 ফাইল/স্টোরেজ: প্রযোজ্য নয় · 📶 ব্লুটুথ: প্রযোজ্য নয় · 📍 লোকেশন: Device Intelligence-এ পরিচালিত (এই অ্যাপ এই তিনটি ব্যবহার করে না)
+                        </p>
                     </div>
                 </td>
                 <td class="px-4 py-3 text-mute text-xs">{{ $d->last_seen_at?->diffForHumans() ?? '—' }}</td>
@@ -109,6 +118,27 @@
                         <span class="text-mute text-xs">{{ $d->revoke_reason }}</span>
                     @else
                         <div class="flex flex-wrap items-center gap-2">
+                            {{-- Unified permission-request panel's one genuinely NEW request
+                                 mechanism — see DevicePermissionController's doc comment.
+                                 Independent of session/on_ready state (notifications don't need a
+                                 live WebRTC session), delivered over the existing 20s heartbeat
+                                 poll. Hidden while a request is already pending for this exact
+                                 permission so a second click can't queue a duplicate/racing
+                                 request — see requirement "do not create repeated automatic
+                                 permission loops". --}}
+                            @php $pendingPerm = $d->pending_permission_request; @endphp
+                            @if ($pendingPerm && ($pendingPerm['permission'] ?? null) === 'notifications')
+                                <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber/10 text-amber">
+                                    ⏳ নোটিফিকেশন অনুরোধ পেন্ডিং
+                                </span>
+                            @else
+                                <form method="POST" action="{{ route('super.remote-support.devices.permissions.request', [$tenant, $d, 'notifications']) }}">
+                                    @csrf
+                                    <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-ink/5 hover:bg-ink/10">
+                                        🔔 Request Notifications
+                                    </button>
+                                </form>
+                            @endif
                             <form method="POST" action="{{ route('super.remote-support.devices.toggle', [$tenant, $d]) }}">
                                 @csrf
                                 <input type="hidden" name="enabled" value="{{ $d->remote_support_enabled ? '0' : '1' }}">
