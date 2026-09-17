@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Schema;
  */
 class TenantAppVersionHistory extends Model
 {
+    protected $table = 'tenant_app_version_history';
+
     protected $guarded = [];
 
     protected $casts = [
