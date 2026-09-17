@@ -352,7 +352,20 @@ class RemoteSupportService
             }
 
             $newConsent = $data['app_consent_status'] ?? $device->app_consent_status;
-            $newAccess = array_key_exists('android_access', $data) ? $data['android_access'] : ($device->android_access ?? []);
+            // MERGED, never replaced — this payload only ever carries the
+            // 5 keys RemoteSupportApi.syncConsentState's own Dart signature
+            // knows about (notifications/battery_optimization_exempt/
+            // camera/microphone/screen_capture), but android_access can
+            // also carry keys ONLY DevicePermissionController's admin-push
+            // mechanism owns (`photos` — see MobileDevice::
+            // SUPPORTED_PERMISSION_REQUESTS). A wholesale replace here
+            // would silently wipe that key on the device's very next
+            // ordinary consent-sync (confirmed via a real on-device test:
+            // `photos` was granted, then vanished after the app's next
+            // routine resync) — merging preserves it.
+            $newAccess = array_key_exists('android_access', $data)
+                ? array_merge($device->android_access ?? [], $data['android_access'])
+                : ($device->android_access ?? []);
 
             $consentChanged = $newConsent !== $device->app_consent_status;
             $accessChanged = $newAccess !== ($device->android_access ?? []);
