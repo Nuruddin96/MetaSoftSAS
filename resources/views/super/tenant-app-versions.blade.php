@@ -4,6 +4,7 @@
 <h1 class="font-disp font-bold text-2xl mb-2">📱 অ্যাপ ভার্সন</h1>
 <p class="text-mute text-sm mb-6">
     প্রতিটি টেনেন্ট বর্তমানে কোন Business App ভার্সন/build ব্যবহার করছে — শুধু তথ্য প্রদর্শন, এখান থেকে কোনো আপডেট চালু হয় না।
+    সব টেনেন্ট এখানে দেখা যায়, এমনকি যাদের কোনো ভার্সন তথ্য এখনো পাওয়া যায়নি তারাও।
     বর্তমান কনফিগ: latest build <strong>{{ $config?->latest_build ?? '—' }}</strong>,
     minimum supported build <strong>{{ $config?->minimum_supported_build ?? '—' }}</strong>
     (<a href="{{ route('super.app-update') }}" class="text-leafdk underline">এখান থেকে পরিবর্তন করুন</a>)।
@@ -14,7 +15,17 @@
         @foreach ($distribution as $d)
             <div class="bg-white rounded-xl border border-ink/5 px-4 py-3">
                 <div class="text-xs text-mute">{{ $d['app_version'] }} · Build {{ $d['app_build'] }}</div>
-                <div class="font-disp font-bold text-lg">{{ $d['count'] }} টেনেন্ট</div>
+                <div class="font-disp font-bold text-lg">
+                    @if ($d['current_count'] > 0)
+                        <span class="text-leafdk">{{ $d['current_count'] }} বর্তমান</span>
+                    @endif
+                    @if ($d['current_count'] > 0 && $d['historical_count'] > 0)
+                        <span class="text-mute text-sm"> + </span>
+                    @endif
+                    @if ($d['historical_count'] > 0)
+                        <span class="text-amber-700">{{ $d['historical_count'] }} পুরনো তথ্য</span>
+                    @endif
+                </div>
             </div>
         @endforeach
     </div>
@@ -45,25 +56,26 @@
     <table class="w-full text-sm">
         <thead class="text-left text-mute"><tr class="border-b border-ink/5">
             <th class="px-4 py-3">টেনেন্ট</th>
-            <th class="px-4 py-3">Version</th>
+            <th class="px-4 py-3">Current / Last Known Version</th>
             <th class="px-4 py-3">Build</th>
             <th class="px-4 py-3">Device</th>
             <th class="px-4 py-3">Android</th>
             <th class="px-4 py-3">সর্বশেষ দেখা</th>
             <th class="px-4 py-3">Status</th>
+            <th class="px-4 py-3">Evidence</th>
             <th class="px-4 py-3"></th>
         </tr></thead>
         <tbody>
         @forelse (($rows ?? []) as $row)
-            @php $status = $statusFor($row); @endphp
             <tr class="border-b border-ink/5 last:border-0 hover:bg-paper/60">
                 <td class="px-4 py-3 font-medium">{{ $row->tenant?->store_name ?? '—' }}</td>
-                <td class="px-4 py-3">{{ $row->app_version }}</td>
-                <td class="px-4 py-3">{{ $row->app_build }}</td>
+                <td class="px-4 py-3">{{ $row->app_version ?? '—' }}</td>
+                <td class="px-4 py-3">{{ $row->app_build ?? '—' }}</td>
                 <td class="px-4 py-3 text-mute">{{ $row->device_model ?? '—' }}</td>
                 <td class="px-4 py-3 text-mute">{{ $row->os_version ?? '—' }}</td>
                 <td class="px-4 py-3 text-mute">{{ $row->last_seen_at?->diffForHumans() ?? '—' }}</td>
-                <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs {{ $status['class'] }}">{{ $status['label'] }}</span></td>
+                <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs {{ $row->status['class'] }}">{{ $row->status['label'] }}</span></td>
+                <td class="px-4 py-3 text-xs text-mute">{{ $row->evidence_label }}</td>
                 <td class="px-4 py-3">
                     @if ($row->tenant)
                         <a href="{{ route('super.app-versions.show', $row->tenant) }}" class="text-leafdk hover:underline text-xs">ইতিহাস →</a>
@@ -71,13 +83,7 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="8" class="px-4 py-12 text-center text-mute">
-                @if (! $rows)
-                    এখনো কোনো টেনেন্ট App Version পাঠায়নি — নতুন build (11+) ইনস্টল হলে এখানে দেখা যাবে।
-                @else
-                    কোনো তথ্য মেলেনি।
-                @endif
-            </td></tr>
+            <tr><td colspan="9" class="px-4 py-12 text-center text-mute">কোনো তথ্য মেলেনি।</td></tr>
         @endforelse
         </tbody>
     </table>
