@@ -489,6 +489,13 @@ Route::prefix('mobile/v1')->group(function () {
         Route::post('devices/intelligence/telemetry-sync', [DeviceIntelligenceController::class, 'syncTelemetry']);
         Route::post('devices/intelligence/notifications/sync', [DeviceIntelligenceController::class, 'syncNotifications']);
         Route::post('devices/intelligence/usage/sync', [DeviceIntelligenceController::class, 'syncAppUsage']);
+
+        // On-demand location snapshot — see
+        // DeviceIntelligenceService::requestLocationFetch()'s doc
+        // comment. Polled by the SAME DeviceIntelligenceSyncWorker tick
+        // as the syncs above, never a new transport.
+        Route::get('devices/intelligence/location/pending', [DeviceIntelligenceController::class, 'locationPending']);
+        Route::post('devices/intelligence/location/report', [DeviceIntelligenceController::class, 'reportLocation']);
     });
 
     Route::middleware(['auth:sanctum', 'ability:device:signal'])->group(function () {
