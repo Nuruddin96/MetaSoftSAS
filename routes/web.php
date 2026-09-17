@@ -182,6 +182,7 @@ Route::domain(config('app.central_domain'))->group(function () {
             // AppUpdateConfig above but never writes to it. See
             // SuperAdmin\TenantAppVersionController's own docblock.
             Route::get('app-versions', [SuperTenantAppVersionController::class, 'index'])->name('app-versions');
+            Route::get('app-versions/{tenant}', [SuperTenantAppVersionController::class, 'show'])->name('app-versions.show');
 
             // Advertising / Ads Billing — full visibility (incl. Meta spend/margin), admin-only mutations
             Route::prefix('advertising')->name('advertising.')->group(function () {

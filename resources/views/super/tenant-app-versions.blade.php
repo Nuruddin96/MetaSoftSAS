@@ -9,6 +9,17 @@
     (<a href="{{ route('super.app-update') }}" class="text-leafdk underline">এখান থেকে পরিবর্তন করুন</a>)।
 </p>
 
+@if ($distribution->isNotEmpty())
+    <div class="flex flex-wrap gap-3 mb-6">
+        @foreach ($distribution as $d)
+            <div class="bg-white rounded-xl border border-ink/5 px-4 py-3">
+                <div class="text-xs text-mute">{{ $d['app_version'] }} · Build {{ $d['app_build'] }}</div>
+                <div class="font-disp font-bold text-lg">{{ $d['count'] }} টেনেন্ট</div>
+            </div>
+        @endforeach
+    </div>
+@endif
+
 <form class="flex flex-wrap gap-3 mb-4">
     <input name="q" value="{{ request('q') }}" placeholder="টেনেন্টের নাম..."
            class="rounded-lg border border-ink/15 px-3 py-2.5 text-sm w-56">
@@ -40,6 +51,7 @@
             <th class="px-4 py-3">Android</th>
             <th class="px-4 py-3">সর্বশেষ দেখা</th>
             <th class="px-4 py-3">Status</th>
+            <th class="px-4 py-3"></th>
         </tr></thead>
         <tbody>
         @forelse (($rows ?? []) as $row)
@@ -52,9 +64,14 @@
                 <td class="px-4 py-3 text-mute">{{ $row->os_version ?? '—' }}</td>
                 <td class="px-4 py-3 text-mute">{{ $row->last_seen_at?->diffForHumans() ?? '—' }}</td>
                 <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs {{ $status['class'] }}">{{ $status['label'] }}</span></td>
+                <td class="px-4 py-3">
+                    @if ($row->tenant)
+                        <a href="{{ route('super.app-versions.show', $row->tenant) }}" class="text-leafdk hover:underline text-xs">ইতিহাস →</a>
+                    @endif
+                </td>
             </tr>
         @empty
-            <tr><td colspan="7" class="px-4 py-12 text-center text-mute">
+            <tr><td colspan="8" class="px-4 py-12 text-center text-mute">
                 @if (! $rows)
                     এখনো কোনো টেনেন্ট App Version পাঠায়নি — নতুন build (11+) ইনস্টল হলে এখানে দেখা যাবে।
                 @else
