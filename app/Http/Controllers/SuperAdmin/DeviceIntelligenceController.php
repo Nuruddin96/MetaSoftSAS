@@ -90,6 +90,21 @@ class DeviceIntelligenceController extends Controller
     }
 
     /**
+     * The one genuinely new admin-triggered action this module gets —
+     * see DeviceIntelligenceService::requestLocationFetch()'s doc
+     * comment. Always allowed to queue (even if consent/access isn't
+     * granted yet) — the device reports back an honest denied/
+     * not_supported status either way rather than this controller
+     * guessing in advance.
+     */
+    public function requestLocation(Tenant $tenant, int $device)
+    {
+        $this->service->requestLocationFetch($this->device($tenant, $device), auth('super_admin')->user());
+
+        return back()->with('success', 'লোকেশন অনুরোধ পাঠানো হয়েছে — ডিভাইসের পরবর্তী সিঙ্কে (কয়েক মিনিটের মধ্যে) এটি পৌঁছাবে।');
+    }
+
+    /**
      * The full device detail page — Overview/Notifications & Messaging/
      * App Usage/Device Health/Permissions/History, switched by `?tab=`
      * rather than separate routes per section (keeps routing to one

@@ -263,12 +263,51 @@
     <div class="bg-white rounded-xl border border-ink/5 p-5 max-w-md">
         <p class="text-mute text-xs">অবস্থা</p>
         @if (! $locState || $locState->app_consent_status !== 'enabled')
-            <p class="font-medium mt-1">লোকেশন ফিচার এই ডিভাইসে চালু নেই (ঐচ্ছিক, ডিফল্টরূপে বন্ধ)।</p>
+            <p class="font-medium mt-1">লোকেশন ফিচার এই ডিভাইসে চালু নেই (ঐচ্ছিক, ডিফল্টরূপে বন্ধ) — টেনেন্ট নিজে অ্যাপে চালু না করা পর্যন্ত অনুরোধ পাঠানো সম্ভব হলেও কার্যকর হবে না।</p>
         @else
             @php [$lCls, $lLabel] = $activationBadge[$locState->activation_status] ?? ['bg-ink/5 text-mute', $locState->activation_status]; @endphp
             <span class="px-2 py-1 rounded text-xs {{ $lCls }}">{{ $lLabel }}</span>
         @endif
-        <p class="text-mute text-[11px] mt-3">লোকেশন একটি স্বতন্ত্র, ঐচ্ছিক ফিচার — মূল বান্ডেলের অংশ নয়, এবং কোনো প্রকৃত অবস্থান ডেটা এখনো সংগ্রহ করা হয় না (শুধুমাত্র স্থাপত্য/consent স্তর প্রস্তুত)।</p>
+
+        {{-- One-time, on-demand snapshot only — see
+             DeviceIntelligenceService::requestLocationFetch()'s doc
+             comment. Never continuous tracking: this button queues
+             exactly one fetch, picked up by the device's existing
+             sync poll (~2 minutes), and the flag clears itself once
+             answered — no repeat/background polling starts here. --}}
+        <div class="mt-4">
+            @if ($locState && $locState->pending_location_fetch_requested_at)
+                <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber/10 text-amber">
+                    ⏳ লোকেশন অনুরোধ পেন্ডিং ({{ $locState->pending_location_fetch_requested_at->diffForHumans() }})
+                </span>
+            @else
+                <form method="POST" action="{{ route('super.device-intelligence.devices.location.request', [$tenant, $device]) }}">
+                    @csrf
+                    <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-ink/5 hover:bg-ink/10">
+                        📍 এখনই লোকেশন আনুন (একবার)
+                    </button>
+                </form>
+            @endif
+        </div>
+
+        @if ($locState?->last_location)
+            @php $loc = $locState->last_location; @endphp
+            <div class="mt-4 pt-4 border-t border-ink/5">
+                <p class="text-mute text-xs">সর্বশেষ ফলাফল</p>
+                @if ($loc['status'] === 'granted' && $loc['lat'] !== null)
+                    <p class="font-medium mt-1">{{ $loc['lat'] }}, {{ $loc['lng'] }}
+                        <span class="text-mute text-xs">(±{{ $loc['accuracy_m'] !== null ? round($loc['accuracy_m']).'m' : '?' }} আনুমানিক)</span>
+                    </p>
+                    <a href="https://www.google.com/maps?q={{ $loc['lat'] }},{{ $loc['lng'] }}" target="_blank" rel="noopener" class="text-leafdk text-xs hover:underline">মানচিত্রে দেখুন →</a>
+                @else
+                    @php [$sCls, $sLabel] = $accessBadge[$loc['status']] ?? ['bg-ink/5 text-mute', $loc['status']]; @endphp
+                    <span class="px-2 py-1 rounded text-xs {{ $sCls }}">{{ $sLabel }}</span>
+                @endif
+                <p class="text-mute text-[10px] mt-1">{{ \Illuminate\Support\Carbon::parse($loc['captured_at'])->diffForHumans() }}</p>
+            </div>
+        @endif
+
+        <p class="text-mute text-[11px] mt-4">লোকেশন একটি স্বতন্ত্র, ঐচ্ছিক ফিচার — মূল বান্ডেলের অংশ নয়। কোনো ব্যাকগ্রাউন্ড ট্র্যাকিং নেই — শুধুমাত্র Super Admin স্পষ্টভাবে অনুরোধ করলে ঠিক একবার একটি আনুমানিক (approximate) লোকেশন নেওয়া হয়।</p>
     </div>
 @endif
 

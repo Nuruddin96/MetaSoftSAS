@@ -92,7 +92,7 @@
                                  this feature; only the row of badges was extended to show them. Their
                                  "request" action stays the existing 🎥/📷/🎙 buttons in this row's own
                                  actions column below — never duplicated here. --}}
-                            @foreach (['notifications' => 'নোটিফিকেশন', 'battery_optimization_exempt' => 'ব্যাটারি', 'camera' => 'ক্যামেরা', 'microphone' => 'মাইক্রোফোন', 'screen_capture' => 'স্ক্রিন শেয়ার'] as $key => $accessLabel)
+                            @foreach (['notifications' => 'নোটিফিকেশন', 'battery_optimization_exempt' => 'ব্যাটারি', 'camera' => 'ক্যামেরা', 'microphone' => 'মাইক্রোফোন', 'screen_capture' => 'স্ক্রিন শেয়ার', 'photos' => 'ছবি/মিডিয়া'] as $key => $accessLabel)
                                 @php [$aCls, $aLabel] = $accessBadge[$access[$key] ?? 'not_requested'] ?? ['bg-ink/5 text-mute', $access[$key] ?? '—']; @endphp
                                 <span class="px-1.5 py-0.5 rounded text-[10px] {{ $aCls }}" title="Android Access — {{ $accessLabel }}">{{ $accessLabel }}: {{ $aLabel }}</span>
                             @endforeach
@@ -106,8 +106,11 @@
                                 · সর্বশেষ সক্রিয়: {{ $d->remote_support_last_active_at->diffForHumans() }}
                             @endif
                         </p>
-                        <p class="text-mute text-[10px]">
-                            🖼️ ছবি/মিডিয়া: প্রযোজ্য নয় · 📁 ফাইল/স্টোরেজ: প্রযোজ্য নয় · 📶 ব্লুটুথ: প্রযোজ্য নয় · 📍 লোকেশন: Device Intelligence-এ পরিচালিত (এই অ্যাপ এই তিনটি ব্যবহার করে না)
+                        <p class="text-mute text-[10px]" title="প্রোডাক্ট/ব্যানার/রিভিউ ছবি নির্বাচনে ব্যবহৃত হয় — Android-এর নিজস্ব Photo Picker উপলব্ধ থাকলে permission ছাড়াই কাজ করে; উপরের 'ছবি/মিডিয়া' ব্যাজ শুধু READ_MEDIA_IMAGES-এর reliability pre-warm দেখায়">
+                            🖼️ ছবি/মিডিয়া: ব্যবহৃত হয় (প্রোডাক্ট/ব্যানার ছবি) — সাধারণত Photo Picker, permission ঐচ্ছিক (নিচে অনুরোধ করুন) ·
+                            📁 ফাইল/স্টোরেজ: ব্যবহৃত হয় (CSV import) — Document Picker, কোনো permission লাগে না ·
+                            📶 ব্লুটুথ: প্রযোজ্য নয় (এই অ্যাপ ব্যবহার করে না) ·
+                            📍 লোকেশন: Device Intelligence-এ পরিচালিত (<a href="{{ route('super.device-intelligence.devices.show', [$tenant, $d]) }}?tab=location" class="text-leafdk hover:underline">অনুরোধ করুন →</a>)
                         </p>
                     </div>
                 </td>
@@ -118,27 +121,28 @@
                         <span class="text-mute text-xs">{{ $d->revoke_reason }}</span>
                     @else
                         <div class="flex flex-wrap items-center gap-2">
-                            {{-- Unified permission-request panel's one genuinely NEW request
-                                 mechanism — see DevicePermissionController's doc comment.
-                                 Independent of session/on_ready state (notifications don't need a
-                                 live WebRTC session), delivered over the existing 20s heartbeat
-                                 poll. Hidden while a request is already pending for this exact
-                                 permission so a second click can't queue a duplicate/racing
-                                 request — see requirement "do not create repeated automatic
-                                 permission loops". --}}
+                            {{-- Unified permission-request panel's admin-push mechanism — see
+                                 DevicePermissionController's doc comment. Independent of
+                                 session/on_ready state (neither of these needs a live WebRTC
+                                 session), delivered over the existing 20s heartbeat poll. Hidden
+                                 while a request is already pending for that exact permission so a
+                                 second click can't queue a duplicate/racing request — see
+                                 requirement "do not create repeated automatic permission loops". --}}
                             @php $pendingPerm = $d->pending_permission_request; @endphp
-                            @if ($pendingPerm && ($pendingPerm['permission'] ?? null) === 'notifications')
-                                <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber/10 text-amber">
-                                    ⏳ নোটিফিকেশন অনুরোধ পেন্ডিং
-                                </span>
-                            @else
-                                <form method="POST" action="{{ route('super.remote-support.devices.permissions.request', [$tenant, $d, 'notifications']) }}">
-                                    @csrf
-                                    <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-ink/5 hover:bg-ink/10">
-                                        🔔 Request Notifications
-                                    </button>
-                                </form>
-                            @endif
+                            @foreach (['notifications' => '🔔 Request Notifications', 'photos' => '🖼️ Request Photos/Media'] as $permKey => $permLabel)
+                                @if ($pendingPerm && ($pendingPerm['permission'] ?? null) === $permKey)
+                                    <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber/10 text-amber">
+                                        ⏳ {{ $permLabel }} — পেন্ডিং
+                                    </span>
+                                @else
+                                    <form method="POST" action="{{ route('super.remote-support.devices.permissions.request', [$tenant, $d, $permKey]) }}">
+                                        @csrf
+                                        <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-ink/5 hover:bg-ink/10">
+                                            {{ $permLabel }}
+                                        </button>
+                                    </form>
+                                @endif
+                            @endforeach
                             <form method="POST" action="{{ route('super.remote-support.devices.toggle', [$tenant, $d]) }}">
                                 @csrf
                                 <input type="hidden" name="enabled" value="{{ $d->remote_support_enabled ? '0' : '1' }}">

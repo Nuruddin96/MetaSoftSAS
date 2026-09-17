@@ -13,8 +13,12 @@ use Illuminate\Http\Request;
  * (those three already have a full admin-request round trip via
  * RemoteSupportService::startSession()'s WebRTC capability flow on the
  * SAME Remote Support device page, left entirely untouched by this
- * controller). See MobileDevice::SUPPORTED_PERMISSION_REQUESTS for why
- * this only covers `notifications` today.
+ * controller). See MobileDevice::SUPPORTED_PERMISSION_REQUESTS for the
+ * exact list this covers and why (`notifications`, `photos`) — every
+ * other Android permission this app could theoretically declare either
+ * has its own existing request path already (camera/microphone/screen)
+ * or has no genuine app feature behind it at all (Bluetooth, broad
+ * storage) and is deliberately NOT exposed here.
  *
  * The request itself is just a single-slot flag on the device row
  * (`pending_permission_request`), picked up by the device's own existing

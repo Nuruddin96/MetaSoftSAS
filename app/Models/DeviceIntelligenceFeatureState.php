@@ -45,6 +45,8 @@ class DeviceIntelligenceFeatureState extends Model
         'access_synced_at' => 'datetime',
         'state_observed_at' => 'datetime',
         'last_active_at' => 'datetime',
+        'pending_location_fetch_requested_at' => 'datetime',
+        'last_location' => 'array',
     ];
 
     public function device()

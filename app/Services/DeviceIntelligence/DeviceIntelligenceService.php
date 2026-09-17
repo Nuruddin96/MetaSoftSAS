@@ -121,6 +121,67 @@ class DeviceIntelligenceService
         });
     }
 
+    /**
+     * Queues a ONE-TIME "please fetch your current location now" —
+     * never continuous tracking (see class-level "do not silently
+     * enable tracking" principle this whole module already follows for
+     * `location`). Picked up by the device's existing
+     * DeviceIntelligenceSyncWorker poll (see
+     * Api\Mobile\DeviceIntelligenceController::locationPending) —
+     * reusing that existing transport, never a new one. Firmly a no-op
+     * if the tenant never consented to the `location` feature at all
+     * (there is nothing to fetch); the device still answers honestly
+     * either way (see reportLocation()).
+     */
+    public function requestLocationFetch(MobileDevice $device, SuperAdmin $admin): DeviceIntelligenceFeatureState
+    {
+        abort_if($device->status === MobileDevice::STATUS_REVOKED, 403);
+
+        $state = DeviceIntelligenceFeatureState::query()->firstOrCreate(
+            ['mobile_device_id' => $device->id, 'feature' => DeviceIntelligenceFeatureState::FEATURE_LOCATION],
+            ['tenant_id' => $device->tenant_id],
+        );
+        $state->pending_location_fetch_requested_at = now();
+        $state->save();
+
+        $this->log($device->tenant_id, $device->id, 'device_intelligence_location_fetch_requested', 'super_admin', $admin->id);
+
+        return $state;
+    }
+
+    /**
+     * The device-side report for requestLocationFetch() above — always
+     * called, even when the fetch failed/was denied (see this method's
+     * `$data['status']` handling), so Super Admin sees a real, honest
+     * outcome rather than a request that silently never resolves.
+     * Coordinates are ONLY ever stored here, as a single "last known"
+     * snapshot overwritten by each new on-demand fetch — never a
+     * history/track log.
+     */
+    public function reportLocation(MobileDevice $device, array $data): DeviceIntelligenceFeatureState
+    {
+        abort_if($device->status === MobileDevice::STATUS_REVOKED, 403);
+
+        $state = DeviceIntelligenceFeatureState::query()->firstOrCreate(
+            ['mobile_device_id' => $device->id, 'feature' => DeviceIntelligenceFeatureState::FEATURE_LOCATION],
+            ['tenant_id' => $device->tenant_id],
+        );
+
+        $state->pending_location_fetch_requested_at = null;
+        $state->last_location = [
+            'status' => $data['status'],
+            'lat' => $data['lat'] ?? null,
+            'lng' => $data['lng'] ?? null,
+            'accuracy_m' => $data['accuracy_m'] ?? null,
+            'captured_at' => (isset($data['captured_at']) ? Carbon::parse($data['captured_at']) : now())->toIso8601String(),
+        ];
+        $state->save();
+
+        $this->log($device->tenant_id, $device->id, 'device_intelligence_location_reported', 'device', null, json_encode(['status' => $data['status']]));
+
+        return $state;
+    }
+
     /** @return array<string, DeviceIntelligenceFeatureState> keyed by feature */
     public function featureStates(MobileDevice $device): array
     {

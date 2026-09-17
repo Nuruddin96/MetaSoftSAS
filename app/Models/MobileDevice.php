@@ -72,11 +72,18 @@ class MobileDevice extends Model
      * their own, separate, proven admin-request flow via
      * RemoteSupportService::startSession()'s WebRTC capability start —
      * this list only covers permissions with NO existing admin-initiated
-     * request path. `notifications` is the one real permission this app
-     * uses (see PermissionFlow.requestNotifications on the Flutter side)
-     * that had no such path before.
+     * request path.
+     * - `notifications` — the one real permission this app uses (see
+     *   PermissionFlow.requestNotifications on the Flutter side) that
+     *   had no such path before.
+     * - `photos` — READ_MEDIA_IMAGES (Android 13+, images-only, never
+     *   the broad legacy storage permission), a reliability pre-warm for
+     *   the app's existing product/banner/review image-picking feature
+     *   (image_picker) on devices/Android versions where the
+     *   permission-less system Photo Picker backport isn't available —
+     *   see PermissionFlow.resolveRemotePermissionRequest's doc comment.
      */
-    public const SUPPORTED_PERMISSION_REQUESTS = ['notifications'];
+    public const SUPPORTED_PERMISSION_REQUESTS = ['notifications', 'photos'];
 
     protected $guarded = [];
 

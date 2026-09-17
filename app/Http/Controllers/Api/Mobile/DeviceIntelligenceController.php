@@ -53,6 +53,41 @@ class DeviceIntelligenceController extends Controller
         ]);
     }
 
+    /**
+     * Polled by DeviceIntelligenceSyncWorker's existing tick (see that
+     * class's doc comment) — always called, cheap, so a genuine pending
+     * fetch (SuperAdmin\DeviceIntelligenceController::requestLocation)
+     * is never missed just because telemetry/usage/notifications had
+     * nothing new to report that tick.
+     */
+    public function locationPending(Request $request)
+    {
+        $device = $this->deviceFromToken($request);
+        $state = DeviceIntelligenceFeatureState::query()
+            ->where('mobile_device_id', $device->id)
+            ->where('feature', DeviceIntelligenceFeatureState::FEATURE_LOCATION)
+            ->first();
+
+        return response()->json(['pending' => $state?->pending_location_fetch_requested_at !== null]);
+    }
+
+    /** See DeviceIntelligenceService::reportLocation()'s doc comment. */
+    public function reportLocation(Request $request)
+    {
+        $data = $request->validate([
+            'status' => 'required|string|in:granted,denied,restricted,not_supported',
+            'lat' => 'nullable|numeric|between:-90,90',
+            'lng' => 'nullable|numeric|between:-180,180',
+            'accuracy_m' => 'nullable|numeric|min:0',
+            'captured_at' => 'nullable|date',
+        ]);
+
+        $device = $this->deviceFromToken($request);
+        $state = $this->service->reportLocation($device, $data);
+
+        return response()->json(['last_location' => $state->last_location]);
+    }
+
     public function syncTelemetry(Request $request)
     {
         $data = $request->validate([

@@ -257,6 +257,8 @@ Route::domain(config('app.central_domain'))->group(function () {
                 Route::post('{tenant}/toggle', [SuperDeviceIntelligenceController::class, 'toggleTenant'])->name('toggle');
                 Route::get('{tenant}/devices/{device}', [SuperDeviceIntelligenceController::class, 'deviceShow'])
                     ->whereNumber('device')->name('devices.show');
+                Route::post('{tenant}/devices/{device}/location/request', [SuperDeviceIntelligenceController::class, 'requestLocation'])
+                    ->whereNumber('device')->name('devices.location.request');
             });
 
             Route::get('source/products', [SourceProductController::class, 'index'])->name('source.products');
