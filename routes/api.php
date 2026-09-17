@@ -36,6 +36,7 @@ use App\Http\Controllers\Api\Mobile\ReportController;
 use App\Http\Controllers\Api\Mobile\ReviewController;
 use App\Http\Controllers\Api\Mobile\SettingController;
 use App\Http\Controllers\Api\Mobile\SignalController;
+use App\Http\Controllers\Api\Mobile\SteadfastController;
 use App\Http\Controllers\Api\Mobile\WhatsAppConnectController;
 use App\Http\Controllers\Api\Mobile\WhatsAppController;
 use App\Http\Controllers\Api\WordPress\WordPressConnectionController;
@@ -120,6 +121,15 @@ Route::prefix('mobile/v1')->group(function () {
         // courier() docblock.
         Route::get('settings/courier', [SettingController::class, 'courier']);
         Route::post('settings/courier', [SettingController::class, 'updateCourier']);
+
+        // Steadfast Center (mobile mirror) — mirrors Tenant\
+        // SteadfastCenterController::index()/refreshBalance(), reached
+        // by tapping the dashboard's Steadfast Balance card, same as the
+        // Web dashboard's own Steadfast tile. See SteadfastController's
+        // docblock for the deliberately smaller scope (no search/
+        // pagination/settlement history).
+        Route::get('steadfast', [SteadfastController::class, 'show']);
+        Route::post('steadfast/balance/refresh', [SteadfastController::class, 'refreshBalance']);
 
         // Marketing Pixel/CAPI/GTM — mirrors Tenant\SettingController::
         // marketing()/testCapiConnection() exactly, only the 5 real fields
