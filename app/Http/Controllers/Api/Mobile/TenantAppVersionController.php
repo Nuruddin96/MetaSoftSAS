@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
 use App\Models\TenantAppVersion;
+use App\Models\TenantAppVersionHistory;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 /**
  * Tenant-wise App Version Tracking — lightweight telemetry only, read by
@@ -39,6 +42,9 @@ class TenantAppVersionController extends Controller
         }
 
         $user = $request->user();
+        $now = now();
+
+        $current = TenantAppVersion::where('user_id', $user->id)->first();
 
         TenantAppVersion::updateOrCreate(
             ['user_id' => $user->id],
@@ -49,10 +55,57 @@ class TenantAppVersionController extends Controller
                 'app_build' => $data['app_build'],
                 'device_model' => $data['device_model'] ?? null,
                 'os_version' => $data['os_version'] ?? null,
-                'last_seen_at' => now(),
+                'last_seen_at' => $now,
             ]
         );
 
+        if (TenantAppVersionHistory::tablesReady()) {
+            $this->recordHistory($current, $user, $data, $now);
+        }
+
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * A genuine version CHANGE (or the very first report this user has
+     * ever sent) starts a new history row; a report matching what's
+     * already current just extends the latest row's last_seen_at — see
+     * the tenant_app_version_history migration's own docblock for why.
+     * $current is the PRE-update TenantAppVersion snapshot (null on a
+     * first-ever report), so this always compares against what the
+     * tenant was on a moment ago, never the row this same request just
+     * wrote.
+     */
+    private function recordHistory(?TenantAppVersion $current, User $user, array $data, Carbon $now): void
+    {
+        $changed = ! $current
+            || $current->app_version !== $data['app_version']
+            || $current->app_build !== $data['app_build'];
+
+        if (! $changed) {
+            TenantAppVersionHistory::where('user_id', $user->id)
+                ->latest('id')
+                ->first()
+                ?->update([
+                    'last_seen_at' => $now,
+                    'device_model' => $data['device_model'] ?? null,
+                    'os_version' => $data['os_version'] ?? null,
+                ]);
+
+            return;
+        }
+
+        TenantAppVersionHistory::create([
+            'tenant_id' => $user->tenant_id,
+            'user_id' => $user->id,
+            'source' => 'app_version_report',
+            'platform' => $data['platform'] ?? 'android',
+            'app_version' => $data['app_version'],
+            'app_build' => $data['app_build'],
+            'device_model' => $data['device_model'] ?? null,
+            'os_version' => $data['os_version'] ?? null,
+            'first_seen_at' => $now,
+            'last_seen_at' => $now,
+        ]);
     }
 }
