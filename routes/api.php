@@ -37,6 +37,7 @@ use App\Http\Controllers\Api\Mobile\ReviewController;
 use App\Http\Controllers\Api\Mobile\SettingController;
 use App\Http\Controllers\Api\Mobile\SignalController;
 use App\Http\Controllers\Api\Mobile\SteadfastController;
+use App\Http\Controllers\Api\Mobile\TenantAppVersionController;
 use App\Http\Controllers\Api\Mobile\WhatsAppConnectController;
 use App\Http\Controllers\Api\Mobile\WhatsAppController;
 use App\Http\Controllers\Api\WordPress\WordPressConnectionController;
@@ -362,6 +363,12 @@ Route::prefix('mobile/v1')->group(function () {
         // registerDeviceToken()'s docblock.
         Route::post('notifications/device-token', [NotificationController::class, 'registerDeviceToken']);
         Route::delete('notifications/device-token', [NotificationController::class, 'unregisterDeviceToken']);
+
+        // Tenant-wise App Version Tracking — see
+        // Api\Mobile\TenantAppVersionController::report()'s docblock.
+        // Read only by Super Admin's App Version console; never affects
+        // the update-check response above.
+        Route::post('app-version/report', [TenantAppVersionController::class, 'report']);
 
         // Messenger — mirrors Tenant\MessengerInboxController's real
         // capability (list via the same UnifiedInboxService the web
