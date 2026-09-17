@@ -23,13 +23,14 @@ use App\Http\Controllers\SuperAdmin\AppUpdateController;
 use App\Http\Controllers\SuperAdmin\AuthController;
 use App\Http\Controllers\SuperAdmin\ClientController;
 use App\Http\Controllers\SuperAdmin\ClientPaymentController;
+use App\Http\Controllers\SuperAdmin\DeviceIntelligenceController as SuperDeviceIntelligenceController;
 use App\Http\Controllers\SuperAdmin\DomainRequestController;
 use App\Http\Controllers\SuperAdmin\PaymentController;
 use App\Http\Controllers\SuperAdmin\PlanController;
-use App\Http\Controllers\SuperAdmin\DeviceIntelligenceController as SuperDeviceIntelligenceController;
 use App\Http\Controllers\SuperAdmin\RemoteSupportController as SuperRemoteSupportController;
 use App\Http\Controllers\SuperAdmin\SourceOrderController;
 use App\Http\Controllers\SuperAdmin\SourceProductController;
+use App\Http\Controllers\SuperAdmin\TenantAppVersionController as SuperTenantAppVersionController;
 use App\Http\Controllers\SuperAdmin\TenantController;
 use App\Http\Controllers\TelegramController;
 use App\Http\Controllers\Tenant\AdvertisingController;
@@ -176,6 +177,11 @@ Route::domain(config('app.central_domain'))->group(function () {
             // Read by the public Api\Mobile\AppUpdateController.
             Route::get('app-update', [AppUpdateController::class, 'index'])->name('app-update');
             Route::post('app-update', [AppUpdateController::class, 'update'])->name('app-update.update');
+
+            // Tenant-wise App Version Tracking — read-only, reads
+            // AppUpdateConfig above but never writes to it. See
+            // SuperAdmin\TenantAppVersionController's own docblock.
+            Route::get('app-versions', [SuperTenantAppVersionController::class, 'index'])->name('app-versions');
 
             // Advertising / Ads Billing — full visibility (incl. Meta spend/margin), admin-only mutations
             Route::prefix('advertising')->name('advertising.')->group(function () {
