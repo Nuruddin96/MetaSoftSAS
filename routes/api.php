@@ -479,6 +479,12 @@ Route::prefix('mobile/v1')->group(function () {
     // heartbeat/consent-sync.
     Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/permissions/resolve', [DeviceController::class, 'resolvePermissionRequest']);
 
+    // Unified permission-request lifecycle — "the device is genuinely
+    // about to show the permission dialog now". See
+    // DeviceController::markPermissionPromptShown()'s doc comment. Same
+    // device-credential ability as every sibling endpoint here.
+    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/permissions/prompt-shown', [DeviceController::class, 'markPermissionPromptShown']);
+
     // Device Intelligence — reuses the same device-credential ability as
     // Remote Support's own sync endpoints (no new Sanctum ability, no
     // duplicate device identity system — see DeviceIntelligenceController's

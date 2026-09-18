@@ -57,3 +57,13 @@ Schedule::command('remote-support:sweep-stale-sessions')
     ->everyFiveMinutes()
     ->onOneServer()
     ->withoutOverlapping();
+
+// Unified permission-request lifecycle: same "someone has to notice a
+// stale one, independent of any admin revisiting that device" rationale as
+// the sweep above — see SweepExpiredPermissionRequests's own docblock.
+// Every five minutes is comfortably inside the default 15-minute TTL
+// (config('permission_requests.ttl_minutes')).
+Schedule::command('permission-requests:sweep-expired')
+    ->everyFiveMinutes()
+    ->onOneServer()
+    ->withoutOverlapping();
