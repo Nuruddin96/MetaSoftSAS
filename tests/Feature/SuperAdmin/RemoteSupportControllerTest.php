@@ -7,17 +7,24 @@ use App\Models\RemoteSupportSetting;
 use App\Models\RemoteSupportSignal;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\DB;
-use Tests\Concerns\InteractsWithRemoteSupportSchema;
+use Tests\Concerns\InteractsWithDeviceIntelligenceSchema;
 use Tests\TestCase;
 
 class RemoteSupportControllerTest extends TestCase
 {
-    use InteractsWithRemoteSupportSchema;
+    // Upgraded from InteractsWithRemoteSupportSchema to the superset
+    // Device Intelligence trait: RemoteSupportController::show() now
+    // calls PermissionRequestService::panelFor(), which reads
+    // device_intelligence_feature_states for the unified panel's
+    // `location` row (see that method's doc comment) — a real production
+    // dependency (both modules' migrations always run together), not
+    // test-only coupling.
+    use InteractsWithDeviceIntelligenceSchema;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->setUpRemoteSupportSchema();
+        $this->setUpDeviceIntelligenceSchema();
         $this->withoutMiddleware(ValidateCsrfToken::class);
     }
 
@@ -297,6 +304,27 @@ class RemoteSupportControllerTest extends TestCase
             'mobile_device_id' => $device->id, 'status' => 'active', 'include_microphone' => 1,
         ]);
         $this->assertDatabaseHas('device_events', ['mobile_device_id' => $device->id, 'event_type' => 'session_started']);
+    }
+
+    /** Camera/microphone/screen have no separate admin-request flow — starting a session WITH that capability is the unified request. See PermissionRequestService::create() wiring in RemoteSupportService::startSession(). */
+    public function test_starting_a_session_with_microphone_records_a_unified_permission_request(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, [
+            'status' => 'on_ready', 'remote_support_enabled' => true, 'last_seen_at' => now(),
+        ]);
+
+        $this->actingAs($admin, 'super_admin')
+            ->post(route('super.remote-support.session.start', [$tenant, $device]), ['include_microphone' => '1']);
+
+        $this->assertDatabaseHas('permission_requests', [
+            'mobile_device_id' => $device->id, 'capability' => 'microphone', 'status' => \App\Models\PermissionRequest::STATUS_SENT,
+        ]);
+        // Camera/screen were NOT requested by this session — no row for them.
+        $this->assertDatabaseMissing('permission_requests', ['mobile_device_id' => $device->id, 'capability' => 'camera']);
     }
 
     /**

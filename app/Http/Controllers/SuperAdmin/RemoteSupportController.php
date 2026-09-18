@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MobileDevice;
 use App\Models\RemoteSupportSession;
 use App\Models\Tenant;
+use App\Services\PermissionRequestService;
 use App\Services\RemoteSupport\RemoteSupportService;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -29,7 +30,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  */
 class RemoteSupportController extends Controller
 {
-    public function __construct(protected RemoteSupportService $service) {}
+    public function __construct(protected RemoteSupportService $service, protected PermissionRequestService $permissionRequests) {}
 
     public function index(Request $request)
     {
@@ -62,11 +63,17 @@ class RemoteSupportController extends Controller
             ->filter(fn (RemoteSupportSession $s) => $s->isOpen() && ! $s->isLikelyAbandoned())
             ->keyBy('mobile_device_id');
 
+        // Unified permission-request panel view-model — one entry per
+        // capability per device, see PermissionRequestService::panelFor()'s
+        // doc comment.
+        $permissionPanels = $devices->mapWithKeys(fn (MobileDevice $d) => [$d->id => $this->permissionRequests->panelFor($d)]);
+
         return view('super.remote-support.show', [
             'tenant' => $tenant,
             'setting' => $tenant->remoteSupportSetting,
             'devices' => $devices,
             'openSessions' => $openSessions,
+            'permissionPanels' => $permissionPanels,
         ]);
     }
 

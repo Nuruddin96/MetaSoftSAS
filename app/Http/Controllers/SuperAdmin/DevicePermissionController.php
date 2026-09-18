@@ -5,6 +5,7 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\MobileDevice;
 use App\Models\Tenant;
+use App\Services\PermissionRequestService;
 use Illuminate\Http\Request;
 
 /**
@@ -31,6 +32,8 @@ use Illuminate\Http\Request;
  */
 class DevicePermissionController extends Controller
 {
+    public function __construct(protected PermissionRequestService $permissionRequests) {}
+
     public function request(Request $request, Tenant $tenant, int $device, string $permission)
     {
         abort_unless(in_array($permission, MobileDevice::SUPPORTED_PERMISSION_REQUESTS, true), 404);
@@ -44,6 +47,23 @@ class DevicePermissionController extends Controller
         $access = $deviceModel->android_access ?? [];
         if (($access[$permission] ?? null) === MobileDevice::ACCESS_GRANTED) {
             return back()->with('success', 'এই অনুমতি ইতিমধ্যে দেওয়া আছে — নতুন করে অনুরোধ পাঠানোর প্রয়োজন নেই।');
+        }
+
+        // Unified lifecycle/history row — additive, see
+        // PermissionRequestService::create()'s doc comment. Blocks with a
+        // 409-derived error (caught below) if a genuinely still-open
+        // attempt already exists, i.e. "prevent duplicate simultaneous
+        // requests for the same capability" — surfaced as a flash message
+        // rather than a raw error page, matching every sibling action in
+        // this admin console.
+        try {
+            $this->permissionRequests->create($deviceModel, $permission, auth('super_admin')->user());
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            if ($e->getStatusCode() !== 409) {
+                throw $e;
+            }
+
+            return back()->with('error', $e->getMessage());
         }
 
         $deviceModel->pending_permission_request = [

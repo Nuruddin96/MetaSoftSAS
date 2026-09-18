@@ -299,4 +299,38 @@ class DeviceIntelligenceApiTest extends TestCase
         $this->assertSame(1, DeviceAppUsageDaily::where('mobile_device_id', $device->id)->count());
         $this->assertSame(900, DeviceAppUsageDaily::where('mobile_device_id', $device->id)->first()->duration_seconds);
     }
+
+    // --- unified permission-request integration (location) ------------------
+
+    public function test_location_pending_poll_marks_the_unified_request_delivered(): void
+    {
+        [$tenant, , $device, $token] = $this->makeDeviceWithToken();
+        $admin = $this->makeSuperAdmin();
+        $request = app(\App\Services\PermissionRequestService::class)->create($device, \App\Models\PermissionRequest::CAPABILITY_LOCATION, $admin);
+        \App\Models\DeviceIntelligenceFeatureState::create([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id,
+            'feature' => DeviceIntelligenceFeatureState::FEATURE_LOCATION,
+            'pending_location_fetch_requested_at' => now(),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/mobile/v1/devices/intelligence/location/pending')
+            ->assertOk()
+            ->assertJsonPath('pending', true);
+
+        $this->assertSame(\App\Models\PermissionRequest::STATUS_DELIVERED, $request->fresh()->status);
+    }
+
+    public function test_reporting_location_resolves_the_unified_request_as_allowed(): void
+    {
+        [$tenant, , $device, $token] = $this->makeDeviceWithToken();
+        $admin = $this->makeSuperAdmin();
+        $request = app(\App\Services\PermissionRequestService::class)->create($device, \App\Models\PermissionRequest::CAPABILITY_LOCATION, $admin);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/mobile/v1/devices/intelligence/location/report', ['status' => 'granted', 'lat' => 23.7, 'lng' => 90.4])
+            ->assertOk();
+
+        $this->assertSame(\App\Models\PermissionRequest::STATUS_ALLOWED, $request->fresh()->status);
+    }
 }

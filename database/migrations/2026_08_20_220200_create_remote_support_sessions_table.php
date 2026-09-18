@@ -38,7 +38,7 @@ return new class extends Migration
             $table->timestamp('ended_at')->nullable();
             $table->string('end_reason', 40)->nullable(); // stopped_by_admin|device_declined|device_offline|timeout|ice_failed|expired
 
-            $table->timestamp('expires_at');
+            $table->timestamp('expires_at')->nullable();
 
             $table->timestamps();
 

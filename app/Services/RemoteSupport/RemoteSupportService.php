@@ -4,12 +4,14 @@ namespace App\Services\RemoteSupport;
 
 use App\Models\DeviceEvent;
 use App\Models\MobileDevice;
+use App\Models\PermissionRequest;
 use App\Models\RemoteSupportSession;
 use App\Models\RemoteSupportSetting;
 use App\Models\RemoteSupportSignal;
 use App\Models\SuperAdmin;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\PermissionRequestService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -37,6 +39,8 @@ use Illuminate\Support\Str;
  */
 class RemoteSupportService
 {
+    public function __construct(protected PermissionRequestService $permissionRequests) {}
+
     public function setTenantEnabled(Tenant $tenant, bool $enabled, SuperAdmin $admin): RemoteSupportSetting
     {
         return DB::transaction(function () use ($tenant, $enabled, $admin) {
@@ -503,6 +507,22 @@ class RemoteSupportService
                 actorId: $admin->id,
             );
 
+            // Unified lifecycle rows for whichever of the three
+            // SESSION_CAPABILITIES this session actually asked for — see
+            // pushSignal()'s doc comment for how these get resolved.
+            // Best-effort: a capability already mid-request (e.g. the
+            // admin double-clicked) simply skips re-recording rather than
+            // failing session start over it.
+            if ($includeCamera) {
+                $this->recordCapabilityRequested($device, PermissionRequest::CAPABILITY_CAMERA, $admin);
+            }
+            if ($includeMicrophone) {
+                $this->recordCapabilityRequested($device, PermissionRequest::CAPABILITY_MICROPHONE, $admin);
+            }
+            if ($includeScreen) {
+                $this->recordCapabilityRequested($device, PermissionRequest::CAPABILITY_SCREEN, $admin);
+            }
+
             return $session;
         });
     }
@@ -552,6 +572,35 @@ class RemoteSupportService
             $this->log($session->tenant_id, $session->mobile_device_id, $session->id, 'session_connected', 'admin');
         }
 
+        // Unified lifecycle integration point for camera/microphone/screen
+        // — see PermissionRequestService's doc comment on
+        // PermissionRequest::SESSION_CAPABILITIES for why these three
+        // never get a real OS permission "request" of their own (session
+        // start / capability-start IS the request); this is where the
+        // device's own existing `capability-status` report
+        // (WebRtcSessionController._setCapabilityState, Flutter side —
+        // already sent for every capability change, unrelated to this
+        // feature originally) is observed to resolve whichever
+        // permission_requests row that capability's most recent request
+        // created. Purely observational: does not change what gets
+        // relayed to the admin's poll, does not touch $type/$payload.
+        if ($sender === RemoteSupportSignal::SENDER_DEVICE && $type === 'capability-status') {
+            $this->recordCapabilityStatusSignal($session, $payload);
+        }
+
+        // The admin's independent capability-start button (viewer.blade.php,
+        // an already-active session) — payload is the plain capability wire
+        // string. Records the SAME unified request row a session-start
+        // capability gets, so mid-session "turn on mic" is visible in the
+        // panel too, not only the initial session's capabilities.
+        if ($sender === RemoteSupportSignal::SENDER_ADMIN && $type === 'capability-start' && in_array($payload, PermissionRequest::SESSION_CAPABILITIES, true)) {
+            $admin = SuperAdmin::find($session->started_by_super_admin_id);
+            $device = MobileDevice::withoutGlobalScope('tenant')->find($session->mobile_device_id);
+            if ($admin && $device) {
+                $this->recordCapabilityRequested($device, $payload, $admin);
+            }
+        }
+
         if ($type === 'bye') {
             $this->stopSession($session, reason: $sender === 'device' ? 'device_declined' : 'stopped_by_admin', actorType: $sender);
         }
@@ -571,6 +620,52 @@ class RemoteSupportService
             ->where('id', '>', $sinceId)
             ->orderBy('id')
             ->get();
+    }
+
+    /**
+     * Creates (or, if one's already open/fresh, silently skips — a
+     * capability actively being negotiated doesn't need a second attempt
+     * row) a unified permission_requests row for a SESSION_CAPABILITIES
+     * entry. Best-effort: swallows the 409 PermissionRequestService::
+     * create() throws for a genuine duplicate, since here that's an
+     * expected, harmless race (e.g. two heartbeats' worth of the same
+     * session-start call), never a reason to fail starting the session
+     * itself.
+     */
+    private function recordCapabilityRequested(MobileDevice $device, string $capability, SuperAdmin $admin): void
+    {
+        try {
+            $this->permissionRequests->create($device, $capability, $admin);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            if ($e->getStatusCode() !== 409) {
+                throw $e;
+            }
+        }
+    }
+
+    /**
+     * `$payload` is `{"capability": "camera|microphone|screen|device_audio", "state": "off|starting|active|unavailable|stopped|error"}`
+     * (RemoteSupportCapability/CapabilityState wire values, Flutter side).
+     * `device_audio` is silently ignored — not one of the six capabilities
+     * this unified system covers (see PermissionRequest::CAPABILITIES's
+     * doc comment). Malformed/unparseable payloads are also silently
+     * ignored — this is a best-effort observation of an existing signal,
+     * never allowed to break signal relay itself.
+     */
+    private function recordCapabilityStatusSignal(RemoteSupportSession $session, string $payload): void
+    {
+        $decoded = json_decode($payload, true);
+        $capability = $decoded['capability'] ?? null;
+        $state = $decoded['state'] ?? null;
+
+        if (! is_string($capability) || ! is_string($state) || ! in_array($capability, PermissionRequest::SESSION_CAPABILITIES, true)) {
+            return;
+        }
+
+        $device = MobileDevice::withoutGlobalScope('tenant')->find($session->mobile_device_id);
+        if ($device) {
+            $this->permissionRequests->resolve($device, $capability, $state);
+        }
     }
 
     public function iceServers(): array

@@ -99,7 +99,15 @@ class DeviceIntelligenceController extends Controller
      */
     public function requestLocation(Tenant $tenant, int $device)
     {
-        $this->service->requestLocationFetch($this->device($tenant, $device), auth('super_admin')->user());
+        try {
+            $this->service->requestLocationFetch($this->device($tenant, $device), auth('super_admin')->user());
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            if ($e->getStatusCode() !== 409) {
+                throw $e;
+            }
+
+            return back()->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'লোকেশন অনুরোধ পাঠানো হয়েছে — ডিভাইসের পরবর্তী সিঙ্কে (কয়েক মিনিটের মধ্যে) এটি পৌঁছাবে।');
     }

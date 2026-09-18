@@ -86,7 +86,32 @@ trait InteractsWithRemoteSupportSchema
                 // Stale/out-of-order sync ordering — see
                 // database/migrations/2026_09_15_000000_add_state_observed_at_to_mobile_devices_table.php.
                 $table->timestamp('state_observed_at')->nullable();
+                // Super-Admin-initiated "please prompt for permission X" —
+                // see database/migrations/2026_09_18_000000_add_pending_permission_request_to_mobile_devices_table.php.
+                $table->json('pending_permission_request')->nullable();
                 $table->timestamp('remote_support_last_active_at')->nullable();
+                $table->timestamps();
+            });
+        }
+
+        // Unified permission-request lifecycle/history — see
+        // database/migrations/2026_09_20_000000_create_permission_requests_table.php.
+        if (! Schema::hasTable('permission_requests')) {
+            Schema::create('permission_requests', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('tenant_id');
+                $table->unsignedBigInteger('mobile_device_id');
+                $table->string('capability', 30);
+                $table->string('status', 20)->default('created');
+                $table->unsignedBigInteger('requested_by_super_admin_id')->nullable();
+                $table->timestamp('sent_at')->nullable();
+                $table->timestamp('delivered_at')->nullable();
+                $table->timestamp('prompt_shown_at')->nullable();
+                $table->timestamp('resolved_at')->nullable();
+                $table->string('resolved_status', 30)->nullable();
+                $table->timestamp('expires_at')->nullable();
+                $table->unsignedBigInteger('resend_of_id')->nullable();
+                $table->text('note')->nullable();
                 $table->timestamps();
             });
         }

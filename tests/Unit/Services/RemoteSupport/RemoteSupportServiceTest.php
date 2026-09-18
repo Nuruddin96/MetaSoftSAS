@@ -26,7 +26,7 @@ class RemoteSupportServiceTest extends TestCase
 
     public function test_returns_stun_only_when_no_turn_provider_configured(): void
     {
-        $servers = (new RemoteSupportService)->iceServers();
+        $servers = app(RemoteSupportService::class)->iceServers();
 
         $this->assertSame([['urls' => 'stun:stun.l.google.com:19302']], $servers);
     }
@@ -38,7 +38,7 @@ class RemoteSupportServiceTest extends TestCase
         Config::set('remote_support.turn_username', 'u');
         Config::set('remote_support.turn_credential', 'p');
 
-        $servers = (new RemoteSupportService)->iceServers();
+        $servers = app(RemoteSupportService::class)->iceServers();
 
         $this->assertCount(2, $servers);
         $this->assertSame([
@@ -60,7 +60,7 @@ class RemoteSupportServiceTest extends TestCase
             ], 201),
         ]);
 
-        $servers = (new RemoteSupportService)->iceServers();
+        $servers = app(RemoteSupportService::class)->iceServers();
 
         $this->assertCount(2, $servers);
         $this->assertSame('cf-user', $servers[1]['username']);
@@ -82,7 +82,7 @@ class RemoteSupportServiceTest extends TestCase
             ], 201),
         ]);
 
-        $servers = (new RemoteSupportService)->iceServers();
+        $servers = app(RemoteSupportService::class)->iceServers();
 
         $this->assertCount(2, $servers);
         $this->assertSame('cf-user', $servers[1]['username']);
@@ -96,7 +96,7 @@ class RemoteSupportServiceTest extends TestCase
 
         Http::fake(['rtc.live.cloudflare.com/*' => Http::response(['error' => 'unauthorized'], 401)]);
 
-        $servers = (new RemoteSupportService)->iceServers();
+        $servers = app(RemoteSupportService::class)->iceServers();
 
         $this->assertCount(1, $servers);
         $this->assertSame('stun:stun.l.google.com:19302', $servers[0]['urls']);
@@ -112,7 +112,7 @@ class RemoteSupportServiceTest extends TestCase
             throw new \Illuminate\Http\Client\ConnectionException('Connection timed out');
         });
 
-        $servers = (new RemoteSupportService)->iceServers();
+        $servers = app(RemoteSupportService::class)->iceServers();
 
         $this->assertCount(1, $servers);
     }
@@ -128,7 +128,7 @@ class RemoteSupportServiceTest extends TestCase
             ], 201),
         ]);
 
-        $service = new RemoteSupportService;
+        $service = app(RemoteSupportService::class);
         $service->iceServers();
         $service->iceServers();
         $service->iceServers();
@@ -148,7 +148,7 @@ class RemoteSupportServiceTest extends TestCase
                 'iceServers' => ['urls' => ['turn:turn.cloudflare.com:3478'], 'username' => 'cf-user', 'credential' => 'cf-cred'],
             ], 201);
 
-        $service = new RemoteSupportService;
+        $service = app(RemoteSupportService::class);
         $first = $service->iceServers();
         $second = $service->iceServers();
 

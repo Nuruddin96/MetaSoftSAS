@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\Mobile;
 
 use App\Http\Controllers\Controller;
 use App\Models\MobileDevice;
+use App\Models\PermissionRequest;
 use App\Models\RemoteSupportSession;
+use App\Services\PermissionRequestService;
 use App\Services\RemoteSupport\RemoteSupportService;
 use Illuminate\Http\Request;
 
@@ -24,7 +26,7 @@ use Illuminate\Http\Request;
  */
 class DeviceController extends Controller
 {
-    public function __construct(protected RemoteSupportService $service) {}
+    public function __construct(protected RemoteSupportService $service, protected PermissionRequestService $permissionRequests) {}
 
     /**
      * The Flutter app calls this only AFTER the tenant has tapped "Allow
@@ -108,6 +110,16 @@ class DeviceController extends Controller
             ->where('expires_at', '>', now())
             ->latest('id')
             ->first();
+
+        // This heartbeat is a genuine request/response round trip the
+        // device itself initiated — unlike a fire-and-forget push, the
+        // server can be confident this payload is about to reach the
+        // SAME device that just polled, so this is real "Delivered"
+        // evidence (see PermissionRequestService::markDelivered()'s doc
+        // comment), not merely "a send was attempted".
+        if ($device->pending_permission_request) {
+            $this->permissionRequests->markDelivered($device, $device->pending_permission_request['permission']);
+        }
 
         return response()->json([
             'status' => $device->status,
@@ -209,15 +221,26 @@ class DeviceController extends Controller
     {
         $data = $request->validate([
             'permission' => 'required|string|in:'.implode(',', MobileDevice::SUPPORTED_PERMISSION_REQUESTS),
-            'status' => 'required|string|in:granted,denied,restricted,not_supported',
+            // `denied_retryable` is NEW — an ordinary, re-promptable
+            // decline (Android's own re-askable `denied`, as opposed to
+            // `permanentlyDenied`) — see PermissionFlow.
+            // resolveRemotePermissionRequest (Flutter) and
+            // PermissionRequestService::resolve()'s doc comment. Mapped
+            // down to the SAME 'denied' value below for android_access —
+            // that column's 5-value vocabulary is untouched; only the new
+            // permission_requests row keeps the richer distinction, since
+            // that's what Resend-eligibility needs.
+            'status' => 'required|string|in:granted,denied,denied_retryable,restricted,not_supported',
         ]);
 
         $device = $this->deviceFromToken($request);
         $pending = $device->pending_permission_request;
         $matchesPending = $pending && ($pending['permission'] ?? null) === $data['permission'];
 
+        $accessValue = $data['status'] === 'denied_retryable' ? 'denied' : $data['status'];
+
         $access = $device->android_access ?? [];
-        $access[$data['permission']] = $data['status'];
+        $access[$data['permission']] = $accessValue;
         $device->android_access = $access;
         $device->access_synced_at = now();
         $device->activation_status = MobileDevice::computeActivationStatus($device->app_consent_status ?? MobileDevice::CONSENT_NOT_ASKED, $access);
@@ -233,10 +256,34 @@ class DeviceController extends Controller
 
         $device->save();
 
+        $this->permissionRequests->resolve($device, $data['permission'], $data['status']);
+
         return response()->json([
             'android_access' => $device->android_access,
             'activation_status' => $device->activation_status,
         ]);
+    }
+
+    /**
+     * The device-side "I'm about to show the actual permission dialog"
+     * signal — see PermissionRequestService::markPromptShown()'s doc
+     * comment for why this must be reported, never inferred, and
+     * PermissionFlow.resolveRemotePermissionRequest (Flutter) for the
+     * exact moment it fires (right before `.request()`, only when a
+     * dialog will genuinely appear). Reuses the same device-credential
+     * ability as every other device-agent endpoint here — no new Sanctum
+     * ability introduced.
+     */
+    public function markPermissionPromptShown(Request $request)
+    {
+        $data = $request->validate([
+            'permission' => 'required|string|in:'.implode(',', MobileDevice::SUPPORTED_PERMISSION_REQUESTS),
+        ]);
+
+        $device = $this->deviceFromToken($request);
+        $this->permissionRequests->markPromptShown($device, $data['permission']);
+
+        return response()->json(['ok' => true]);
     }
 
     public function deviceFromToken(Request $request): MobileDevice

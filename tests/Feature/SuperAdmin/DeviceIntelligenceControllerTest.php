@@ -287,4 +287,44 @@ class DeviceIntelligenceControllerTest extends TestCase
         $response->assertOk();
         $response->assertDontSee('Tenant B Device');
     }
+
+    /** Unified permission-request integration — additive, must not change requestLocation()'s own success behavior. See DeviceIntelligenceService::requestLocationFetch()'s doc comment. */
+    public function test_requesting_location_creates_a_unified_permission_request_row_without_changing_the_existing_pending_flag(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id);
+
+        $this->actingAs($admin, 'super_admin')
+            ->post(route('super.device-intelligence.devices.location.request', [$tenant, $device]))
+            ->assertSessionHas('success');
+
+        $state = DeviceIntelligenceFeatureState::where('mobile_device_id', $device->id)
+            ->where('feature', DeviceIntelligenceFeatureState::FEATURE_LOCATION)->first();
+        $this->assertNotNull($state->pending_location_fetch_requested_at);
+        $this->assertDatabaseHas('permission_requests', [
+            'mobile_device_id' => $device->id,
+            'capability' => 'location',
+            'status' => \App\Models\PermissionRequest::STATUS_SENT,
+        ]);
+    }
+
+    /** "Prevent duplicate simultaneous requests" for location too, not just Remote Support's notifications/photos. */
+    public function test_a_second_location_request_while_one_is_still_open_is_blocked(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id);
+
+        $this->actingAs($admin, 'super_admin')
+            ->post(route('super.device-intelligence.devices.location.request', [$tenant, $device]));
+
+        $this->actingAs($admin, 'super_admin')
+            ->post(route('super.device-intelligence.devices.location.request', [$tenant, $device]))
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseCount('permission_requests', 1);
+    }
 }

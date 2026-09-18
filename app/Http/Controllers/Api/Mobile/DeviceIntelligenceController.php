@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\Mobile;
 use App\Http\Controllers\Controller;
 use App\Models\DeviceIntelligenceFeatureState;
 use App\Models\MobileDevice;
+use App\Models\PermissionRequest;
 use App\Services\DeviceIntelligence\DeviceIntelligenceService;
+use App\Services\PermissionRequestService;
 use Illuminate\Http\Request;
 
 /**
@@ -19,7 +21,7 @@ use Illuminate\Http\Request;
  */
 class DeviceIntelligenceController extends Controller
 {
-    public function __construct(protected DeviceIntelligenceService $service) {}
+    public function __construct(protected DeviceIntelligenceService $service, protected PermissionRequestService $permissionRequests) {}
 
     /** Lets the app decide, at any point, whether to show the (nav-hidden until enabled) Device Intelligence entry point at all — mirrors DeviceController::status()'s tenant-gate shape exactly, but for a SEPARATE tenant-level toggle. */
     public function status(Request $request)
@@ -68,7 +70,15 @@ class DeviceIntelligenceController extends Controller
             ->where('feature', DeviceIntelligenceFeatureState::FEATURE_LOCATION)
             ->first();
 
-        return response()->json(['pending' => $state?->pending_location_fetch_requested_at !== null]);
+        $pending = $state?->pending_location_fetch_requested_at !== null;
+        if ($pending) {
+            // Same "this poll IS the delivery evidence" reasoning as
+            // DeviceController::heartbeat() — see
+            // PermissionRequestService::markDelivered()'s doc comment.
+            $this->permissionRequests->markDelivered($device, PermissionRequest::CAPABILITY_LOCATION);
+        }
+
+        return response()->json(['pending' => $pending]);
     }
 
     /** See DeviceIntelligenceService::reportLocation()'s doc comment. */

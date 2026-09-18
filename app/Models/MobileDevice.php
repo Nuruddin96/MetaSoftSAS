@@ -131,6 +131,11 @@ class MobileDevice extends Model
         return $this->hasMany(DeviceEvent::class);
     }
 
+    public function permissionRequests()
+    {
+        return $this->hasMany(PermissionRequest::class);
+    }
+
     /**
      * A heartbeat gap doesn't need the device to explicitly announce going
      * offline (device-lifecycle.md) — this is evaluated live wherever

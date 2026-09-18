@@ -8,8 +8,10 @@ use App\Models\DeviceIntelligenceFeatureState;
 use App\Models\DeviceIntelligenceSetting;
 use App\Models\DeviceNotification;
 use App\Models\MobileDevice;
+use App\Models\PermissionRequest;
 use App\Models\SuperAdmin;
 use App\Models\Tenant;
+use App\Services\PermissionRequestService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -25,6 +27,8 @@ use Illuminate\Support\Facades\DB;
  */
 class DeviceIntelligenceService
 {
+    public function __construct(protected PermissionRequestService $permissionRequests) {}
+
     public function setTenantEnabled(Tenant $tenant, bool $enabled, SuperAdmin $admin): DeviceIntelligenceSetting
     {
         return DB::transaction(function () use ($tenant, $enabled, $admin) {
@@ -137,6 +141,19 @@ class DeviceIntelligenceService
     {
         abort_if($device->status === MobileDevice::STATUS_REVOKED, 403);
 
+        // Unified lifecycle/history row — additive only, see
+        // PermissionRequestService::create()'s doc comment. This is the
+        // ONLY change to this method's existing behavior: the
+        // pending_location_fetch_requested_at flag below (what the
+        // device's own poll actually checks) is set exactly as before,
+        // unconditionally. The 409 this can throw ("already pending") is
+        // deliberately allowed to propagate — SuperAdmin\
+        // DeviceIntelligenceController::requestLocation() has no
+        // try/catch today because a location request was never
+        // rate-limited before; now that it can be, that controller
+        // catches it the same way DevicePermissionController does.
+        $this->permissionRequests->create($device, PermissionRequest::CAPABILITY_LOCATION, $admin);
+
         $state = DeviceIntelligenceFeatureState::query()->firstOrCreate(
             ['mobile_device_id' => $device->id, 'feature' => DeviceIntelligenceFeatureState::FEATURE_LOCATION],
             ['tenant_id' => $device->tenant_id],
@@ -178,6 +195,8 @@ class DeviceIntelligenceService
         $state->save();
 
         $this->log($device->tenant_id, $device->id, 'device_intelligence_location_reported', 'device', null, json_encode(['status' => $data['status']]));
+
+        $this->permissionRequests->resolve($device, PermissionRequest::CAPABILITY_LOCATION, $data['status']);
 
         return $state;
     }

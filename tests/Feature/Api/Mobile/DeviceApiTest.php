@@ -3,9 +3,11 @@
 namespace Tests\Feature\Api\Mobile;
 
 use App\Models\MobileDevice;
+use App\Models\PermissionRequest;
 use App\Models\RemoteSupportSession;
 use App\Models\RemoteSupportSetting;
 use App\Models\RemoteSupportSignal;
+use App\Services\PermissionRequestService;
 use Laravel\Sanctum\Sanctum;
 use Tests\Concerns\InteractsWithRemoteSupportSchema;
 use Tests\TestCase;
@@ -365,5 +367,128 @@ class DeviceApiTest extends TestCase
 
         $this->assertCount(1, $response->json('signals'));
         $this->assertSame('answer', $response->json('signals.0.type'));
+    }
+
+    public function test_heartbeat_marks_a_pending_permission_request_as_delivered(): void
+    {
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $token = $user->createToken('device:uuid-1', ['device:heartbeat']);
+        $device = MobileDevice::create([
+            'tenant_id' => $tenant->id, 'user_id' => $user->id, 'device_uuid' => 'uuid-1',
+            'status' => 'on_ready', 'remote_support_enabled' => true,
+            'credential_token_id' => $token->accessToken->id,
+            'pending_permission_request' => ['permission' => 'notifications', 'requested_at' => now()->toIso8601String()],
+        ]);
+        $admin = $this->makeSuperAdmin();
+        $request = app(PermissionRequestService::class)->create($device, PermissionRequest::CAPABILITY_NOTIFICATIONS, $admin);
+
+        $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken)
+            ->postJson('/api/mobile/v1/devices/heartbeat', ['foreground_service_running' => true])
+            ->assertOk()
+            ->assertJsonPath('pending_permission_request.permission', 'notifications');
+
+        $this->assertSame(PermissionRequest::STATUS_DELIVERED, $request->fresh()->status);
+    }
+
+    public function test_resolve_permission_request_accepts_denied_retryable_and_stores_denied_in_android_access(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $token = $user->createToken('device:uuid-1', ['device:heartbeat']);
+        $device = MobileDevice::create([
+            'tenant_id' => $tenant->id, 'user_id' => $user->id, 'device_uuid' => 'uuid-1',
+            'status' => 'on_ready',
+            'credential_token_id' => $token->accessToken->id,
+            'pending_permission_request' => ['permission' => 'notifications', 'requested_at' => now()->toIso8601String()],
+        ]);
+        $admin = $this->makeSuperAdmin();
+        $request = app(PermissionRequestService::class)->create($device, PermissionRequest::CAPABILITY_NOTIFICATIONS, $admin);
+
+        $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken)
+            ->postJson('/api/mobile/v1/devices/permissions/resolve', ['permission' => 'notifications', 'status' => 'denied_retryable'])
+            ->assertOk()
+            ->assertJsonPath('android_access.notifications', 'denied');
+
+        $fresh = $request->fresh();
+        $this->assertSame(PermissionRequest::STATUS_DENIED, $fresh->status);
+        $this->assertSame('denied_retryable', $fresh->resolved_status);
+        $this->assertNull($device->fresh()->pending_permission_request);
+    }
+
+    public function test_mark_permission_prompt_shown_advances_the_unified_request_row(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $token = $user->createToken('device:uuid-1', ['device:heartbeat']);
+        $device = MobileDevice::create([
+            'tenant_id' => $tenant->id, 'user_id' => $user->id, 'device_uuid' => 'uuid-1',
+            'status' => 'on_ready', 'credential_token_id' => $token->accessToken->id,
+        ]);
+        $admin = $this->makeSuperAdmin();
+        $request = app(PermissionRequestService::class)->create($device, PermissionRequest::CAPABILITY_PHOTOS, $admin);
+
+        $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken)
+            ->postJson('/api/mobile/v1/devices/permissions/prompt-shown', ['permission' => 'photos'])
+            ->assertOk();
+
+        $this->assertSame(PermissionRequest::STATUS_PROMPT_SHOWN, $request->fresh()->status);
+    }
+
+    /** Camera/microphone/screen never go through the heartbeat-poll mechanism — a device's existing `capability-status` signal (already sent for every capability change, unrelated to this feature originally) is the only observable outcome. See RemoteSupportService::pushSignal()'s doc comment. */
+    public function test_device_capability_status_signal_resolves_the_matching_unified_request(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $token = $user->createToken('device:uuid-1', ['device:heartbeat', 'device:signal']);
+        $device = MobileDevice::create([
+            'tenant_id' => $tenant->id, 'user_id' => $user->id, 'device_uuid' => 'uuid-1',
+            'status' => 'on_ready', 'remote_support_enabled' => true,
+            'credential_token_id' => $token->accessToken->id,
+        ]);
+        RemoteSupportSession::create([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => 1,
+            'status' => 'active', 'session_token' => 'cap-sess', 'include_camera' => true,
+            'started_at' => now(), 'expires_at' => now()->addMinutes(30),
+        ]);
+        $admin = $this->makeSuperAdmin();
+        $request = app(PermissionRequestService::class)->create($device, PermissionRequest::CAPABILITY_CAMERA, $admin);
+
+        $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken)
+            ->postJson('/api/mobile/v1/devices/sessions/cap-sess/signal', [
+                'type' => 'capability-status',
+                'payload' => json_encode(['capability' => 'camera', 'state' => 'active']),
+            ])->assertCreated();
+
+        $this->assertSame(PermissionRequest::STATUS_ALLOWED, $request->fresh()->status);
+        $this->assertSame('active', $request->fresh()->resolved_status);
+    }
+
+    public function test_device_capability_status_unavailable_resolves_the_request_as_denied(): void
+    {
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $token = $user->createToken('device:uuid-1', ['device:heartbeat', 'device:signal']);
+        $device = MobileDevice::create([
+            'tenant_id' => $tenant->id, 'user_id' => $user->id, 'device_uuid' => 'uuid-1',
+            'status' => 'on_ready', 'remote_support_enabled' => true,
+            'credential_token_id' => $token->accessToken->id,
+        ]);
+        RemoteSupportSession::create([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => 1,
+            'status' => 'active', 'session_token' => 'cap-sess-2', 'include_microphone' => true,
+            'started_at' => now(), 'expires_at' => now()->addMinutes(30),
+        ]);
+        $admin = $this->makeSuperAdmin();
+        $request = app(PermissionRequestService::class)->create($device, PermissionRequest::CAPABILITY_MICROPHONE, $admin);
+
+        $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken)
+            ->postJson('/api/mobile/v1/devices/sessions/cap-sess-2/signal', [
+                'type' => 'capability-status',
+                'payload' => json_encode(['capability' => 'microphone', 'state' => 'unavailable']),
+            ])->assertCreated();
+
+        $this->assertSame(PermissionRequest::STATUS_DENIED, $request->fresh()->status);
     }
 }

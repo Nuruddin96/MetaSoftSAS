@@ -64,6 +64,10 @@ trait InteractsWithDeviceIntelligenceSchema
                 $table->timestamp('access_synced_at')->nullable();
                 $table->timestamp('state_observed_at')->nullable();
                 $table->timestamp('last_active_at')->nullable();
+                // On-demand location snapshot — see
+                // database/migrations/2026_09_19_000000_add_location_fetch_to_device_intelligence_feature_states_table.php.
+                $table->timestamp('pending_location_fetch_requested_at')->nullable();
+                $table->json('last_location')->nullable();
                 $table->timestamps();
                 // Matches the migration's explicit short constraint name
                 // — see that file's doc comment on the MySQL 64-char

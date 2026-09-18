@@ -34,6 +34,35 @@
         'disabled_by_tenant' => ['bg-red-50 text-red-600', 'টেনেন্ট কর্তৃক বন্ধ'],
         'active' => ['bg-leaf/10 text-leafdk', 'সক্রিয়'],
     ];
+
+    // Unified permission-request lifecycle badges — see
+    // PermissionRequest::STATUS_* / PermissionRequestService::panelFor().
+    // Deliberately a DIFFERENT badge set from $accessBadge above:
+    // $accessBadge is "current Android permission state" (source of
+    // truth: android_access), this is "what happened to the latest
+    // REQUEST attempt" — the task's own "these must not overwrite each
+    // other" distinction, kept visually distinct too.
+    $requestStatusBadge = [
+        'created' => ['bg-ink/5 text-mute', 'তৈরি হয়েছে'],
+        'sent' => ['bg-sky-50 text-sky-700', 'পাঠানো হয়েছে'],
+        'delivered' => ['bg-sky-50 text-sky-700', 'ডিভাইসে পৌঁছেছে'],
+        'prompt_shown' => ['bg-amber/10 text-amber', 'প্রম্পট দেখানো হয়েছে'],
+        'allowed' => ['bg-leaf/10 text-leafdk', '✅ অনুমোদিত'],
+        'denied' => ['bg-red-50 text-red-600', '❌ প্রত্যাখ্যাত'],
+        'dismissed' => ['bg-ink/5 text-mute', 'বাতিল করা হয়েছে'],
+        'failed' => ['bg-red-50 text-red-600', 'ব্যর্থ'],
+        'expired' => ['bg-ink/5 text-mute', '⏱️ মেয়াদোত্তীর্ণ'],
+        'cancelled' => ['bg-ink/5 text-mute', 'বাতিল'],
+    ];
+
+    $capabilityMeta = [
+        'notifications' => ['icon' => '🔔', 'label' => 'নোটিফিকেশন'],
+        'photos' => ['icon' => '🖼️', 'label' => 'ছবি/মিডিয়া'],
+        'location' => ['icon' => '📍', 'label' => 'লোকেশন'],
+        'camera' => ['icon' => '📷', 'label' => 'ক্যামেরা'],
+        'microphone' => ['icon' => '🎙️', 'label' => 'মাইক্রোফোন'],
+        'screen' => ['icon' => '🖥️', 'label' => 'স্ক্রিন শেয়ার'],
+    ];
 @endphp
 
 <a href="{{ route('super.remote-support.index') }}" class="text-mute text-sm hover:underline">← রিমোট সাপোর্ট</a>
@@ -78,25 +107,82 @@
                     @php
                         [$consentCls, $consentLabel] = $consentBadge[$d->app_consent_status] ?? ['bg-ink/5 text-mute', $d->app_consent_status];
                         [$activationCls, $activationLabel] = $activationBadge[$d->activation_status] ?? ['bg-ink/5 text-mute', $d->activation_status];
-                        $access = $d->android_access ?? [];
+                        $panel = $permissionPanels[$d->id] ?? [];
                     @endphp
-                    <div class="space-y-1">
+                    <div class="space-y-1.5 min-w-[260px]">
                         <div class="flex flex-wrap items-center gap-1">
                             <span class="px-2 py-0.5 rounded text-[11px] {{ $consentCls }}" title="App Consent">সম্মতি: {{ $consentLabel }}</span>
                             <span class="px-2 py-0.5 rounded text-[11px] {{ $activationCls }}" title="Activation">{{ $activationLabel }}</span>
                         </div>
-                        <div class="flex flex-wrap items-center gap-1">
-                            {{-- Unified permission-request panel — status only, sourced from the SAME
-                                 android_access column syncConsent()/resolvePermissionRequest() both
-                                 write. camera/microphone/screen_capture were already synced here before
-                                 this feature; only the row of badges was extended to show them. Their
-                                 "request" action stays the existing 🎥/📷/🎙 buttons in this row's own
-                                 actions column below — never duplicated here. --}}
-                            @foreach (['notifications' => 'নোটিফিকেশন', 'battery_optimization_exempt' => 'ব্যাটারি', 'camera' => 'ক্যামেরা', 'microphone' => 'মাইক্রোফোন', 'screen_capture' => 'স্ক্রিন শেয়ার', 'photos' => 'ছবি/মিডিয়া'] as $key => $accessLabel)
-                                @php [$aCls, $aLabel] = $accessBadge[$access[$key] ?? 'not_requested'] ?? ['bg-ink/5 text-mute', $access[$key] ?? '—']; @endphp
-                                <span class="px-1.5 py-0.5 rounded text-[10px] {{ $aCls }}" title="Android Access — {{ $accessLabel }}">{{ $accessLabel }}: {{ $aLabel }}</span>
+
+                        {{-- Unified permission-request panel — one row per requestable
+                             capability, combining (A) request history [latest attempt],
+                             (B) current Android permission state, and (C) whether Resend
+                             is offered right now — see PermissionRequestService::panelFor()'s
+                             doc comment for why these three are never allowed to overwrite
+                             each other. --}}
+                        <div class="border border-ink/5 rounded-lg divide-y divide-ink/5">
+                            @foreach ($capabilityMeta as $capKey => $meta)
+                                @php
+                                    $entry = $panel[$capKey] ?? null;
+                                    $latest = $entry['latest'] ?? null;
+                                    [$accCls, $accLabel] = $accessBadge[$entry['access_status'] ?? 'not_requested'] ?? ['bg-ink/5 text-mute', $entry['access_status'] ?? '—'];
+                                    $reqStatus = $latest?->status;
+                                    [$reqCls, $reqLabel] = $requestStatusBadge[$reqStatus] ?? ['bg-ink/5 text-mute', 'কখনো অনুরোধ করা হয়নি'];
+                                @endphp
+                                <div class="px-2 py-1.5 text-[11px]">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="font-medium">{{ $meta['icon'] }} {{ $meta['label'] }}</span>
+                                        <span class="px-1.5 py-0.5 rounded {{ $accCls }}">{{ $accLabel }}</span>
+                                    </div>
+                                    @if ($latest)
+                                        <div class="flex items-center gap-1 mt-0.5">
+                                            <span class="px-1.5 py-0.5 rounded {{ $reqCls }}">{{ $reqLabel }}</span>
+                                            <span class="text-mute">
+                                                @if ($latest->resolved_at)
+                                                    · উত্তর: {{ $latest->resolved_at->diffForHumans() }}
+                                                @elseif ($latest->delivered_at)
+                                                    · পৌঁছেছে: {{ $latest->delivered_at->diffForHumans() }}
+                                                @else
+                                                    · পাঠানো: {{ $latest->sent_at?->diffForHumans() ?? '—' }}
+                                                @endif
+                                            </span>
+                                        </div>
+                                        @if (($entry['resend_blocked_reason'] ?? null) === 'settings_required')
+                                            <p class="text-red-600 mt-0.5">⚠️ সেটিংস থেকে অনুমতি দিতে হবে — অ্যাপ থেকে আর অনুরোধ করা যাবে না।</p>
+                                        @endif
+                                    @endif
+
+                                    {{-- notifications/photos: unified panel's own request/resend
+                                         button. location: routes through the existing Device
+                                         Intelligence request (task requirement: don't break that
+                                         flow) — link only, same unified status shown above it.
+                                         camera/microphone/screen: no separate button here — the
+                                         existing Screen/Camera/Microphone live-session buttons in
+                                         this row's actions column ARE the request/resend action;
+                                         duplicating them here would just be a second, confusing
+                                         affordance for the same action. --}}
+                                    @if (in_array($capKey, ['notifications', 'photos']) && ($entry['can_resend'] ?? true) && $d->status !== 'revoked')
+                                        <form method="POST" action="{{ route('super.remote-support.devices.permissions.request', [$tenant, $d, $capKey]) }}" class="mt-1">
+                                            @csrf
+                                            <button class="px-2 py-1 rounded text-[10px] font-medium bg-ink/5 hover:bg-ink/10">
+                                                {{ $latest ? '↻ Resend Request' : 'Request' }}
+                                            </button>
+                                        </form>
+                                    @elseif ($capKey === 'location' && ($entry['can_resend'] ?? true))
+                                        <form method="POST" action="{{ route('super.device-intelligence.devices.location.request', [$tenant, $d]) }}" class="mt-1">
+                                            @csrf
+                                            <button class="px-2 py-1 rounded text-[10px] font-medium bg-ink/5 hover:bg-ink/10">
+                                                {{ $latest ? '↻ Resend Request' : 'Request' }}
+                                            </button>
+                                        </form>
+                                    @elseif (in_array($capKey, ['camera', 'microphone', 'screen']) && $latest && ($entry['can_resend'] ?? false))
+                                        <p class="text-mute mt-0.5">নিচের লাইভ বাটন থেকে পুনরায় অনুরোধ করুন।</p>
+                                    @endif
+                                </div>
                             @endforeach
                         </div>
+
                         <p class="text-mute text-[10px]">
                             রিপোর্ট: {{ $d->access_synced_at?->diffForHumans() ?? '—' }}
                             @if ($d->consent_changed_at)
@@ -106,11 +192,8 @@
                                 · সর্বশেষ সক্রিয়: {{ $d->remote_support_last_active_at->diffForHumans() }}
                             @endif
                         </p>
-                        <p class="text-mute text-[10px]" title="প্রোডাক্ট/ব্যানার/রিভিউ ছবি নির্বাচনে ব্যবহৃত হয় — Android-এর নিজস্ব Photo Picker উপলব্ধ থাকলে permission ছাড়াই কাজ করে; উপরের 'ছবি/মিডিয়া' ব্যাজ শুধু READ_MEDIA_IMAGES-এর reliability pre-warm দেখায়">
-                            🖼️ ছবি/মিডিয়া: ব্যবহৃত হয় (প্রোডাক্ট/ব্যানার ছবি) — সাধারণত Photo Picker, permission ঐচ্ছিক (নিচে অনুরোধ করুন) ·
-                            📁 ফাইল/স্টোরেজ: ব্যবহৃত হয় (CSV import) — Document Picker, কোনো permission লাগে না ·
-                            📶 ব্লুটুথ: প্রযোজ্য নয় (এই অ্যাপ ব্যবহার করে না) ·
-                            📍 লোকেশন: Device Intelligence-এ পরিচালিত (<a href="{{ route('super.device-intelligence.devices.show', [$tenant, $d]) }}?tab=location" class="text-leafdk hover:underline">অনুরোধ করুন →</a>)
+                        <p class="text-mute text-[10px]" title="📁 ফাইল/স্টোরেজ ও 📶 ব্লুটুথ এই unified panel-এ নেই — কোনো admin-initiated request path নেই (স্টোরেজ: Document Picker, permission লাগে না; ব্লুটুথ: এই অ্যাপ ব্যবহার করে না)">
+                            📁 ফাইল/স্টোরেজ: permission লাগে না (Document Picker) · 📶 ব্লুটুথ: প্রযোজ্য নয়
                         </p>
                     </div>
                 </td>
@@ -121,28 +204,9 @@
                         <span class="text-mute text-xs">{{ $d->revoke_reason }}</span>
                     @else
                         <div class="flex flex-wrap items-center gap-2">
-                            {{-- Unified permission-request panel's admin-push mechanism — see
-                                 DevicePermissionController's doc comment. Independent of
-                                 session/on_ready state (neither of these needs a live WebRTC
-                                 session), delivered over the existing 20s heartbeat poll. Hidden
-                                 while a request is already pending for that exact permission so a
-                                 second click can't queue a duplicate/racing request — see
-                                 requirement "do not create repeated automatic permission loops". --}}
-                            @php $pendingPerm = $d->pending_permission_request; @endphp
-                            @foreach (['notifications' => '🔔 Request Notifications', 'photos' => '🖼️ Request Photos/Media'] as $permKey => $permLabel)
-                                @if ($pendingPerm && ($pendingPerm['permission'] ?? null) === $permKey)
-                                    <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber/10 text-amber">
-                                        ⏳ {{ $permLabel }} — পেন্ডিং
-                                    </span>
-                                @else
-                                    <form method="POST" action="{{ route('super.remote-support.devices.permissions.request', [$tenant, $d, $permKey]) }}">
-                                        @csrf
-                                        <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-ink/5 hover:bg-ink/10">
-                                            {{ $permLabel }}
-                                        </button>
-                                    </form>
-                                @endif
-                            @endforeach
+                            {{-- Notifications/Photos request+Resend now live in the unified
+                                 permission panel (this row's earlier column) — not duplicated
+                                 here anymore. --}}
                             <form method="POST" action="{{ route('super.remote-support.devices.toggle', [$tenant, $d]) }}">
                                 @csrf
                                 <input type="hidden" name="enabled" value="{{ $d->remote_support_enabled ? '0' : '1' }}">
