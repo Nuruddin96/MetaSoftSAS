@@ -242,12 +242,23 @@ class DeviceIntelligenceService
 
     /**
      * Batched, idempotent notification ingestion — `client_notification_key`
-     * (Android's `StatusBarNotification.getKey()`) is what makes a
-     * retried/duplicate batch safe to resubmit: insertOrIgnore on the
-     * unique(mobile_device_id, client_notification_key) constraint means
-     * an already-stored notification is silently skipped, never
-     * duplicated. A `removed` entry for an already-stored key updates
-     * `removed_at` in place rather than inserting a second row.
+     * (Android's `StatusBarNotification.getKey()`) alone is NOT a safe
+     * dedup key on its own: Android reuses the SAME key across UPDATES to
+     * a still-unread conversation notification (WhatsApp/Messenger/imo all
+     * update one notification in place as further messages arrive in the
+     * same unread thread, rather than posting a new key per message), so
+     * a bare unique(mobile_device_id, client_notification_key) constraint
+     * would silently drop every genuinely new message that happened to
+     * share an already-stored key — see
+     * 2026_09_20_000100_add_content_hash_to_device_notifications_table.php's
+     * doc comment. `content_hash` (sha256 of title|body|sender|
+     * conversation_title|posted_at) distinguishes distinct message content
+     * sharing the same key, while an EXACT retry of the same batch still
+     * hashes identically and is still silently skipped by insertOrIgnore
+     * on the (mobile_device_id, client_notification_key, content_hash)
+     * constraint. A `removed` entry for an already-stored key updates
+     * `removed_at` in place (by key alone — a removal has no content of
+     * its own to hash) rather than inserting a second row.
      *
      * @param  array<int, array<string, mixed>>  $notifications
      * @return int number of NEW rows actually inserted (for the caller's own "did anything change" telemetry, never surfaced to the tenant)
@@ -281,6 +292,7 @@ class DeviceIntelligenceService
                     'sender' => $n['sender'] ?? null,
                     'title' => isset($n['title']) ? mb_substr($n['title'], 0, 255) : null,
                     'body' => $n['body'] ?? null,
+                    'content_hash' => $this->notificationContentHash($n),
                     'posted_at' => Carbon::parse($n['posted_at']),
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -291,6 +303,25 @@ class DeviceIntelligenceService
         });
 
         return $inserted;
+    }
+
+    /**
+     * See storeNotifications()'s doc comment — deliberately keyed on the
+     * same raw wire values used to build the stored row (title/body/
+     * sender/conversation_title/posted_at, all as sent, before the
+     * title-length truncation applied to the stored column) so a genuine
+     * retry of the exact same batch always hashes identically regardless
+     * of that truncation.
+     */
+    private function notificationContentHash(array $n): string
+    {
+        return hash('sha256', implode('|', [
+            $n['title'] ?? '',
+            $n['body'] ?? '',
+            $n['sender'] ?? '',
+            $n['conversation_title'] ?? '',
+            $n['posted_at'] ?? '',
+        ]));
     }
 
     /**

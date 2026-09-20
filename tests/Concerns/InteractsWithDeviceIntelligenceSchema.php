@@ -91,10 +91,19 @@ trait InteractsWithDeviceIntelligenceSchema
                 $table->string('sender', 191)->nullable();
                 $table->string('title', 255)->nullable();
                 $table->text('body')->nullable();
+                // See 2026_09_20_000100_add_content_hash_to_device_notifications_table.php's
+                // doc comment: distinguishes distinct message content
+                // sharing the same Android notification key (a
+                // still-unread conversation notification updated in place
+                // as new messages arrive) from a genuine upload retry.
+                $table->string('content_hash', 64);
                 $table->timestamp('posted_at');
                 $table->timestamp('removed_at')->nullable();
                 $table->timestamps();
-                $table->unique(['mobile_device_id', 'client_notification_key'], 'device_notifications_device_key_unique');
+                $table->unique(
+                    ['mobile_device_id', 'client_notification_key', 'content_hash'],
+                    'device_notifications_device_key_hash_unique',
+                );
             });
         }
 

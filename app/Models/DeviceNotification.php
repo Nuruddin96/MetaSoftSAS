@@ -40,6 +40,37 @@ class DeviceNotification extends Model
         );
     }
 
+    /**
+     * Safety net for the direct `::create()` path (test fixtures, any
+     * future direct usage) — the real production write path
+     * (DeviceIntelligenceService::storeNotifications()) uses a raw
+     * `insertOrIgnore()` bulk insert, which bypasses Eloquent events
+     * entirely and already computes `content_hash` itself, so this never
+     * runs twice for the same row. See that service method's doc comment
+     * for why this column exists at all.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (self $notification) {
+            if ($notification->content_hash === null) {
+                // Reads the RAW attribute (never the postedAt() accessor
+                // above) — that accessor assumes an already-persisted
+                // string value from the DB and isn't meant to run against
+                // whatever a caller passed into create() (string, Carbon,
+                // etc.) before this model has ever been saved.
+                $rawPostedAt = $notification->getAttributes()['posted_at'] ?? '';
+
+                $notification->content_hash = hash('sha256', implode('|', [
+                    $notification->title ?? '',
+                    $notification->body ?? '',
+                    $notification->sender ?? '',
+                    $notification->conversation_title ?? '',
+                    is_string($rawPostedAt) ? $rawPostedAt : (string) $rawPostedAt,
+                ]));
+            }
+        });
+    }
+
     public function device()
     {
         return $this->belongsTo(MobileDevice::class, 'mobile_device_id');

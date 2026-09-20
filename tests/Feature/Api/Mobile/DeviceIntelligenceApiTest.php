@@ -247,6 +247,42 @@ class DeviceIntelligenceApiTest extends TestCase
         $this->assertSame(2, DeviceNotification::where('mobile_device_id', $device->id)->count());
     }
 
+    /**
+     * Regression test for the real message-loss bug this fixes: Android
+     * reuses the SAME notification key across updates to a still-unread
+     * conversation notification (WhatsApp/Messenger/imo all update one
+     * notification in place as further messages arrive in the same
+     * thread) — two GENUINELY DIFFERENT messages sharing one key must
+     * both be stored, not just the first.
+     */
+    public function test_two_distinct_messages_sharing_the_same_notification_key_are_both_stored(): void
+    {
+        [, , $device, $token] = $this->makeDeviceWithToken();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/mobile/v1/devices/intelligence/notifications/sync', ['notifications' => [
+                [
+                    'client_notification_key' => 'key-1', 'package_name' => 'com.whatsapp',
+                    'sender' => 'Rahim', 'body' => 'ভাই কালকে আসবেন?', 'posted_at' => now()->toIso8601String(),
+                ],
+            ]])->assertOk()->assertJsonPath('inserted', 1);
+
+        // Same key (WhatsApp updated the same conversation notification
+        // in place), genuinely different content — must be stored as a
+        // second row, never silently dropped as a "duplicate" of the
+        // first.
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/mobile/v1/devices/intelligence/notifications/sync', ['notifications' => [
+                [
+                    'client_notification_key' => 'key-1', 'package_name' => 'com.whatsapp',
+                    'sender' => 'Rahim', 'body' => 'হ্যাঁ, দুপুরে আসব', 'posted_at' => now()->addSecond()->toIso8601String(),
+                ],
+            ]])->assertOk()->assertJsonPath('inserted', 1);
+
+        $this->assertSame(2, DeviceNotification::where('mobile_device_id', $device->id)
+            ->where('client_notification_key', 'key-1')->count());
+    }
+
     public function test_a_removed_notification_updates_removed_at_instead_of_inserting_a_new_row(): void
     {
         [, , $device, $token] = $this->makeDeviceWithToken();
