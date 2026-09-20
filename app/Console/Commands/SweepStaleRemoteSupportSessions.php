@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\RemoteSupportSession;
+use App\Models\RemoteSupportSignal;
 use App\Services\RemoteSupport\RemoteSupportService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 
 /**
  * Closes the one gap left by RemoteSupportService::startSession()'s own
@@ -35,7 +37,7 @@ class SweepStaleRemoteSupportSessions extends Command
         $stale = RemoteSupportSession::withoutGlobalScope('tenant')
             ->where('status', '!=', RemoteSupportSession::STATUS_ENDED)
             ->get()
-            ->filter(fn (RemoteSupportSession $session) => $session->isExpired() || $session->isLikelyAbandoned());
+            ->filter(fn (RemoteSupportSession $session) => $session->isExpired() || $this->isTrulyAbandoned($session));
 
         foreach ($stale as $session) {
             $service->stopSession(
@@ -48,5 +50,41 @@ class SweepStaleRemoteSupportSessions extends Command
         $this->info("Swept {$stale->count()} stale remote support session(s).");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * `isLikelyAbandoned()` alone (90s, no `connected_at`) is right for a
+     * device that never even offered — see that method's doc comment. But
+     * a session whose device HAS already sent an 'offer' is proven to be
+     * mid-negotiation, not dead: pollSignals() replays the full signal
+     * history by id regardless of when a viewer starts polling, so a Super
+     * Admin who reopens/retries the viewer later can still answer that
+     * same offer — UNLESS this sweep has already flipped status to
+     * `ended`, which permanently 409-blocks that answer via pushSignal()'s
+     * `abort_unless($session->isOpen())`. Give such a session
+     * `pending_offer_grace_seconds` (config, comfortably longer than
+     * `abandoned_session_grace_seconds`) measured from its OWN most recent
+     * offer before treating it as genuinely dead, instead of the ordinary
+     * 90-second mark.
+     */
+    private function isTrulyAbandoned(RemoteSupportSession $session): bool
+    {
+        if (! $session->isLikelyAbandoned()) {
+            return false;
+        }
+
+        $lastOfferAt = RemoteSupportSignal::withoutGlobalScope('tenant')
+            ->where('remote_support_session_id', $session->id)
+            ->where('sender', RemoteSupportSignal::SENDER_DEVICE)
+            ->where('type', 'offer')
+            ->max('created_at');
+
+        if ($lastOfferAt === null) {
+            return true;
+        }
+
+        return Carbon::parse($lastOfferAt)
+            ->addSeconds((int) config('remote_support.pending_offer_grace_seconds'))
+            ->isPast();
     }
 }

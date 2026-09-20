@@ -52,6 +52,26 @@ return [
      */
     'abandoned_session_grace_seconds' => (int) env('REMOTE_SUPPORT_ABANDONED_SESSION_GRACE_SECONDS', 90),
 
+    /**
+     * Extended grace window used ONLY by SweepStaleRemoteSupportSessions,
+     * on top of abandoned_session_grace_seconds above, for a session where
+     * the device HAS already sent its WebRTC offer but nobody has answered
+     * it yet. A stored offer proves the device/backend half of the
+     * pipeline already worked — the only missing event is the Super
+     * Admin's answer, which a late-opened/reopened viewer can still
+     * recover (RemoteSupportService::pollSignals() replays full signal
+     * history by id, not by "created after this poller started
+     * watching"). Sweeping that session at the ordinary 90-second mark
+     * would permanently block the answer via pushSignal()'s
+     * `abort_unless($session->isOpen())` the moment status flips to
+     * `ended`, even though the offer a late viewer fetches is otherwise
+     * still perfectly answerable. A session whose device never offered at
+     * all is unaffected by this and still sweeps at the ordinary
+     * abandoned_session_grace_seconds mark — this only extends the window
+     * for a session already proven to be mid-negotiation.
+     */
+    'pending_offer_grace_seconds' => (int) env('REMOTE_SUPPORT_PENDING_OFFER_GRACE_SECONDS', 600),
+
     /** Heartbeat gap beyond which a device is considered offline. */
     'offline_after_seconds' => (int) env('REMOTE_SUPPORT_OFFLINE_AFTER_SECONDS', 180),
 
