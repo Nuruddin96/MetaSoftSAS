@@ -86,7 +86,20 @@
                                     <td class="px-4 py-3 text-xs">{{ $entry->type }}</td>
                                     <td class="px-4 py-3 text-mute text-xs">{{ $entry->note ?: '—' }}</td>
                                     <td class="px-4 py-3 text-right text-mute">{{ $entry->meta_spend_usd ? '$'.number_format($entry->meta_spend_usd, 2) : '—' }}</td>
-                                    <td class="px-4 py-3 text-right font-semibold {{ $credit ? 'text-leafdk' : 'text-red-600' }}">{{ $credit ? '+' : '−' }}৳{{ number_format($entry->amount, 2) }}</td>
+                                    <td class="px-4 py-3 text-right font-semibold {{ $credit ? 'text-leafdk' : 'text-red-600' }}">
+                                        @if ($entry->type === 'charge')
+                                            <details class="inline-block">
+                                                <summary class="cursor-pointer list-none">{{ $credit ? '+' : '−' }}৳{{ number_format($entry->amount, 2) }}</summary>
+                                                <form method="POST" action="{{ route('super.advertising.charges.update', [$tenant, $entry->id]) }}" class="mt-2 flex items-center gap-1 justify-end font-normal">
+                                                    @csrf @method('PUT')
+                                                    <input name="amount" type="number" step="0.01" min="0.01" value="{{ $entry->amount }}" required class="w-24 rounded border border-ink/15 px-2 py-1 text-xs text-right">
+                                                    <button class="px-2 py-1 rounded bg-ink text-white text-xs">সেভ</button>
+                                                </form>
+                                            </details>
+                                        @else
+                                            {{ $credit ? '+' : '−' }}৳{{ number_format($entry->amount, 2) }}
+                                        @endif
+                                    </td>
                                     <td class="px-4 py-3 text-right text-mute">৳{{ number_format($entry->balance_after, 2) }}</td>
                                     <td class="px-4 py-3 text-xs text-mute">{{ $entry->admin?->name ?? ($entry->created_by ? '—' : 'সিস্টেম (দৈনিক চার্জ)') }}</td>
                                 </tr>
