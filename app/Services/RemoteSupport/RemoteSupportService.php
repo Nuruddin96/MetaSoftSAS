@@ -527,6 +527,59 @@ class RemoteSupportService
         });
     }
 
+    /**
+     * The single entry point behind the Admin's ONE "Start Live Screen"
+     * button — merges what used to be two separate admin actions
+     * (`startSession` for an already-`on_ready` device, `wakeAndStart` for
+     * an offline one) into one decision, without duplicating either's real
+     * logic: this only ever calls the EXISTING {@see startSession} and
+     * {@see sendWakeSignal}, unchanged.
+     *
+     * Returns one of:
+     *  - `['state' => 'started', 'session' => RemoteSupportSession]` — the
+     *    device was already `on_ready`; a session now exists exactly as
+     *    the old plain Start button would have produced.
+     *  - `['state' => 'waking']` — the device's heartbeat had gone stale
+     *    (genuinely `offline`, not just `on_not_ready`) and an FCM wake was
+     *    just sent; the caller (RemoteSupportController::status(), polled
+     *    by the Admin's browser) is what notices the device turning
+     *    `on_ready` afterwards and re-calls this method to actually start.
+     *  - `['state' => 'not_ready']` — nothing to do server-side: either the
+     *    device is `on_not_ready` (already heartbeating, so waking is a
+     *    no-op — see show.blade.php's own doc comment on this exact
+     *    distinction), or it's genuinely offline but unwakeable (no
+     *    `fcm_token` yet, or {@see sendWakeSignal} itself failed).
+     *
+     * A device that is `revoked` or whose tenant has Remote Support
+     * disabled never reaches the `on_ready` branch below
+     * (`isEligibleForSession()` is false either way, or — for the
+     * tenant-disabled case — {@see startSession}'s own `abort_unless`
+     * catches it the moment the ready branch calls it) — this method
+     * itself only decides "ready vs. try waking vs. neither", never
+     * duplicating eligibility rules that already live in those two
+     * existing methods.
+     */
+    public function requestSessionStart(
+        MobileDevice $device,
+        SuperAdmin $admin,
+        bool $includeMicrophone,
+        bool $includeCamera,
+        bool $includeScreen = true,
+        bool $includeDeviceAudio = false,
+    ): array {
+        if ($device->isEligibleForSession()) {
+            $session = $this->startSession($device, $admin, $includeMicrophone, $includeCamera, $includeScreen, $includeDeviceAudio);
+
+            return ['state' => 'started', 'session' => $session];
+        }
+
+        if ($device->liveStatus() === MobileDevice::STATUS_OFFLINE && $this->sendWakeSignal($device)) {
+            return ['state' => 'waking'];
+        }
+
+        return ['state' => 'not_ready'];
+    }
+
     public function stopSession(RemoteSupportSession $session, ?string $reason = 'stopped_by_admin', string $actorType = 'super_admin', ?int $actorId = null): RemoteSupportSession
     {
         if ($session->status === RemoteSupportSession::STATUS_ENDED) {

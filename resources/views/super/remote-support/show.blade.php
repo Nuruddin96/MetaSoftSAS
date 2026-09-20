@@ -239,63 +239,73 @@
                                    class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">
                                     🎥 চলমান লাইভ ভিউ দেখুন
                                 </a>
-                            @elseif ($d->liveStatus() === 'offline')
-                                {{-- "Wake & Start" only ever applies here (offline = stale
-                                     heartbeat, likely a dead process) — an on_not_ready device
-                                     is already heartbeating, so HeadlessEngineHost.startIfNeeded()
-                                     would just no-op (see its own doc comment); nothing to wake.
-                                     Requires an fcm_token to have ever been captured — see
-                                     RemoteSupportFcmService.kt / DeviceController::updateFcmToken. --}}
-                                @if ($d->fcm_token)
-                                    <form method="POST" action="{{ route('super.remote-support.devices.wake', [$tenant, $d]) }}"
-                                          class="flex items-center gap-2" onsubmit="return remoteSupportWakeSubmit(this);">
-                                        @csrf
-                                        <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_microphone" value="1"> 🎙 মাইক্রোফোন</label>
-                                        <label class="text-[11px] text-mute flex items-center gap-1"><input type="checkbox" name="include_camera" value="1"> 📷 ক্যামেরা</label>
-                                        <button type="submit" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber text-white">
-                                            🔄 Wake &amp; Start Remote Support
-                                        </button>
-                                    </form>
-                                @else
-                                    <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600">
-                                        🎥 লাইভ স্ক্রিন — ডিভাইস অফলাইন (FCM টোকেন নেই)
-                                    </span>
-                                @endif
-                            @elseif ($d->liveStatus() !== 'on_ready')
+                            @elseif ($d->liveStatus() === 'offline' && ! $d->fcm_token)
+                                {{-- Genuinely unwakeable — no fcm_token has ever been
+                                     captured for this device (see
+                                     RemoteSupportService::sendWakeSignal's own guard),
+                                     so the unified button below would only ever land on
+                                     'not_ready' anyway. Kept as a plain unavailable state
+                                     rather than a button that can never succeed. --}}
+                                <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600">
+                                    🎥 লাইভ স্ক্রিন — ডিভাইস অফলাইন (FCM টোকেন নেই)
+                                </span>
+                            @elseif ($d->liveStatus() === 'on_not_ready')
+                                {{-- Already heartbeating (not stale) but missing a
+                                     required Android access — see
+                                     RemoteSupportService::requestSessionStart's own doc
+                                     comment on why waking would just no-op here. Nothing
+                                     this button could usefully do until that changes on
+                                     its own next heartbeat. --}}
                                 <span class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber/10 text-amber">
                                     🎥 লাইভ স্ক্রিন — ডিভাইস প্রস্তুত হচ্ছে…
                                 </span>
                             @else
-                                {{-- Independent Remote Support capabilities — see
+                                {{-- The ONE unified "Start Live Screen" action — covers
+                                     both an already-on_ready device (starts immediately)
+                                     and a stale-heartbeat/offline one WITH an fcm_token
+                                     (wakes it first, then auto-starts once ready), via
+                                     RemoteSupportService::requestSessionStart(). The
+                                     admin never has to pick between a separate Start and
+                                     Wake & Start action anymore — see remoteSupportStart()
+                                     below.
+
+                                     Independent Remote Support capabilities — see
                                      docs/remote-support-architecture.md §Independent
-                                     capabilities. Screen is no longer a prerequisite
-                                     for Camera/Microphone/Device Audio: each button
-                                     here starts a session with ONLY its own
-                                     capability. Once a session is live, the OTHER
-                                     three are added independently from inside the
-                                     viewer (viewer.blade.php) via capability-start
-                                     signals, never a second session. --}}
-                                <div class="flex items-center gap-1.5 flex-wrap">
-                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}">
+                                     capabilities — are UNCHANGED: each button still
+                                     starts (or wakes-then-starts) a session with ONLY its
+                                     own capability; the other three are still added
+                                     independently from inside the viewer
+                                     (viewer.blade.php) via capability-start signals,
+                                     never a second session. --}}
+                                <div class="flex items-center gap-1.5 flex-wrap" data-remote-support-device="{{ $d->id }}"
+                                     data-status-url="{{ route('super.remote-support.devices.status', [$tenant, $d]) }}"
+                                     data-wake-timeout-ms="{{ (int) config('remote_support.wake_timeout_seconds') * 1000 }}"
+                                     data-wake-poll-interval-ms="{{ max(1, (int) config('remote_support.wake_poll_interval_seconds')) * 1000 }}">
+                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}"
+                                          class="rs-start-form" data-capability-field="include_screen" onsubmit="return remoteSupportStart(event, this);">
                                         @csrf
                                         <input type="hidden" name="include_screen" value="1">
-                                        <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🎥 Screen</button>
+                                        <button type="submit" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🎥 Screen</button>
                                     </form>
-                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}">
+                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}"
+                                          class="rs-start-form" data-capability-field="include_camera" onsubmit="return remoteSupportStart(event, this);">
                                         @csrf
                                         <input type="hidden" name="include_camera" value="1">
-                                        <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">📷 Camera</button>
+                                        <button type="submit" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">📷 Camera</button>
                                     </form>
-                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}">
+                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}"
+                                          class="rs-start-form" data-capability-field="include_microphone" onsubmit="return remoteSupportStart(event, this);">
                                         @csrf
                                         <input type="hidden" name="include_microphone" value="1">
-                                        <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🎙 Microphone</button>
+                                        <button type="submit" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🎙 Microphone</button>
                                     </form>
-                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}">
+                                    <form method="POST" action="{{ route('super.remote-support.session.start', [$tenant, $d]) }}"
+                                          class="rs-start-form" data-capability-field="include_device_audio" onsubmit="return remoteSupportStart(event, this);">
                                         @csrf
                                         <input type="hidden" name="include_device_audio" value="1">
-                                        <button class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🔊 Device Audio</button>
+                                        <button type="submit" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-leafdk text-white">🔊 Device Audio</button>
                                     </form>
+                                    <span class="rs-start-status text-[11px] text-mute"></span>
                                 </div>
                             @endif
                         </div>
@@ -317,19 +327,118 @@
 </div>
 
 <script>
-    // Prevents a duplicate click while the request is in flight — the
-    // backend request itself blocks for up to
-    // config('remote_support.wake_timeout_seconds') waiting for the device
-    // to wake (RemoteSupportController::wakeAndStart()), so the normal page
-    // navigation/loading state during that wait IS the "waiting" UI; this
-    // only stops a second submit and gives a clearer label than the browser
-    // default while it's pending.
-    function remoteSupportWakeSubmit(form) {
-        const btn = form.querySelector('button[type="submit"]');
-        if (btn.disabled) return false;
-        btn.disabled = true;
-        btn.textContent = '⏳ ডিভাইস জাগানো হচ্ছে…';
-        return true;
+    // The unified "Start Live Screen" flow — one POST to
+    // RemoteSupportController::startSession() (now
+    // requestSessionStart()-backed) decides everything server-side; this
+    // only ever reacts to its JSON response, never blocks a request the
+    // way the old wakeAndStart() page-navigation wait did:
+    //   'started' -> navigate straight to the viewer, exactly like the old
+    //                immediate-start path always did.
+    //   'waking'  -> disable every capability button on this device's row,
+    //                show a status line, and poll
+    //                RemoteSupportController::status() (a plain GET, no
+    //                side effects) every data-wake-poll-interval-ms until
+    //                it reports 'ready' or 'session_open' (another admin
+    //                started one meanwhile) or a client-side
+    //                data-wake-timeout-ms ceiling passes — mirroring
+    //                config('remote_support.wake_timeout_seconds') exactly,
+    //                just off the request thread.
+    //   'not_ready'/'failed' -> re-enable the buttons and show the
+    //                server's own message inline, never a silent dead end.
+    //
+    // A non-JS client still gets a working (if less smooth) fallback: the
+    // form posts normally, the server redirects on 'started' or flashes a
+    // message on 'waking'/'not_ready' exactly like every other action on
+    // this page, and the operator reloads to see whether it became ready.
+    async function remoteSupportStart(event, form) {
+        if (!window.fetch) return true; // let the plain form submit happen.
+        // Must happen SYNCHRONOUSLY, before any `await` below — returning
+        // `false` from an async onsubmit handler does NOT stop the browser
+        // from submitting the form (the return value the browser checks is
+        // the Promise itself, which is always truthy), so this function
+        // must prevent the default here at the top, not rely on its own
+        // return value at all. `event` is null on the recursive
+        // re-invocation from pollUntilReady() below, which never came from
+        // a real submit.
+        event?.preventDefault();
+        const wrapper = form.closest('[data-remote-support-device]');
+        const statusEl = wrapper?.querySelector('.rs-start-status');
+        const buttons = wrapper ? Array.from(wrapper.querySelectorAll('button[type="submit"]')) : [form.querySelector('button[type="submit"]')];
+
+        const setBusy = (busy, text) => {
+            buttons.forEach((b) => { b.disabled = busy; });
+            if (statusEl) statusEl.textContent = text ?? '';
+        };
+
+        setBusy(true, '⏳ শুরু হচ্ছে…');
+
+        try {
+            const res = await fetch(form.action, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' },
+                body: new FormData(form),
+            });
+            const data = await res.json().catch(() => null);
+            if (!data) throw new Error('invalid response');
+
+            if (data.state === 'started') {
+                setBusy(true, '✅ শুরু হয়েছে — লাইভ ভিউতে যাওয়া হচ্ছে…');
+                window.location = data.redirect;
+                return false;
+            }
+
+            if (data.state === 'waking') {
+                setBusy(true, '🔄 ডিভাইস জাগানো হচ্ছে…');
+                await pollUntilReady(wrapper, form, setBusy);
+                return false;
+            }
+
+            // 'not_ready' or 'failed' (e.g. a session opened by someone
+            // else in the meantime — 409) — the buttons stay usable, the
+            // operator can just try again.
+            setBusy(false, data.message ?? 'ডিভাইসটি এখন রেডি নয়।');
+            return false;
+        } catch (e) {
+            console.warn('remote support start failed', e);
+            setBusy(false, '⚠️ অনুরোধ পাঠানো যায়নি, আবার চেষ্টা করুন।');
+            return false;
+        }
+    }
+
+    async function pollUntilReady(wrapper, form, setBusy) {
+        const statusUrl = wrapper?.dataset.statusUrl;
+        const pollIntervalMs = Number(wrapper?.dataset.wakePollIntervalMs) || 3000;
+        const timeoutMs = Number(wrapper?.dataset.wakeTimeoutMs) || 40000;
+        if (!statusUrl) { setBusy(false); return; }
+
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+            try {
+                const res = await fetch(statusUrl, { headers: { Accept: 'application/json' } });
+                const data = await res.json();
+                if (data.state === 'session_open') {
+                    setBusy(true, '✅ প্রস্তুত — লাইভ ভিউতে যাওয়া হচ্ছে…');
+                    window.location = data.redirect;
+                    return;
+                }
+                if (data.state === 'ready') {
+                    // Device is on_ready now — re-run the exact same start
+                    // flow, which this time takes the immediate 'started'
+                    // path server-side (RemoteSupportService.
+                    // requestSessionStart()'s own `isEligibleForSession()`
+                    // branch), never a second wake.
+                    setBusy(true, '✅ ডিভাইস প্রস্তুত — সেশন শুরু হচ্ছে…');
+                    await remoteSupportStart(null, form);
+                    return;
+                }
+                setBusy(true, '🔄 ডিভাইস জাগানো হচ্ছে…');
+            } catch (e) {
+                console.warn('status poll failed, retrying', e);
+            }
+        }
+
+        setBusy(false, '⚠️ ডিভাইসটিকে জাগানো যায়নি। অ্যাপের ব্যাকগ্রাউন্ড/অটোস্টার্ট অনুমতি এবং ইন্টারনেট সংযোগ যাচাই করুন।');
     }
 </script>
 @endsection

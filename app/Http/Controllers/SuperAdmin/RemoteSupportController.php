@@ -101,11 +101,25 @@ class RemoteSupportController extends Controller
         return back()->with('success', 'ডিভাইস স্ট্যাটাস আপডেট হয়েছে।');
     }
 
+    /**
+     * The Admin's ONE "Start Live Screen" action — internally decides
+     * immediate start vs. wake-then-wait vs. not-ready, via
+     * RemoteSupportService::requestSessionStart() (see that method's doc
+     * comment). Never blocks on a `sleep()` loop the way the old
+     * `wakeAndStart()` below did — a 'waking' result is JSON the show
+     * page's own JS polls {@see status} for, re-POSTing here once the
+     * device reports itself ready (see show.blade.php's script). The
+     * plain-form (non-AJAX) fallback below exists only for a client with
+     * JS disabled/failed; it can't itself wait for a wake to resolve, so
+     * it just flashes what happened and leaves the operator to reload.
+     */
     public function startSession(Request $request, Tenant $tenant, int $device)
     {
+        $deviceModel = $this->device($tenant, $device);
+
         try {
-            $session = $this->service->startSession(
-                $this->device($tenant, $device),
+            $result = $this->service->requestSessionStart(
+                $deviceModel,
                 auth('super_admin')->user(),
                 $request->boolean('include_microphone'),
                 $request->boolean('include_camera'),
@@ -121,10 +135,63 @@ class RemoteSupportController extends Controller
             // the service's own Bengali message instead of the generic
             // uncustomized-409-view "Oops!" page, matching the
             // back()->with(...) pattern every sibling action here uses.
+            if ($request->wantsJson()) {
+                return response()->json(['state' => 'failed', 'message' => $e->getMessage()], 409);
+            }
+
             return back()->with('error', $e->getMessage());
         }
 
-        return redirect()->route('super.remote-support.session.viewer', [$tenant, $device, $session->id]);
+        if ($result['state'] === 'started') {
+            $url = route('super.remote-support.session.viewer', [$tenant, $deviceModel, $result['session']->id]);
+
+            return $request->wantsJson()
+                ? response()->json(['state' => 'started', 'redirect' => $url])
+                : redirect($url);
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json(['state' => $result['state']]);
+        }
+
+        return back()->with(
+            $result['state'] === 'waking' ? 'success' : 'error',
+            $result['state'] === 'waking'
+                ? 'ডিভাইস জাগানো হচ্ছে — কয়েক সেকেন্ড পর পাতাটি রিফ্রেশ করুন।'
+                : 'ডিভাইসটি এখন রেডি নয়।',
+        );
+    }
+
+    /**
+     * Minimal polling target for show.blade.php's JS after a 'waking'
+     * response from {@see startSession} — reports just enough for the
+     * page to decide whether to re-POST startSession (now that the device
+     * is on_ready), keep waiting, or give up. Deliberately NOT a general
+     * device-detail endpoint: mirrors exactly the same
+     * open-session/eligibility checks {@see show}'s own Blade already
+     * makes inline, just as JSON instead of rendered HTML.
+     */
+    public function status(Tenant $tenant, int $device)
+    {
+        $deviceModel = $this->device($tenant, $device);
+
+        $openSession = RemoteSupportSession::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->where('mobile_device_id', $deviceModel->id)
+            ->where('status', '!=', RemoteSupportSession::STATUS_ENDED)
+            ->get()
+            ->first(fn (RemoteSupportSession $s) => $s->isOpen() && ! $s->isLikelyAbandoned());
+
+        if ($openSession) {
+            return response()->json([
+                'state' => 'session_open',
+                'redirect' => route('super.remote-support.session.viewer', [$tenant, $deviceModel, $openSession->id]),
+            ]);
+        }
+
+        return response()->json([
+            'state' => $deviceModel->isEligibleForSession() ? 'ready' : 'not_ready',
+        ]);
     }
 
     /**

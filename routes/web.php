@@ -235,6 +235,11 @@ Route::domain(config('app.central_domain'))->group(function () {
                     ->whereNumber('device')->name('session.start');
                 Route::post('{tenant}/devices/{device}/wake', [SuperRemoteSupportController::class, 'wakeAndStart'])
                     ->whereNumber('device')->name('devices.wake');
+                // Minimal polling target for the unified "Start Live
+                // Screen" button's JS — see
+                // RemoteSupportController::status()'s doc comment.
+                Route::get('{tenant}/devices/{device}/status', [SuperRemoteSupportController::class, 'status'])
+                    ->whereNumber('device')->name('devices.status');
                 Route::get('{tenant}/devices/{device}/session/{session}/view', [SuperRemoteSupportController::class, 'viewer'])
                     ->whereNumber('device')->whereNumber('session')->name('session.viewer');
                 Route::delete('{tenant}/devices/{device}/session/{session}', [SuperRemoteSupportController::class, 'stopSession'])

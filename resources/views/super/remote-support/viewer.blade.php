@@ -126,6 +126,13 @@
     const STATE_LABELS_BN = {
         off: 'বন্ধ', starting: 'সংযোগ হচ্ছে…', active: 'স্ট্রিমিং হচ্ছে ✅',
         unavailable: 'অনুপলব্ধ', stopped: 'বন্ধ করা হয়েছে', error: 'ত্রুটি',
+        // Distinct from generic 'error' — see WebRtcSessionController's
+        // ScreenAuthorizationRequiredException doc comment (Flutter repo):
+        // Android's MediaProjection consent genuinely needs the tenant to
+        // approve it again on THEIR phone; there is nothing the admin or
+        // this app can retry automatically, so this must never look like
+        // an ordinary retryable failure.
+        authorization_required: '📱 ডিভাইসে অনুমোদন প্রয়োজন',
     };
 
     let since = 0;
