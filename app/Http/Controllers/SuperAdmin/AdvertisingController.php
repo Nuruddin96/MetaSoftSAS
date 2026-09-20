@@ -63,6 +63,23 @@ class AdvertisingController extends Controller
         return redirect()->route('super.advertising.show', $tenant)->with('success', 'অ্যাডভার্টাইজিং মডিউল চালু করা হয়েছে।');
     }
 
+    /**
+     * Sets/creates just the billing rate — reachable even before a tenant
+     * has an ad_billing_accounts row, so a Super Admin can price a tenant
+     * without also flipping the module on (see
+     * AdvertisingBalanceService::setBillingRate()'s docblock).
+     */
+    public function updateBillingRate(Request $request, Tenant $tenant)
+    {
+        $data = $request->validate([
+            'billing_rate' => 'required|numeric|min:0',
+        ]);
+
+        $this->service->setBillingRate($tenant->id, (float) $data['billing_rate']);
+
+        return back()->with('success', 'বিলিং রেট সেভ করা হয়েছে।');
+    }
+
     public function updateSettings(Request $request, Tenant $tenant)
     {
         $data = $request->validate([
