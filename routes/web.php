@@ -194,6 +194,13 @@ Route::domain(config('app.central_domain'))->group(function () {
                 Route::put('{tenant}/settings', [SuperAdvertisingController::class, 'updateSettings'])->name('settings');
                 Route::post('{tenant}/payments', [SuperAdvertisingController::class, 'storePayment'])->name('payments.store');
                 Route::post('{tenant}/charges', [SuperAdvertisingController::class, 'storeCharge'])->name('charges.store');
+                // Historical-charge correction (super-admin only, see
+                // AdvertisingBalanceService::correctChargeAmount()) — plain
+                // int, not implicit AdBillingLedger route-model binding:
+                // BelongsToTenant::resolveRouteBinding() would try
+                // TenantResolver::fromRequest() on this central-domain
+                // request and always miss, 404ing every time.
+                Route::put('{tenant}/charges/{ledger}', [SuperAdvertisingController::class, 'updateCharge'])->name('charges.update');
                 Route::post('{tenant}/adjustments', [SuperAdvertisingController::class, 'storeAdjustment'])->name('adjustments.store');
             });
 
