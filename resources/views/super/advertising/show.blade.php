@@ -17,6 +17,21 @@
 @endif
 
 @if (! $account)
+    {{-- Billing rate can be priced before the module is ever activated —
+         this never creates an active account, just an is_active=0 row. --}}
+    <div class="bg-white rounded-xl border border-ink/5 p-6 max-w-md mb-6">
+        <p class="font-bold text-sm mb-4">💰 বিলিং এমাউন্ট নির্ধারণ করুন</p>
+        <form method="POST" action="{{ route('super.advertising.billing-rate', $tenant) }}" class="space-y-3">
+            @csrf @method('PUT')
+            <div>
+                <label class="text-xs text-mute">বিলিং রেট (৳ প্রতি USD)</label>
+                <input name="billing_rate" type="number" step="0.0001" min="0" required class="mt-1 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm">
+            </div>
+            <button class="w-full py-2.5 rounded-lg bg-ink text-white font-semibold text-sm hover:bg-ink/90">সেভ করুন</button>
+        </form>
+        <p class="text-xs text-mute mt-3">এটি সেভ করলে মডিউল স্বয়ংক্রিয়ভাবে চালু হবে না — শুধু রেট নির্ধারিত হবে।</p>
+    </div>
+
     {{-- Not activated yet — this form is the module-activation switch --}}
     <div class="bg-white rounded-xl border border-ink/5 p-6 max-w-md">
         <p class="font-bold text-sm mb-4">🔌 অ্যাডভার্টাইজিং মডিউল চালু করুন</p>

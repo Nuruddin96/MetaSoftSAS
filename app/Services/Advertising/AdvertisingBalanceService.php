@@ -95,6 +95,31 @@ class AdvertisingBalanceService
         ));
     }
 
+    /**
+     * Super-admin: set the billing rate on its own, independent of full
+     * module activation. Unlike activate(), this never sets is_active —
+     * when no account exists yet it creates one at the schema's own
+     * defaults (is_active = 1 is the column default, so it's forced back
+     * to 0 here) so configuring a rate never silently switches the module
+     * on; isEnabled() still requires an explicit activate() call. Updates
+     * billing_rate in place, touching nothing else, when a row already
+     * exists. firstOrCreate() on tenant_id's UNIQUE index keeps this
+     * idempotent under a repeat submit.
+     */
+    public function setBillingRate(int $tenantId, float $billingRate): AdBillingAccount
+    {
+        $account = AdBillingAccount::withoutGlobalScopes()->firstOrCreate(
+            ['tenant_id' => $tenantId],
+            ['billing_rate' => $billingRate, 'is_active' => 0]
+        );
+
+        if (! $account->wasRecentlyCreated) {
+            $account->update(['billing_rate' => $billingRate]);
+        }
+
+        return $account;
+    }
+
     /** Tenant payment received — increases the tenant-facing balance. */
     public function recordPayment(int $tenantId, float $amount, ?string $note = null, ?int $adminId = null): AdBillingLedger
     {

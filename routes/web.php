@@ -190,6 +190,7 @@ Route::domain(config('app.central_domain'))->group(function () {
                 Route::get('/', [SuperAdvertisingController::class, 'index'])->name('index');
                 Route::get('{tenant}', [SuperAdvertisingController::class, 'show'])->name('show');
                 Route::post('{tenant}/activate', [SuperAdvertisingController::class, 'activate'])->name('activate');
+                Route::put('{tenant}/billing-rate', [SuperAdvertisingController::class, 'updateBillingRate'])->name('billing-rate');
                 Route::put('{tenant}/settings', [SuperAdvertisingController::class, 'updateSettings'])->name('settings');
                 Route::post('{tenant}/payments', [SuperAdvertisingController::class, 'storePayment'])->name('payments.store');
                 Route::post('{tenant}/charges', [SuperAdvertisingController::class, 'storeCharge'])->name('charges.store');
