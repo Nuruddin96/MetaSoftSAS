@@ -9,9 +9,17 @@ use Illuminate\Console\Command;
 use Illuminate\Database\QueryException;
 
 /**
- * Applies each active tenant's daily_budget as a 'charge' ledger entry for
- * "today" in Asia/Dhaka. Meant to run once daily via Hostinger Cron Jobs
- * (see config('advertising.timezone')) — never triggered by a page render.
+ * Applies each active tenant's daily USD ad-spend budget as a 'charge'
+ * ledger entry for "today" in Asia/Dhaka, converted to BDT at the
+ * tenant's *current* billing_rate at charge time — same
+ * meta_spend_usd × billing_rate = amount_bdt formula
+ * SuperAdmin\AdvertisingController::storeCharge() uses for a manual entry
+ * (see AdBillingLedger's meta_spend_usd column doc in chunk29.sql). Reading
+ * billing_rate fresh on every run (never cached) means a Super Admin
+ * editing Billing Amount takes effect on the very next automatic charge
+ * with no separate recalculation step needed. Meant to run once daily via
+ * Hostinger Cron Jobs (see config('advertising.timezone')) — never
+ * triggered by a page render.
  *
  * Idempotent per tenant per Dhaka calendar day: ad_billing_ledger has a
  * UNIQUE(tenant_id, charge_date) index, so re-running this command the
@@ -54,9 +62,12 @@ class RunAdvertisingDailyCharges extends Command
                 }
 
                 try {
+                    $amountBdt = round((float) $account->daily_budget * (float) $account->billing_rate, 2);
+
                     $service->recordCharge(
                         $account->tenant_id,
-                        (float) $account->daily_budget,
+                        $amountBdt,
+                        metaSpendUsd: (float) $account->daily_budget,
                         note: 'দৈনিক চার্জ (স্বয়ংক্রিয়)',
                         chargeDate: $today,
                     );
