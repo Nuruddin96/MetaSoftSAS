@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdBillingLedger;
 use App\Models\Tenant;
 use App\Services\Advertising\AdvertisingBalanceService;
 use Illuminate\Http\Request;
@@ -130,6 +131,30 @@ class AdvertisingController extends Controller
         );
 
         return back()->with('success', 'চার্জ এন্ট্রি যোগ হয়েছে।');
+    }
+
+    /**
+     * Corrects the BDT amount already recorded on one historical 'charge'
+     * ledger row — a Super-Admin-only actual-charge adjustment, not the
+     * automatic daily-charge configuration (billing_rate/daily_budget are
+     * untouched by this action). {ledger} is a plain id, not an
+     * implicit-bound model — see the route comment in routes/web.php.
+     */
+    public function updateCharge(Request $request, Tenant $tenant, int $ledger)
+    {
+        $data = $request->validate([
+            'amount' => 'required|numeric|min:0.01',
+        ]);
+
+        $entry = AdBillingLedger::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->where('id', $ledger)
+            ->where('type', 'charge')
+            ->firstOrFail();
+
+        $this->service->correctChargeAmount($tenant->id, $entry->id, (float) $data['amount'], auth('super_admin')->id());
+
+        return back()->with('success', 'চার্জ এন্ট্রি সংশোধন করা হয়েছে।');
     }
 
     public function storeAdjustment(Request $request, Tenant $tenant)

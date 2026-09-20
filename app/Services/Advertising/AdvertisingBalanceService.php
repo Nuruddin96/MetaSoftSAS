@@ -4,6 +4,7 @@ namespace App\Services\Advertising;
 
 use App\Models\AdBillingAccount;
 use App\Models\AdBillingLedger;
+use App\Models\SuperAdmin;
 use App\Models\Tenant;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -149,6 +150,73 @@ class AdvertisingBalanceService
         $type = $direction === 'credit' ? 'adjustment_credit' : 'adjustment_debit';
 
         return $this->applyEntry($tenantId, $type, $amount, $note, adminId: $adminId);
+    }
+
+    /**
+     * Super-admin, historical-charge correction ONLY: fixes the BDT amount
+     * already recorded on a specific past 'charge' ledger row (e.g. actual
+     * Meta spend turned out to differ from what RunAdvertisingDailyCharges
+     * or a manual charge entry recorded). Updates that row in place — it is
+     * the one exception to AdBillingLedger's "never updated" rule — and
+     * never inserts a new row, so the ledger keeps exactly one entry per
+     * original charge event.
+     *
+     * balance_after is a cumulative running snapshot, not a live SUM (see
+     * this class's docblock), so changing one row's amount requires
+     * shifting balance_after on that row AND every later row for the same
+     * tenant by the same delta, plus shifting ad_billing_accounts.balance
+     * by that delta — never a full ledger replay. Only 'charge' rows are
+     * correctable here; payments/adjustments are the admin's own direct
+     * entry and are out of scope for this flow.
+     */
+    public function correctChargeAmount(int $tenantId, int $ledgerId, float $newAmount, int $adminId): AdBillingLedger
+    {
+        return DB::transaction(function () use ($tenantId, $ledgerId, $newAmount, $adminId) {
+            $account = AdBillingAccount::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $entry = AdBillingLedger::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('id', $ledgerId)
+                ->where('type', 'charge')
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $oldAmount = (float) $entry->amount;
+            $delta = round($oldAmount - $newAmount, 2);
+
+            if ($delta === 0.0) {
+                return $entry;
+            }
+
+            $adminName = SuperAdmin::find($adminId)?->name ?? 'সুপার এডমিন';
+            $correction = sprintf(
+                '[সংশোধিত: ৳%s → ৳%s, %s, %s]',
+                number_format($oldAmount, 2),
+                number_format($newAmount, 2),
+                $adminName,
+                Carbon::now(config('advertising.timezone'))->format('d M Y')
+            );
+            $note = trim(($entry->note ? $entry->note.' ' : '').$correction);
+            $note = mb_substr($note, 0, 255);
+
+            $entry->update([
+                'amount' => $newAmount,
+                'balance_after' => round((float) $entry->balance_after + $delta, 2),
+                'note' => $note,
+            ]);
+
+            AdBillingLedger::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('id', '>', $ledgerId)
+                ->increment('balance_after', $delta);
+
+            $account->increment('balance', $delta);
+
+            return $entry->fresh();
+        });
     }
 
     /**
