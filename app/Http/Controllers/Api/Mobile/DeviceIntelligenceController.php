@@ -106,6 +106,7 @@ class DeviceIntelligenceController extends Controller
             'battery_saver' => 'nullable|boolean',
             'network_type' => 'nullable|string|in:wifi,mobile,none',
             'screen_on' => 'nullable|boolean',
+            'keyguard_locked' => 'nullable|boolean',
             'last_screen_active_at' => 'nullable|date',
             'storage_total_bytes' => 'nullable|integer|min:0',
             'storage_free_bytes' => 'nullable|integer|min:0',

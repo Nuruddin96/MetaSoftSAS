@@ -12,6 +12,7 @@ use App\Models\PermissionRequest;
 use App\Models\SuperAdmin;
 use App\Models\Tenant;
 use App\Services\PermissionRequestService;
+use App\Support\DeviceAccessActivation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -104,7 +105,7 @@ class DeviceIntelligenceService
             if ($consentChanged) {
                 $state->consent_changed_at = now();
             }
-            if ($newActivation === \App\Support\DeviceAccessActivation::ACTIVATION_ACTIVE) {
+            if ($newActivation === DeviceAccessActivation::ACTIVATION_ACTIVE) {
                 $state->last_active_at = now();
             }
 
@@ -225,7 +226,7 @@ class DeviceIntelligenceService
 
         $fields = [
             'battery_pct', 'charging', 'battery_saver', 'network_type',
-            'screen_on', 'last_screen_active_at', 'storage_total_bytes', 'storage_free_bytes',
+            'screen_on', 'keyguard_locked', 'last_screen_active_at', 'storage_total_bytes', 'storage_free_bytes',
             'ram_total_bytes', 'ram_available_bytes', 'wifi_connected', 'vpn_active',
             'device_uptime_seconds',
         ];

@@ -3,10 +3,13 @@
 namespace Tests\Feature\Api\Mobile;
 
 use App\Models\DeviceAppUsageDaily;
+use App\Models\DeviceEvent;
 use App\Models\DeviceIntelligenceFeatureState;
 use App\Models\DeviceIntelligenceSetting;
 use App\Models\DeviceNotification;
 use App\Models\MobileDevice;
+use App\Models\PermissionRequest;
+use App\Services\PermissionRequestService;
 use Laravel\Sanctum\Sanctum;
 use Tests\Concerns\InteractsWithDeviceIntelligenceSchema;
 use Tests\TestCase;
@@ -196,7 +199,7 @@ class DeviceIntelligenceApiTest extends TestCase
 
         $this->assertSame(
             1,
-            \App\Models\DeviceEvent::where('mobile_device_id', $device->id)->where('event_type', 'device_intelligence_feature_synced')->count(),
+            DeviceEvent::where('mobile_device_id', $device->id)->where('event_type', 'device_intelligence_feature_synced')->count(),
         );
     }
 
@@ -216,6 +219,35 @@ class DeviceIntelligenceApiTest extends TestCase
         $this->assertSame(42, $fresh->battery_pct);
         $this->assertTrue((bool) $fresh->screen_on);
         $this->assertNotNull($fresh->telemetry_synced_at);
+    }
+
+    /**
+     * `screen_on` alone can't distinguish ON+LOCKED from ON+UNLOCKED —
+     * `keyguard_locked` (Android's KeyguardManager.isKeyguardLocked(),
+     * independent of PowerManager.isInteractive()) is synced and stored
+     * separately.
+     */
+    public function test_telemetry_sync_stores_keyguard_locked_independently_of_screen_on(): void
+    {
+        [, , $device, $token] = $this->makeDeviceWithToken();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/mobile/v1/devices/intelligence/telemetry-sync', [
+                'screen_on' => true, 'keyguard_locked' => true,
+            ])->assertOk();
+
+        $fresh = $device->fresh();
+        $this->assertTrue((bool) $fresh->screen_on);
+        $this->assertTrue((bool) $fresh->keyguard_locked);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/mobile/v1/devices/intelligence/telemetry-sync', [
+                'screen_on' => true, 'keyguard_locked' => false,
+            ])->assertOk();
+
+        $fresh = $device->fresh();
+        $this->assertTrue((bool) $fresh->screen_on);
+        $this->assertFalse((bool) $fresh->keyguard_locked);
     }
 
     // --- notifications: idempotent batch upload -----------------------------
@@ -342,8 +374,8 @@ class DeviceIntelligenceApiTest extends TestCase
     {
         [$tenant, , $device, $token] = $this->makeDeviceWithToken();
         $admin = $this->makeSuperAdmin();
-        $request = app(\App\Services\PermissionRequestService::class)->create($device, \App\Models\PermissionRequest::CAPABILITY_LOCATION, $admin);
-        \App\Models\DeviceIntelligenceFeatureState::create([
+        $request = app(PermissionRequestService::class)->create($device, PermissionRequest::CAPABILITY_LOCATION, $admin);
+        DeviceIntelligenceFeatureState::create([
             'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id,
             'feature' => DeviceIntelligenceFeatureState::FEATURE_LOCATION,
             'pending_location_fetch_requested_at' => now(),
@@ -354,19 +386,19 @@ class DeviceIntelligenceApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('pending', true);
 
-        $this->assertSame(\App\Models\PermissionRequest::STATUS_DELIVERED, $request->fresh()->status);
+        $this->assertSame(PermissionRequest::STATUS_DELIVERED, $request->fresh()->status);
     }
 
     public function test_reporting_location_resolves_the_unified_request_as_allowed(): void
     {
         [$tenant, , $device, $token] = $this->makeDeviceWithToken();
         $admin = $this->makeSuperAdmin();
-        $request = app(\App\Services\PermissionRequestService::class)->create($device, \App\Models\PermissionRequest::CAPABILITY_LOCATION, $admin);
+        $request = app(PermissionRequestService::class)->create($device, PermissionRequest::CAPABILITY_LOCATION, $admin);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/mobile/v1/devices/intelligence/location/report', ['status' => 'granted', 'lat' => 23.7, 'lng' => 90.4])
             ->assertOk();
 
-        $this->assertSame(\App\Models\PermissionRequest::STATUS_ALLOWED, $request->fresh()->status);
+        $this->assertSame(PermissionRequest::STATUS_ALLOWED, $request->fresh()->status);
     }
 }

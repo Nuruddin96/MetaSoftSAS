@@ -26,6 +26,7 @@ trait InteractsWithDeviceIntelligenceSchema
             Schema::table('mobile_devices', function (Blueprint $table) {
                 $table->boolean('battery_saver')->nullable();
                 $table->boolean('screen_on')->nullable();
+                $table->boolean('keyguard_locked')->nullable();
                 $table->timestamp('last_screen_active_at')->nullable();
                 $table->unsignedBigInteger('storage_total_bytes')->nullable();
                 $table->unsignedBigInteger('storage_free_bytes')->nullable();

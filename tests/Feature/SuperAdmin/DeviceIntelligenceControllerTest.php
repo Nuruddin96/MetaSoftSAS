@@ -7,6 +7,8 @@ use App\Models\DeviceIntelligenceFeatureState;
 use App\Models\DeviceIntelligenceSetting;
 use App\Models\DeviceNotification;
 use App\Models\MobileDevice;
+use App\Models\PermissionRequest;
+use App\Models\RemoteSupportSetting;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Tests\Concerns\InteractsWithDeviceIntelligenceSchema;
 use Tests\TestCase;
@@ -64,12 +66,12 @@ class DeviceIntelligenceControllerTest extends TestCase
     {
         $admin = $this->makeSuperAdmin();
         $tenant = $this->makeTenant();
-        \App\Models\RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
 
         $this->actingAs($admin, 'super_admin')
             ->post(route('super.device-intelligence.toggle', $tenant), ['enabled' => '1']);
 
-        $this->assertTrue((bool) \App\Models\RemoteSupportSetting::where('tenant_id', $tenant->id)->first()->enabled);
+        $this->assertTrue((bool) RemoteSupportSetting::where('tenant_id', $tenant->id)->first()->enabled);
     }
 
     public function test_device_overview_tab_shows_activation_badges(): void
@@ -241,7 +243,7 @@ class DeviceIntelligenceControllerTest extends TestCase
         $user = $this->makeUser($tenant->id);
         $device = $this->makeDevice($tenant->id, $user->id, [
             'battery_pct' => 42, 'charging' => false, 'battery_saver' => true,
-            'screen_on' => true, 'last_screen_active_at' => now()->subMinutes(5),
+            'screen_on' => true, 'keyguard_locked' => false, 'last_screen_active_at' => now()->subMinutes(5),
             'storage_total_bytes' => 64_000_000_000, 'storage_free_bytes' => 12_000_000_000,
             'ram_total_bytes' => 4_000_000_000, 'ram_available_bytes' => 900_000_000,
             'network_type' => 'wifi', 'vpn_active' => false,
@@ -258,6 +260,56 @@ class DeviceIntelligenceControllerTest extends TestCase
                 ->get(route('super.device-intelligence.devices.show', [$tenant, $device]).'?tab='.$tab);
             $response->assertOk();
         }
+    }
+
+    /**
+     * `screen_on` alone renders only চালু/বন্ধ (on/off) — with
+     * `keyguard_locked` also known, both the device page and the tenant's
+     * device list must show the finer লকড/আনলকড (locked/unlocked)
+     * distinction instead.
+     */
+    public function test_screen_state_shows_locked_and_unlocked_distinctly_when_keyguard_locked_is_known(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $lockedDevice = $this->makeDevice($tenant->id, $user->id, ['screen_on' => true, 'keyguard_locked' => true]);
+        $unlockedDevice = $this->makeDevice($tenant->id, $user->id, ['screen_on' => true, 'keyguard_locked' => false]);
+        $unknownDevice = $this->makeDevice($tenant->id, $user->id, ['screen_on' => true, 'keyguard_locked' => null]);
+        $offDevice = $this->makeDevice($tenant->id, $user->id, ['screen_on' => false, 'keyguard_locked' => true]);
+
+        $show = $this->actingAs($admin, 'super_admin')->get(route('super.device-intelligence.show', $tenant));
+        $show->assertOk();
+        $show->assertSee('চালু (লকড)');
+        $show->assertSee('চালু (আনলকড)');
+        // The off device must still read as plain বন্ধ, not "locked" —
+        // keyguard state is meaningless once the screen itself is off.
+        $show->assertSee('বন্ধ');
+
+        $this->actingAs($admin, 'super_admin')
+            ->get(route('super.device-intelligence.devices.show', [$tenant, $lockedDevice]).'?tab=network')
+            ->assertOk()
+            ->assertSee('চালু (লকড)');
+
+        $this->actingAs($admin, 'super_admin')
+            ->get(route('super.device-intelligence.devices.show', [$tenant, $unlockedDevice]).'?tab=network')
+            ->assertOk()
+            ->assertSee('চালু (আনলকড)');
+
+        // Unknown keyguard state (older app build never sent it) must still
+        // fall back to the plain চালু label, never a false locked/unlocked claim.
+        $this->actingAs($admin, 'super_admin')
+            ->get(route('super.device-intelligence.devices.show', [$tenant, $unknownDevice]).'?tab=network')
+            ->assertOk()
+            ->assertDontSee('চালু (লকড)')
+            ->assertDontSee('চালু (আনলকড)')
+            ->assertSee('চালু');
+
+        $this->actingAs($admin, 'super_admin')
+            ->get(route('super.device-intelligence.devices.show', [$tenant, $offDevice]).'?tab=network')
+            ->assertOk()
+            ->assertDontSee('চালু')
+            ->assertSee('বন্ধ');
     }
 
     /** Tenant isolation: Tenant A's admin cannot reach Tenant B's device via this route. */
@@ -306,7 +358,7 @@ class DeviceIntelligenceControllerTest extends TestCase
         $this->assertDatabaseHas('permission_requests', [
             'mobile_device_id' => $device->id,
             'capability' => 'location',
-            'status' => \App\Models\PermissionRequest::STATUS_SENT,
+            'status' => PermissionRequest::STATUS_SENT,
         ]);
     }
 

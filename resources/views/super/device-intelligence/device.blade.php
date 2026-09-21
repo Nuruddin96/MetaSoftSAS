@@ -36,6 +36,17 @@
         'history' => 'History',
     ];
     $bytesToMb = fn ($b) => $b === null ? '—' : number_format($b / 1048576, 0).' MB';
+    // screen_on alone can't tell ON+LOCKED from ON+UNLOCKED — keyguard_locked
+    // (Android's KeyguardManager.isKeyguardLocked(), independent of
+    // PowerManager.isInteractive()) is reported separately and only
+    // meaningful once the screen itself is on.
+    $screenLabel = fn ($screenOn, $locked) => match (true) {
+        $screenOn === null => '—',
+        ! $screenOn => 'বন্ধ',
+        $locked === null => 'চালু',
+        (bool) $locked => 'চালু (লকড)',
+        default => 'চালু (আনলকড)',
+    };
 @endphp
 
 <a href="{{ route('super.device-intelligence.show', $tenant) }}" class="text-mute text-sm hover:underline">← {{ $tenant->store_name }}</a>
@@ -240,7 +251,7 @@
     <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">নেটওয়ার্ক</p><p class="font-medium mt-1">{{ $device->network_type ?? '—' }}</p></div>
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">VPN</p><p class="font-medium mt-1">{{ $device->vpn_active === null ? '—' : ($device->vpn_active ? 'সক্রিয়' : 'নিষ্ক্রিয়') }}</p></div>
-        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">স্ক্রিন</p><p class="font-medium mt-1">{{ $device->screen_on === null ? '—' : ($device->screen_on ? 'চালু' : 'বন্ধ') }}</p></div>
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">স্ক্রিন</p><p class="font-medium mt-1">{{ $screenLabel($device->screen_on, $device->keyguard_locked) }}</p></div>
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">শেষ স্ক্রিন সক্রিয়</p><p class="font-medium mt-1">{{ $device->last_screen_active_at?->diffForHumans() ?? '—' }}</p></div>
     </div>
 @endif
@@ -249,7 +260,7 @@
     <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">ব্যাটারি</p><p class="font-medium mt-1">{{ $device->battery_pct !== null ? $device->battery_pct.'%' : '—' }}{{ $device->charging ? ' ⚡ চার্জ হচ্ছে' : '' }}</p></div>
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">ব্যাটারি সেভার</p><p class="font-medium mt-1">{{ $device->battery_saver === null ? '—' : ($device->battery_saver ? 'চালু' : 'বন্ধ') }}</p></div>
-        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">স্ক্রিন</p><p class="font-medium mt-1">{{ $device->screen_on === null ? '—' : ($device->screen_on ? 'চালু' : 'বন্ধ') }}</p></div>
+        <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">স্ক্রিন</p><p class="font-medium mt-1">{{ $screenLabel($device->screen_on, $device->keyguard_locked) }}</p></div>
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">স্টোরেজ (মুক্ত / মোট)</p><p class="font-medium mt-1">{{ $bytesToMb($device->storage_free_bytes) }} / {{ $bytesToMb($device->storage_total_bytes) }}</p></div>
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">RAM (উপলব্ধ / মোট)</p><p class="font-medium mt-1">{{ $bytesToMb($device->ram_available_bytes) }} / {{ $bytesToMb($device->ram_total_bytes) }}</p></div>
         <div class="bg-white rounded-xl border border-ink/5 p-4"><p class="text-mute text-xs">নেটওয়ার্ক</p><p class="font-medium mt-1">{{ $device->network_type ?? '—' }} {{ $device->vpn_active ? '· VPN' : '' }}</p></div>

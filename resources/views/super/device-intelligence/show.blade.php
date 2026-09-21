@@ -22,6 +22,15 @@
         'device_health' => 'ডিভাইস স্বাস্থ্য',
         'location' => 'লোকেশন',
     ];
+    // See device.blade.php's own copy of this closure for the rationale
+    // (screen_on alone can't tell ON+LOCKED from ON+UNLOCKED).
+    $screenLabel = fn ($screenOn, $locked) => match (true) {
+        $screenOn === null => '—',
+        ! $screenOn => 'বন্ধ',
+        $locked === null => 'চালু',
+        (bool) $locked => 'চালু (লকড)',
+        default => 'চালু (আনলকড)',
+    };
 @endphp
 
 <a href="{{ route('super.device-intelligence.index') }}" class="text-mute text-sm hover:underline">← ডিভাইস ইন্টেলিজেন্স</a>
@@ -65,9 +74,7 @@
                 </td>
                 <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs {{ $cls }}">{{ $label }}</span></td>
                 <td class="px-4 py-3 text-mute text-xs">{{ $d->battery_pct !== null ? $d->battery_pct.'%'.($d->charging ? ' ⚡' : '') : '—' }}</td>
-                <td class="px-4 py-3 text-mute text-xs">
-                    @if ($d->screen_on === null) — @else {{ $d->screen_on ? 'চালু' : 'বন্ধ' }} @endif
-                </td>
+                <td class="px-4 py-3 text-mute text-xs">{{ $screenLabel($d->screen_on, $d->keyguard_locked) }}</td>
                 <td class="px-4 py-3">
                     <div class="flex flex-wrap gap-1">
                         @foreach (['notification_monitoring', 'app_usage'] as $feature)
