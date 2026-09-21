@@ -37,13 +37,28 @@
     confirmed via video.videoWidth/videoHeight matching the real device and
     connectionState 'connected' — the stream itself was never broken, only
     this container's sizing).
+
+    Camera used to live INSIDE this same box as a `w-32 h-24` absolutely
+    positioned corner overlay — confirmed live (2026-09-21, session 225)
+    that this makes an active camera nearly impossible to actually see
+    next to the screen. It's now its own sibling box, hidden until camera
+    is actually present, toggled between the SAME "solo, fills the row"
+    shape as this box (`w-full`, no forced aspect) and a "paired with
+    screen" shape (`aspect-[9/16]`, width derived from the shared height)
+    — see updateViewerLayout() below, which is the only thing that ever
+    changes either box's classes/style. Screen-only behavior (this box's
+    own classes/style below) is never touched by that toggle.
 --}}
-<div class="bg-black rounded-xl overflow-hidden relative flex items-center justify-center mx-auto"
-     style="width: 100%; height: clamp(240px, calc(100vh - 320px), 900px);">
-    <video id="remoteVideo" autoplay playsinline class="max-w-full max-h-full object-contain"></video>
-    <p id="waitingNote" class="text-white/50 text-sm absolute">ডিভাইসের স্ক্রিন ক্যাপচার অনুমতির জন্য অপেক্ষা করা হচ্ছে…</p>
-    <video id="cameraVideo" autoplay playsinline muted
-           class="hidden absolute bottom-3 right-3 w-32 h-24 rounded-lg border-2 border-white/40 object-cover bg-black"></video>
+<div id="viewersWrap" class="flex flex-col lg:flex-row gap-3 justify-center">
+    <div id="screenViewerBox" class="w-full bg-black rounded-xl overflow-hidden relative flex items-center justify-center mx-auto"
+         style="height: clamp(240px, calc(100vh - 320px), 900px);">
+        <video id="remoteVideo" autoplay playsinline class="max-w-full max-h-full object-contain"></video>
+        <p id="waitingNote" class="text-white/50 text-sm absolute">ডিভাইসের স্ক্রিন ক্যাপচার অনুমতির জন্য অপেক্ষা করা হচ্ছে…</p>
+    </div>
+    <div id="cameraViewerBox" class="hidden bg-black rounded-xl overflow-hidden relative flex items-center justify-center mx-auto"
+         style="height: clamp(240px, calc(100vh - 320px), 900px);">
+        <video id="cameraVideo" autoplay playsinline muted class="max-w-full max-h-full object-contain"></video>
+    </div>
     <audio id="remoteAudio" autoplay class="hidden"></audio>
 </div>
 
@@ -121,6 +136,51 @@
     const connStatus = document.getElementById('connStatus');
     const stopBtn = document.getElementById('stopBtn');
     const reconnectBtn = document.getElementById('reconnectBtn');
+    const screenBox = document.getElementById('screenViewerBox');
+    const cameraBox = document.getElementById('cameraViewerBox');
+
+    // Shared by both boxes so a paired screen+camera layout always gives
+    // them equal, matching height — only the width-vs-aspect-ratio class
+    // differs between "solo" (fills the row) and "paired" (9:16, width
+    // derived from this same height).
+    const VIEWER_BOX_HEIGHT_STYLE = 'height: clamp(240px, calc(100vh - 320px), 900px);';
+
+    /** Anything other than 'off'/'stopped' means the capability's box should be visible. */
+    function isCapabilityPresent(capability) {
+        const key = tileEls(capability).state?.dataset.stateKey;
+        return !!key && key !== 'off' && key !== 'stopped';
+    }
+
+    /**
+     * The only place either viewer box's classes/style are ever set.
+     * Screen-only stays byte-for-byte the original solo shape (`w-full`,
+     * no aspect-ratio — see the box's own doc comment above for why a
+     * forced aspect ratio is wrong there). The moment camera is ALSO
+     * present, both boxes switch to matching `aspect-[9/16]` boxes (width
+     * derived from the shared height above) so they sit as two equal
+     * large portrait viewers — side by side on `lg:flex-row`, stacked on
+     * the default `flex-col` — never touching the existing WebRTC
+     * tracks/elements, purely a class/style toggle on their containers.
+     */
+    function updateViewerLayout() {
+        const screenPresent = isCapabilityPresent('screen');
+        const cameraPresent = isCapabilityPresent('camera');
+        const paired = screenPresent && cameraPresent;
+
+        screenBox.classList.toggle('hidden', !screenPresent);
+        screenBox.classList.toggle('w-full', !paired);
+        screenBox.classList.toggle('aspect-[9/16]', paired);
+        screenBox.setAttribute('style', VIEWER_BOX_HEIGHT_STYLE);
+
+        cameraBox.classList.toggle('hidden', !cameraPresent);
+        if (cameraPresent) {
+            // Camera alone (screen not present) is just as large as the
+            // paired case — same box shape either way.
+            cameraBox.classList.add('aspect-[9/16]');
+            cameraBox.classList.remove('w-full');
+            cameraBox.setAttribute('style', VIEWER_BOX_HEIGHT_STYLE);
+        }
+    }
 
     const CAPABILITY_LABELS = { screen: '🎥 Screen', camera: '📷 Camera', microphone: '🎙 Microphone', device_audio: '🔊 Device Audio' };
     const STATE_LABELS_BN = {
@@ -181,6 +241,13 @@
         if (button && !button.classList.contains('hidden')) {
             button.textContent = ['starting', 'active'].includes(state) ? 'বন্ধ করুন' : 'চালু করুন';
         }
+        // Screen/camera box layout (solo vs. paired 9:16) is entirely
+        // driven by these two capabilities' own state — recompute on
+        // every transition rather than scattering calls at each of this
+        // function's call sites (ontrack, capability-status signals, the
+        // initial per-capability loop, and connectionstatechange's badge
+        // restore all already call this).
+        if (capability === 'screen' || capability === 'camera') updateViewerLayout();
     }
 
     /**
@@ -275,7 +342,6 @@
                     secondVideoTileAssigned = true;
                 } else {
                     cameraVideo.srcObject = event.streams[0];
-                    cameraVideo.classList.remove('hidden');
                 }
                 setCapabilityState(capability, 'active');
             } else if (track.kind === 'audio') {
