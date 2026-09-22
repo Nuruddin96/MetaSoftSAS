@@ -311,6 +311,27 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
             $this->sendProductImageAttachmentOnly($imageResolution->image, $tenant, $waId, $whatsapp);
         }
 
+        // "pic den" / "ছবি দেন" — WhatsApp counterpart of
+        // ProcessAiAgentMessage's photo-request fallback; see that
+        // method's docblock for the full reasoning (deterministic,
+        // zero-AI-cost, only fires on an unambiguous product match with a
+        // real image on file). Only runs when the memory-based resolution
+        // above found nothing ($imageResolution->isNone()) — a memory
+        // match always takes priority.
+        if ($imageResolution->isNone() && $this->isPhotoRequest((string) $message->message_text)) {
+            $sent = $this->maybeSendProductImage(
+                $products,
+                [...array_column($history, 'content'), (string) $message->message_text],
+                $tenant,
+                $waId,
+                $whatsapp
+            );
+
+            if ($sent !== null) {
+                return $sent;
+            }
+        }
+
         // Phase 7 — real historical human-written WhatsApp replies for this
         // tenant, same "sent_by='human' only" guarantee Messenger's style
         // learning already relies on — see
@@ -672,6 +693,75 @@ class ProcessWhatsAppAiAgentMessage implements ShouldQueue
 
         if (! $sendResult->successful) {
             Log::warning('WhatsApp AI agent job: saved product-image WhatsApp send failed.', [
+                'tenant_id' => $this->tenantId,
+                'error_code' => $sendResult->errorCode,
+            ]);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Deterministic, bilingual keyword check for "send me a photo" —
+     * WhatsApp counterpart of ProcessAiAgentMessage::isPhotoRequest(),
+     * kept as an identical copy per this file's existing "own full
+     * parallel implementation, never a shared base class" convention (see
+     * class doc comment). Cheap and bounded like
+     * AiHandoffService::customerRequestedHuman(), never an AI decision —
+     * a false positive here just means
+     * AiProductKnowledgeService::currentProduct() gets called for no
+     * reason (cheap, no AI cost) and, if nothing resolves, falls through
+     * to the normal reply unaffected; a false negative just means the
+     * request falls through to the normal AI reply instead, which is
+     * always safe.
+     */
+    protected function isPhotoRequest(string $text): bool
+    {
+        if ($text === '') {
+            return false;
+        }
+
+        if (str_contains($text, 'ছবি')) {
+            return true;
+        }
+
+        return (bool) preg_match('/\b(pic|pics|picture|pictures|photo|photos|image|images|chobi|chhobi)\b/iu', $text);
+    }
+
+    /**
+     * Resolves the product currently being discussed and, if it has a
+     * real image, sends it directly via WhatsAppSendService::sendMedia()
+     * — entirely bypassing OpenAI, same zero-extra-cost short-circuit
+     * pattern as a confident "AI মেমোরী" audio match. WhatsApp
+     * counterpart of ProcessAiAgentMessage::maybeSendProductImage(); see
+     * process()'s own doc comment for why this only ever runs as a
+     * fallback when AiProductImageMemoryService::resolve() found nothing.
+     * Unlike the Messenger version, no outbound token to resolve and no
+     * manual WhatsAppMessage row to create — sendMedia() persists its own
+     * outbound row itself (success or failure), same rule every other
+     * WhatsApp send in this class already follows.
+     *
+     * @return bool|null null means "not resolved, fall through to the
+     *                    normal AI reply" (ambiguous product, no product found, or the
+     *                    product has no image on file) — the caller must NOT treat null as
+     *                    failure, only as "nothing to short-circuit here."
+     */
+    protected function maybeSendProductImage(AiProductKnowledgeService $products, array $conversationTexts, Tenant $tenant, string $waId, WhatsAppSendService $whatsapp): ?bool
+    {
+        $product = $products->currentProduct($this->tenantId, $conversationTexts);
+
+        if (! $product || ! $product['image_url']) {
+            return null;
+        }
+
+        $this->humanDelay();
+
+        $sendResult = $whatsapp->sendMedia($tenant, $waId, 'image', $product['image_url'], sentBy: 'ai');
+
+        if (! $sendResult->successful) {
+            Log::warning('WhatsApp AI agent job: product image WhatsApp send failed.', [
                 'tenant_id' => $this->tenantId,
                 'error_code' => $sendResult->errorCode,
             ]);
