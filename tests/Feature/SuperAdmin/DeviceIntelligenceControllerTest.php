@@ -166,13 +166,18 @@ class DeviceIntelligenceControllerTest extends TestCase
         $tenant = $this->makeTenant();
         $user = $this->makeUser($tenant->id);
         $device = $this->makeDevice($tenant->id, $user->id);
+        // posted_at is stored as a genuine UTC instant in production (see
+        // DeviceNotification's own doc comment) — ->utc() here keeps this
+        // fixture honest about that instead of a bare now(), which would
+        // silently store today's Dhaka wall-clock time mislabeled as if it
+        // were the raw UTC literal.
         DeviceNotification::create([
             'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'client_notification_key' => 'k1',
-            'package_name' => 'com.whatsapp', 'sender' => 'Today Sender', 'posted_at' => now(),
+            'package_name' => 'com.whatsapp', 'sender' => 'Today Sender', 'posted_at' => now()->utc(),
         ]);
         DeviceNotification::create([
             'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'client_notification_key' => 'k2',
-            'package_name' => 'com.whatsapp', 'sender' => 'Old Sender', 'posted_at' => now()->subDays(10),
+            'package_name' => 'com.whatsapp', 'sender' => 'Old Sender', 'posted_at' => now()->subDays(10)->utc(),
         ]);
 
         $response = $this->actingAs($admin, 'super_admin')
@@ -181,6 +186,56 @@ class DeviceIntelligenceControllerTest extends TestCase
         $response->assertOk();
         $response->assertSee('Today Sender');
         $response->assertDontSee('Old Sender');
+    }
+
+    /**
+     * Regression guard for the date-boundary bug: `posted_at` is stored as
+     * an absolute UTC instant, so a notification posted late at night
+     * Dhaka time can carry the SAME UTC calendar date as one posted just
+     * after the following Dhaka midnight — the exact case the old
+     * `whereDate('posted_at', '=', $todayDhakaDateString)` got wrong,
+     * since it compared against the raw UTC literal's own date part
+     * instead of the intended Dhaka calendar day.
+     */
+    public function test_notifications_tab_today_preset_uses_the_dhaka_calendar_day_not_the_utc_one(): void
+    {
+        // Freezes "now" so the controller's own now()->toDateString() call
+        // deterministically resolves to Dhaka "today" = 2026-09-22,
+        // regardless of what real-world hour the test suite happens to run at.
+        $this->travelTo(\Carbon\Carbon::create(2026, 9, 22, 23, 45, 0, 'Asia/Dhaka'));
+
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id);
+
+        // 2026-09-22 23:30 Dhaka == 2026-09-22 17:30 UTC — genuinely
+        // Dhaka "today".
+        DeviceNotification::create([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'client_notification_key' => 'near-midnight-dhaka',
+            'package_name' => 'com.whatsapp', 'sender' => 'Late Night Sender',
+            'posted_at' => \Carbon\Carbon::create(2026, 9, 22, 23, 30, 0, 'Asia/Dhaka')->utc(),
+        ]);
+
+        // 2026-09-23 00:30 Dhaka == 2026-09-22 18:30 UTC — already Dhaka
+        // "tomorrow", but its UTC calendar DATE is still "22", identical to
+        // the fixture above: exactly what made the old whereDate()-based
+        // filter wrongly include a Dhaka-tomorrow notification inside a
+        // Dhaka-"today" filter.
+        DeviceNotification::create([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'client_notification_key' => 'just-after-dhaka-midnight',
+            'package_name' => 'com.whatsapp', 'sender' => 'Just After Midnight Sender',
+            'posted_at' => \Carbon\Carbon::create(2026, 9, 23, 0, 30, 0, 'Asia/Dhaka')->utc(),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')
+            ->get(route('super.device-intelligence.devices.show', [$tenant, $device]).'?tab=notifications&range=today');
+
+        $response->assertOk();
+        $response->assertSee('Late Night Sender');
+        $response->assertDontSee('Just After Midnight Sender');
+
+        $this->travelBack();
     }
 
     public function test_notifications_tab_shows_the_access_consent_and_feature_status_strip(): void

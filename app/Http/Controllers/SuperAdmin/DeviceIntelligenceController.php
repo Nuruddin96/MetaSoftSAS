@@ -146,8 +146,8 @@ class DeviceIntelligenceController extends Controller
                     }
                 })
                 ->when($request->sender, fn ($q) => $q->where('sender', 'like', '%'.$request->sender.'%'))
-                ->when($rangeFrom, fn ($q) => $q->whereDate('posted_at', '>=', $rangeFrom))
-                ->when($rangeTo, fn ($q) => $q->whereDate('posted_at', '<=', $rangeTo))
+                ->when($rangeFrom, fn ($q) => $q->where('posted_at', '>=', $rangeFrom))
+                ->when($rangeTo, fn ($q) => $q->where('posted_at', '<', $rangeTo))
                 ->when($request->q, fn ($q) => $q->where(function ($q2) use ($request) {
                     $q2->where('title', 'like', '%'.$request->q.'%')
                         ->orWhere('body', 'like', '%'.$request->q.'%')
@@ -253,23 +253,44 @@ class DeviceIntelligenceController extends Controller
      * `date_from`/`date_to` pair, never both silently mixed: an explicit
      * pair always wins over a preset if somehow both are present.
      *
-     * @return array{0: ?string, 1: ?string} [from, to] as Y-m-d strings, or [null, null] for "all time"
+     * `DeviceNotification::posted_at` is stored as an absolute UTC instant
+     * (see that model's own doc comment), while every boundary here is a
+     * Y-m-d `app.timezone` (Asia/Dhaka) CALENDAR date — what an Admin
+     * viewing this page actually means by "today". Returns UTC instant
+     * boundaries, not bare date strings: the caller must compare against
+     * `posted_at` with `>=`/`<` (an exclusive upper bound covering the
+     * whole requested end day), never `whereDate()`, which reads only the
+     * raw UTC literal's own date part and drifts up to ~6 hours off the
+     * intended Dhaka day boundary — silently dropping/including
+     * notifications posted near local midnight.
+     *
+     * @return array{0: ?\Illuminate\Support\Carbon, 1: ?\Illuminate\Support\Carbon} [from, toExclusive], or [null, null] for "all time"
      */
     private function resolveDateRange(?string $range, ?string $dateFrom, ?string $dateTo): array
     {
         if ($dateFrom || $dateTo) {
-            return [$dateFrom, $dateTo];
+            return [
+                $dateFrom ? $this->dhakaDayStartUtc($dateFrom) : null,
+                $dateTo ? $this->dhakaDayStartUtc($dateTo)->addDay() : null,
+            ];
         }
 
         $today = now()->toDateString();
+        $yesterday = now()->subDay()->toDateString();
 
         return match ($range) {
-            'today' => [$today, $today],
-            'yesterday' => [now()->subDay()->toDateString(), now()->subDay()->toDateString()],
-            '7d' => [now()->subDays(6)->toDateString(), $today],
-            '30d' => [now()->subDays(29)->toDateString(), $today],
+            'today' => [$this->dhakaDayStartUtc($today), $this->dhakaDayStartUtc($today)->addDay()],
+            'yesterday' => [$this->dhakaDayStartUtc($yesterday), $this->dhakaDayStartUtc($yesterday)->addDay()],
+            '7d' => [$this->dhakaDayStartUtc(now()->subDays(6)->toDateString()), $this->dhakaDayStartUtc($today)->addDay()],
+            '30d' => [$this->dhakaDayStartUtc(now()->subDays(29)->toDateString()), $this->dhakaDayStartUtc($today)->addDay()],
             default => [null, null],
         };
+    }
+
+    /** Midnight of the given Y-m-d date in `app.timezone`, converted to UTC — the actual instant `posted_at`'s stored UTC literal must be compared against. */
+    private function dhakaDayStartUtc(string $ymd): \Illuminate\Support\Carbon
+    {
+        return \Illuminate\Support\Carbon::parse($ymd, config('app.timezone'))->startOfDay()->utc();
     }
 
     private function devicesFor(Tenant $tenant)
