@@ -374,6 +374,31 @@ class ProcessAiAgentMessage implements ShouldQueue
             $this->sendProductImageAttachmentOnly($imageResolution->image, $psid, $api);
         }
 
+        // "pic den" / "ছবি দেন" — a deterministic, zero-AI-cost fallback
+        // for when no admin-curated Product Image Memory matched
+        // ($imageResolution->isNone()): catches an explicit photo request
+        // and sends whatever image the product CURRENTLY being discussed
+        // has on file, via the catalog rather than a saved memory. Only
+        // fires when that product is unambiguously resolved (see
+        // AiProductKnowledgeService::currentProduct()'s docblock — it
+        // returns null on genuine ambiguity, never a guess) AND actually
+        // has an image; any other case falls through to the normal AI
+        // reply below, which already knows (via the system prompt) to
+        // answer honestly rather than claim a photo was sent. A memory
+        // match above always takes priority over this fallback.
+        if ($imageResolution->isNone() && $this->isPhotoRequest((string) $message->message_text)) {
+            $sent = $this->maybeSendProductImage(
+                $products,
+                [...array_column($history, 'content'), (string) $message->message_text],
+                $psid,
+                $api
+            );
+
+            if ($sent !== null) {
+                return $sent;
+            }
+        }
+
         $styleExamples = $style->messengerStyleExamples($this->tenantId);
         // Same "not just this row" resolution MessengerInboxController
         // already relies on — a name resolved on an earlier message in
@@ -915,6 +940,97 @@ class ProcessAiAgentMessage implements ShouldQueue
             'mid' => $sendResult['message_id'] ?? null,
             'message_text' => null,
             'attachment_url' => $url,
+            'attachment_type' => 'image',
+            'direction' => 'out',
+            'status' => 'contacted',
+        ];
+
+        if (MessengerMessage::sentByColumnReady()) {
+            $attributes['sent_by'] = 'ai';
+        }
+
+        MessengerMessage::withoutGlobalScopes()->create($attributes);
+
+        return true;
+    }
+
+    /**
+     * Deterministic, bilingual keyword check for "send me a photo" —
+     * cheap and bounded like AiHandoffService::customerRequestedHuman(),
+     * never an AI decision. Deliberately loose (word-boundary match on a
+     * handful of common English/Banglish/Bengali words for "picture") —
+     * a false positive here just means AiProductKnowledgeService::
+     * currentProduct() gets called for no reason (cheap, no AI cost) and,
+     * if nothing resolves, falls through to the normal reply unaffected;
+     * a false negative just means the request falls through to the
+     * normal AI reply instead, which is always safe.
+     */
+    protected function isPhotoRequest(string $text): bool
+    {
+        if ($text === '') {
+            return false;
+        }
+
+        if (str_contains($text, 'ছবি')) {
+            return true;
+        }
+
+        return (bool) preg_match('/\b(pic|pics|picture|pictures|photo|photos|image|images|chobi|chhobi)\b/iu', $text);
+    }
+
+    /**
+     * Resolves the product currently being discussed and, if it has a
+     * real image, sends it directly via the existing attachment-send path
+     * (same one sendAudioMemoryReply() below already uses) — entirely
+     * bypassing OpenAI, same zero-extra-cost short-circuit pattern as a
+     * confident "AI মেমোরী" audio match. See process()'s own doc comment
+     * for why this only ever runs as a fallback when
+     * AiProductImageMemoryService::resolve() found nothing.
+     *
+     * @return bool|null null means "not resolved, fall through to the
+     *                    normal AI reply" (ambiguous product, no product found, or the
+     *                    product has no image on file) — the caller must NOT treat null as
+     *                    failure, only as "nothing to short-circuit here."
+     */
+    protected function maybeSendProductImage(AiProductKnowledgeService $products, array $conversationTexts, string $psid, MessengerApi $api): ?bool
+    {
+        $product = $products->currentProduct($this->tenantId, $conversationTexts);
+
+        if (! $product || ! $product['image_url']) {
+            return null;
+        }
+
+        $token = $this->resolveOutboundToken($this->tenantId, $psid);
+
+        if (! $token) {
+            return null;
+        }
+
+        try {
+            $api->sendTypingOn($psid, $token);
+        } catch (\Throwable $e) {
+            // Purely cosmetic — never let a failure here block the actual send.
+        }
+
+        $this->humanDelay();
+
+        $sendResult = $api->sendAttachment($psid, $product['image_url'], 'image', $token);
+
+        if (isset($sendResult['error'])) {
+            Log::warning('AI agent job: product image Messenger send failed.', [
+                'tenant_id' => $this->tenantId,
+                'error_type' => $sendResult['error']['type'] ?? null,
+            ]);
+
+            return false;
+        }
+
+        $attributes = [
+            'tenant_id' => $this->tenantId,
+            'sender_psid' => $psid,
+            'mid' => $sendResult['message_id'] ?? null,
+            'message_text' => null,
+            'attachment_url' => $product['image_url'],
             'attachment_type' => 'image',
             'direction' => 'out',
             'status' => 'contacted',
