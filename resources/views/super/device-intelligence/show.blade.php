@@ -74,8 +74,8 @@
                 </td>
                 <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs {{ $cls }}">{{ $label }}</span></td>
                 <td class="px-4 py-3 text-xs">
-                    <span class="{{ $d->isHeartbeatFresh() ? 'text-mute' : 'text-mute/40' }}">{{ $d->battery_pct !== null ? $d->battery_pct.'%'.($d->charging ? ' ⚡' : '') : '—' }}</span>
-                    <span class="block text-mute/70 text-[10px]">{{ $d->isHeartbeatFresh() ? '' : 'পুরনো · ' }}{{ $d->last_seen_at?->diffForHumans() ?? '—' }}</span>
+                    <span class="text-mute {{ $d->isHeartbeatFresh() ? '' : 'opacity-40' }}">{{ $d->battery_pct !== null ? $d->battery_pct.'%'.($d->charging ? ' ⚡' : '') : '—' }}</span>
+                    <span class="block text-mute text-[10px]">{{ $d->isHeartbeatFresh() ? '' : 'পুরনো · ' }}{{ $d->last_seen_at?->diffForHumans() ?? '—' }}</span>
                 </td>
                 <td class="px-4 py-3 text-mute text-xs">{{ $screenLabel($d->screen_on, $d->keyguard_locked) }}</td>
                 <td class="px-4 py-3">
