@@ -74,11 +74,13 @@
         </div>
         <div class="bg-white rounded-xl border border-ink/5 p-4">
             <p class="text-mute text-xs">ব্যাটারি</p>
-            <p class="font-medium mt-1">{{ $device->battery_pct !== null ? $device->battery_pct.'%' : '—' }}{{ $device->charging ? ' ⚡' : '' }}</p>
+            <p class="font-medium mt-1 {{ $device->isHeartbeatFresh() ? '' : 'opacity-40' }}">{{ $device->battery_pct !== null ? $device->battery_pct.'%' : '—' }}{{ $device->charging ? ' ⚡' : '' }}</p>
+            <p class="text-mute text-[10px] mt-1">{{ $device->isHeartbeatFresh() ? 'সর্বশেষ হার্টবিট অনুযায়ী' : 'পুরনো হতে পারে' }} · {{ $device->last_seen_at?->diffForHumans() ?? '—' }}</p>
         </div>
         <div class="bg-white rounded-xl border border-ink/5 p-4">
             <p class="text-mute text-xs">নেটওয়ার্ক</p>
-            <p class="font-medium mt-1">{{ $device->network_type ?? '—' }}</p>
+            <p class="font-medium mt-1 {{ $device->isHeartbeatFresh() ? '' : 'opacity-40' }}">{{ $device->network_type ?? '—' }}</p>
+            <p class="text-mute text-[10px] mt-1">{{ $device->isHeartbeatFresh() ? 'সর্বশেষ হার্টবিট অনুযায়ী' : 'পুরনো হতে পারে' }} · {{ $device->last_seen_at?->diffForHumans() ?? '—' }}</p>
         </div>
     </div>
     <div class="mt-4 flex flex-wrap gap-2">
