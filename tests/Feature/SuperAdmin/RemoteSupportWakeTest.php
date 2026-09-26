@@ -4,6 +4,7 @@ namespace Tests\Feature\SuperAdmin;
 
 use App\Models\MobileDevice;
 use App\Models\RemoteSupportSetting;
+use App\Services\RemoteSupport\RemoteSupportService;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Http;
 use Tests\Concerns\InteractsWithRemoteSupportSchema;
@@ -118,7 +119,9 @@ class RemoteSupportWakeTest extends TestCase
         $user = $this->makeUser($tenant->id);
         $device = $this->makeDevice($tenant->id, $user->id, ['status' => 'off', 'fcm_token' => 'tok-123']);
 
-        // Deliberately leaves remote_support.fcm_project_id/fcm_service_account_path unset.
+        // Deliberately leaves remote_support.fcm_project_id/fcm_service_account_path
+        // unset, and clears the services.fcm fallback a local .env may carry.
+        config(['services.fcm.project_id' => null, 'services.fcm.service_account_json' => null]);
         $response = $this->actingAs($admin, 'super_admin')
             ->post(route('super.remote-support.devices.wake', [$tenant, $device]));
 
@@ -185,5 +188,35 @@ class RemoteSupportWakeTest extends TestCase
         $response->assertRedirect(route('super.remote-support.session.viewer', [
             $tenant, $device, $device->sessions()->latest('id')->first()->id,
         ]));
+    }
+
+    public function test_wake_falls_back_to_the_general_push_fcm_credentials_when_no_dedicated_file_is_configured(): void
+    {
+        config([
+            'remote_support.fcm_project_id' => null,
+            'remote_support.fcm_service_account_path' => null,
+            'services.fcm.project_id' => 'general-push-project',
+            'services.fcm.service_account_json' => json_encode([
+                'client_email' => 'test@example.iam.gserviceaccount.com',
+                'private_key' => self::TEST_ONLY_PRIVATE_KEY,
+                'token_uri' => 'https://oauth2.googleapis.com/token',
+            ]),
+        ]);
+        Http::fake([
+            'oauth2.googleapis.com/*' => Http::response(['access_token' => 'fake-token'], 200),
+            'fcm.googleapis.com/*' => Http::response(['name' => 'projects/test/messages/1'], 200),
+        ]);
+
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, ['fcm_token' => 'tok-123']);
+        $service = app(RemoteSupportService::class);
+
+        $this->assertTrue($service->isWakeConfigured());
+        $this->assertTrue($service->sendWakeSignal($device));
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/projects/general-push-project/messages:send')
+            && $request['message']['token'] === 'tok-123'
+            && $request['message']['data'] === ['type' => 'remote_support_wake']
+            && $request['message']['android'] === ['priority' => 'high']);
     }
 }

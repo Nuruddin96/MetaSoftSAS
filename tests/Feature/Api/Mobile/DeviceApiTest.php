@@ -213,6 +213,29 @@ class DeviceApiTest extends TestCase
         $this->assertNotNull($fresh->last_seen_at);
     }
 
+    public function test_fcm_token_is_stored_on_the_credentialed_device_only(): void
+    {
+        $tenant = $this->makeTenant();
+        RemoteSupportSetting::create(['tenant_id' => $tenant->id, 'enabled' => true]);
+        $user = $this->makeUser($tenant->id);
+        $token = $user->createToken('device:uuid-1', ['device:heartbeat']);
+        $device = MobileDevice::create([
+            'tenant_id' => $tenant->id, 'user_id' => $user->id, 'device_uuid' => 'uuid-1',
+            'status' => 'off', 'credential_token_id' => $token->accessToken->id,
+        ]);
+        // Same user, older install — must not receive this install's token.
+        $otherDevice = MobileDevice::create([
+            'tenant_id' => $tenant->id, 'user_id' => $user->id, 'device_uuid' => 'uuid-old', 'status' => 'off',
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken)
+            ->postJson('/api/mobile/v1/devices/fcm-token', ['fcm_token' => 'fcm-abc'])
+            ->assertOk();
+
+        $this->assertSame('fcm-abc', $device->fresh()->fcm_token);
+        $this->assertNull($otherDevice->fresh()->fcm_token);
+    }
+
     public function test_heartbeat_surfaces_a_pending_session_so_the_device_can_discover_it_without_push(): void
     {
         $tenant = $this->makeTenant();

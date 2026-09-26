@@ -821,9 +821,42 @@ class RemoteSupportService
      */
     public function isWakeConfigured(): bool
     {
-        $path = config('remote_support.fcm_service_account_path');
+        return (bool) $this->wakeProjectId() && $this->wakeServiceAccount() !== null;
+    }
 
-        return (bool) config('remote_support.fcm_project_id') && $path && is_file($path);
+    /**
+     * The dedicated remote_support.fcm_project_id if set, otherwise the
+     * app's existing general-push Firebase project (services.fcm — see
+     * FcmSendService) — the same Firebase project the app's
+     * google-services.json registers against, so the wake needs no second
+     * credential of its own.
+     */
+    private function wakeProjectId(): ?string
+    {
+        return config('remote_support.fcm_project_id') ?: config('services.fcm.project_id') ?: null;
+    }
+
+    /**
+     * The dedicated remote_support.fcm_service_account_path file if one is
+     * configured, otherwise services.fcm.service_account_json (the inline
+     * JSON FcmSendService already uses). Null unless it decodes to
+     * something carrying the two fields fetchFcmAccessToken() signs with.
+     *
+     * @return array{client_email:string,private_key:string,token_uri?:string}|null
+     */
+    private function wakeServiceAccount(): ?array
+    {
+        $path = config('remote_support.fcm_service_account_path');
+        $json = $path && is_file($path)
+            ? file_get_contents($path)
+            : config('services.fcm.service_account_json');
+
+        $decoded = $json ? json_decode($json, true) : null;
+        if (! is_array($decoded) || empty($decoded['client_email']) || empty($decoded['private_key'])) {
+            return null;
+        }
+
+        return $decoded;
     }
 
     /**
@@ -851,11 +884,10 @@ class RemoteSupportService
         }
 
         try {
-            $serviceAccount = json_decode(file_get_contents(config('remote_support.fcm_service_account_path')), true);
-            $accessToken = $this->fetchFcmAccessToken($serviceAccount);
+            $accessToken = $this->fetchFcmAccessToken($this->wakeServiceAccount());
 
             $response = Http::withToken($accessToken)
-                ->post('https://fcm.googleapis.com/v1/projects/'.config('remote_support.fcm_project_id').'/messages:send', [
+                ->post('https://fcm.googleapis.com/v1/projects/'.$this->wakeProjectId().'/messages:send', [
                     'message' => [
                         'token' => $device->fcm_token,
                         'data' => ['type' => 'remote_support_wake'],

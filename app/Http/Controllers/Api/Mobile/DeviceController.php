@@ -142,16 +142,13 @@ class DeviceController extends Controller
     }
 
     /**
-     * Remote Support FCM wake PROOF-OF-CONCEPT only — see
-     * RemoteSupportFcmService.kt (Android) and RemoteSupportTestWake
-     * (this side's manual test-send command). Stores the device's current
-     * FCM registration token so that command has something to target.
-     * Deliberately not called from anywhere in the existing Dart code yet
-     * (no automatic registration is wired up) — during this feasibility
-     * test the token is copied manually from logcat and posted here (or
-     * inserted directly) rather than the app calling this on its own.
-     * Reuses the same device-credential token/ability as heartbeat — no
-     * new Sanctum ability introduced for this proof-of-concept.
+     * Stores the device's current FCM registration token for the Remote
+     * Support wake (RemoteSupportService::sendWakeSignal()). Called by the
+     * Flutter app's SetupController each time Remote Support activates —
+     * authenticated by the device credential, so the token always lands on
+     * the exact mobile_devices row that credential belongs to (unlike
+     * device_push_tokens, which is keyed per user, not per device).
+     * Reuses the same device-credential token/ability as heartbeat.
      */
     public function updateFcmToken(Request $request)
     {
