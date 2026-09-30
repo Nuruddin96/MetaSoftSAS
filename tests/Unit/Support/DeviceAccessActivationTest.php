@@ -48,4 +48,24 @@ class DeviceAccessActivationTest extends TestCase
     {
         $this->assertSame(A::ACTIVATION_WAITING_FOR_ANDROID_ACCESS, A::compute(A::CONSENT_ENABLED, ['x' => A::ACCESS_RESTRICTED], ['x']));
     }
+
+    /**
+     * A required key the build/OS can't provide (`not_supported`, e.g.
+     * notification_listener on the `direct` APK flavor) is its own state,
+     * never `waiting_for_android_access` — there is no permission screen to
+     * send the tenant to. Independent of consent on either side.
+     */
+    public function test_not_supported_required_access_is_not_supported_regardless_of_consent(): void
+    {
+        $this->assertSame(A::ACTIVATION_NOT_SUPPORTED, A::compute(A::CONSENT_ENABLED, ['x' => A::ACCESS_NOT_SUPPORTED], ['x']));
+        $this->assertSame(A::ACTIVATION_NOT_SUPPORTED, A::compute(A::CONSENT_DISABLED, ['x' => A::ACCESS_NOT_SUPPORTED], ['x']));
+        $this->assertSame(A::ACTIVATION_NOT_SUPPORTED, A::compute(A::CONSENT_NOT_ASKED, ['x' => A::ACCESS_NOT_SUPPORTED], ['x']));
+    }
+
+    /** A build that CAN provide the access still reports the ordinary states — not_supported never leaks into a grantable device. */
+    public function test_granted_access_is_still_active_not_not_supported(): void
+    {
+        $this->assertSame(A::ACTIVATION_ACTIVE, A::compute(A::CONSENT_ENABLED, ['x' => A::ACCESS_GRANTED], ['x']));
+        $this->assertSame(A::ACTIVATION_WAITING_FOR_ANDROID_ACCESS, A::compute(A::CONSENT_ENABLED, ['x' => A::ACCESS_DENIED], ['x']));
+    }
 }

@@ -3,6 +3,8 @@
 namespace Tests\Feature\SuperAdmin;
 
 use App\Models\MobileDevice;
+use App\Models\PermissionRequest;
+use App\Models\RemoteSupportSession;
 use App\Models\RemoteSupportSetting;
 use App\Models\RemoteSupportSignal;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -321,7 +323,7 @@ class RemoteSupportControllerTest extends TestCase
             ->post(route('super.remote-support.session.start', [$tenant, $device]), ['include_microphone' => '1']);
 
         $this->assertDatabaseHas('permission_requests', [
-            'mobile_device_id' => $device->id, 'capability' => 'microphone', 'status' => \App\Models\PermissionRequest::STATUS_SENT,
+            'mobile_device_id' => $device->id, 'capability' => 'microphone', 'status' => PermissionRequest::STATUS_SENT,
         ]);
         // Camera/screen were NOT requested by this session — no row for them.
         $this->assertDatabaseMissing('permission_requests', ['mobile_device_id' => $device->id, 'capability' => 'camera']);
@@ -627,6 +629,9 @@ class RemoteSupportControllerTest extends TestCase
         // Screen: always present, real WebRTC track state driven client-side.
         $response->assertSee('স্ক্রিন');
         $response->assertSee('remoteVideo', escape: false);
+        // Read-only WebRTC connection-quality badge (sampled via getStats() only while connected).
+        $response->assertSee('id="connQuality"', escape: false);
+        $response->assertSee('stopQualitySampling', escape: false);
         // The URL is embedded via Blade's @json(), which escapes forward
         // slashes — match that same encoding rather than the raw route().
         $response->assertSee(
@@ -913,6 +918,49 @@ class RemoteSupportControllerTest extends TestCase
 
         $response->assertOk();
         $response->assertDontSee('Tenant B Device');
+    }
+
+    public function test_show_page_lists_recent_session_history_per_device(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, ['device_model' => 'Pixel 8']);
+        RemoteSupportSession::create([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'ended', 'session_token' => 'hist-1', 'include_screen' => true,
+            'started_at' => now()->subHour(), 'connected_at' => now()->subHour()->addSeconds(5),
+            'ended_at' => now()->subHour()->addMinutes(3), 'end_reason' => 'device_declined',
+            'expires_at' => now()->subMinutes(30),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenant));
+
+        $response->assertOk();
+        $response->assertSee('সেশন ইতিহাস (1)');
+        $response->assertSee('ডিভাইস বন্ধ করেছে'); // end_reason label
+        $response->assertSee('সংযুক্ত হয়েছিল');
+    }
+
+    /** Tenant isolation: a session row owned by Tenant B never appears in Tenant A's history, even if it (wrongly) references A's device id. */
+    public function test_session_history_never_leaks_another_tenants_sessions(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenantA = $this->makeTenant();
+        $tenantB = $this->makeTenant();
+        $userA = $this->makeUser($tenantA->id);
+        $deviceA = $this->makeDevice($tenantA->id, $userA->id);
+        RemoteSupportSession::create([
+            'tenant_id' => $tenantB->id, 'mobile_device_id' => $deviceA->id, 'started_by_super_admin_id' => $admin->id,
+            'status' => 'ended', 'session_token' => 'hist-leak', 'end_reason' => 'device_offline',
+            'started_at' => now()->subHour(), 'ended_at' => now()->subMinutes(50), 'expires_at' => now()->subMinutes(30),
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')->get(route('super.remote-support.show', $tenantA));
+
+        $response->assertOk();
+        $response->assertSee('সেশন ইতিহাস (0)');
+        $response->assertDontSee('সংযুক্ত হয়নি'); // only a history row renders this
     }
 
     private function extractBetween(string $haystack, string $start, string $end): string

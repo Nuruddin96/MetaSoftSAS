@@ -5,6 +5,7 @@
     $activationBadge = [
         'inactive' => ['bg-ink/5 text-mute', 'নিষ্ক্রিয়'],
         'waiting_for_android_access' => ['bg-amber/10 text-amber', 'অ্যান্ড্রয়েড অনুমতির অপেক্ষায়'],
+        'not_supported' => ['bg-ink/5 text-mute', 'এই বিল্ডে সমর্থিত নয়'],
         'disabled_by_tenant' => ['bg-red-50 text-red-600', 'টেনেন্ট কর্তৃক বন্ধ'],
         'active' => ['bg-leaf/10 text-leafdk', 'সক্রিয়'],
     ];

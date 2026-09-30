@@ -30,6 +30,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  */
 class RemoteSupportController extends Controller
 {
+    /** How many recent sessions show() lists per device. */
+    private const SESSION_HISTORY_PER_DEVICE = 5;
+
     public function __construct(protected RemoteSupportService $service, protected PermissionRequestService $permissionRequests) {}
 
     public function index(Request $request)
@@ -68,12 +71,29 @@ class RemoteSupportController extends Controller
         // doc comment.
         $permissionPanels = $devices->mapWithKeys(fn (MobileDevice $d) => [$d->id => $this->permissionRequests->panelFor($d)]);
 
+        // Lightweight session history — the last few sessions per device,
+        // read from columns remote_support_sessions already records (no new
+        // table). Scoped to THIS tenant explicitly, exactly like
+        // $openSessions above, since the Super Admin context has no tenant
+        // global scope to lean on. Capped overall so a long-lived device
+        // can never make this page heavy.
+        $sessionHistory = RemoteSupportSession::withoutGlobalScope('tenant')
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('mobile_device_id', $devices->pluck('id'))
+            ->with('startedBy:id,name')
+            ->orderByDesc('id')
+            ->limit(self::SESSION_HISTORY_PER_DEVICE * max(1, $devices->count()))
+            ->get()
+            ->groupBy('mobile_device_id')
+            ->map(fn ($sessions) => $sessions->take(self::SESSION_HISTORY_PER_DEVICE)->values());
+
         return view('super.remote-support.show', [
             'tenant' => $tenant,
             'setting' => $tenant->remoteSupportSetting,
             'devices' => $devices,
             'openSessions' => $openSessions,
             'permissionPanels' => $permissionPanels,
+            'sessionHistory' => $sessionHistory,
         ]);
     }
 

@@ -12,6 +12,7 @@
 
 <div class="flex flex-wrap items-center gap-3 mb-4 text-sm">
     <span id="connStatus" class="px-3 py-1.5 rounded-full bg-ink/5 text-mute font-medium">সংযোগ হচ্ছে…</span>
+    <span id="connQuality" class="hidden px-3 py-1.5 rounded-full bg-ink/5 text-mute text-xs font-medium" title="WebRTC getStats() থেকে — শুধু দেখার জন্য"></span>
     <button id="reconnectBtn" class="ml-auto px-4 py-2 rounded-lg text-sm font-medium bg-ink/5 text-ink hover:bg-ink/10 disabled:opacity-50 disabled:cursor-not-allowed">🔄 রিকানেক্ট</button>
     <button id="stopBtn" class="px-4 py-2 rounded-lg text-sm font-medium bg-red-50 text-red-600">সেশন বন্ধ করুন</button>
 </div>
@@ -138,6 +139,79 @@
     const reconnectBtn = document.getElementById('reconnectBtn');
     const screenBox = document.getElementById('screenViewerBox');
     const cameraBox = document.getElementById('cameraViewerBox');
+    const connQuality = document.getElementById('connQuality');
+
+    /**
+     * Read-only connection-quality badge. Samples pc.getStats() every few
+     * seconds ONLY while connected, and never changes anything about the
+     * media pipeline (no bitrate/resolution control) — it just tells the
+     * admin whether a blurry/laggy picture is the network. Stopped on every
+     * disconnect/close path so an idle tab does no background work.
+     */
+    const QUALITY_SAMPLE_MS = 3000;
+    let qualityTimer = null;
+    let lastInbound = null;
+
+    function stopQualitySampling() {
+        if (qualityTimer) clearInterval(qualityTimer);
+        qualityTimer = null;
+        lastInbound = null;
+        connQuality.classList.add('hidden');
+    }
+
+    function startQualitySampling() {
+        if (qualityTimer) return;
+        qualityTimer = setInterval(sampleQuality, QUALITY_SAMPLE_MS);
+        sampleQuality();
+    }
+
+    async function sampleQuality() {
+        if (!pc || pc.connectionState !== 'connected') return;
+        let stats;
+        try {
+            stats = await pc.getStats();
+        } catch (e) {
+            return;
+        }
+        let rttMs = null;
+        let inboundVideo = null;
+        stats.forEach((r) => {
+            if (r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)
+                && typeof r.currentRoundTripTime === 'number') {
+                rttMs = Math.round(r.currentRoundTripTime * 1000);
+            }
+            // The first inbound video track (screen, normally) is representative enough.
+            if (r.type === 'inbound-rtp' && r.kind === 'video' && !inboundVideo) inboundVideo = r;
+        });
+
+        let lossPct = null;
+        if (inboundVideo) {
+            if (lastInbound) {
+                const lost = (inboundVideo.packetsLost ?? 0) - lastInbound.packetsLost;
+                const recv = (inboundVideo.packetsReceived ?? 0) - lastInbound.packetsReceived;
+                lossPct = lost + recv > 0 ? Math.max(0, (lost / (lost + recv)) * 100) : 0;
+            }
+            lastInbound = { packetsLost: inboundVideo.packetsLost ?? 0, packetsReceived: inboundVideo.packetsReceived ?? 0 };
+        }
+
+        let level = 'good';
+        if ((rttMs !== null && rttMs > 400) || (lossPct !== null && lossPct > 8)) level = 'poor';
+        else if ((rttMs !== null && rttMs > 150) || (lossPct !== null && lossPct > 2)) level = 'fair';
+        const LEVELS = {
+            good: ['bg-leaf/10 text-leafdk', 'ভালো'],
+            fair: ['bg-amber/10 text-amber', 'মাঝারি'],
+            poor: ['bg-red-50 text-red-600', 'দুর্বল'],
+        };
+
+        const parts = ['নেটওয়ার্ক: ' + LEVELS[level][1]];
+        if (rttMs !== null) parts.push(rttMs + 'ms');
+        if (lossPct !== null) parts.push('লস ' + lossPct.toFixed(1) + '%');
+        if (inboundVideo?.framesPerSecond) parts.push(Math.round(inboundVideo.framesPerSecond) + 'fps');
+        if (inboundVideo?.frameWidth && inboundVideo?.frameHeight) parts.push(inboundVideo.frameWidth + "×" + inboundVideo.frameHeight);
+
+        connQuality.className = 'px-3 py-1.5 rounded-full text-xs font-medium ' + LEVELS[level][0];
+        connQuality.textContent = parts.join(' · ');
+    }
 
     // Shared by both boxes so a paired screen+camera layout always gives
     // them equal, matching height — only the width-vs-aspect-ratio class
@@ -355,6 +429,7 @@
             if (pc.connectionState === 'connected') {
                 setStatus('সংযুক্ত', 'bg-leaf/10 text-leafdk');
                 reconnectBtn.disabled = false;
+                startQualitySampling();
                 // `ontrack` does not reliably re-fire for a track that
                 // simply survives a renegotiation — restore any badge
                 // whose element already has a track playing.
@@ -363,8 +438,10 @@
                 if (cameraVideo.srcObject) setCapabilityState('camera', 'active');
             } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
                 setStatus('সংযোগ বিচ্ছিন্ন — পুনঃসংযোগের চেষ্টা হচ্ছে', 'bg-amber/10 text-amber');
+                stopQualitySampling();
             } else if (pc.connectionState === 'closed') {
                 setStatus('বন্ধ', 'bg-ink/5 text-mute');
+                stopQualitySampling();
                 markAllTracksStopped();
             }
         };
@@ -399,6 +476,7 @@
             polling = false;
             setStatus('ডিভাইস সংযোগ শেষ করেছে', 'bg-ink/5 text-mute');
             markAllTracksStopped();
+            stopQualitySampling(); // pc.close() never fires onconnectionstatechange
             pc?.close();
         } else if (signal.type === 'capability-status') {
             let data;
@@ -448,6 +526,7 @@
                         polling = false;
                         setStatus('সেশন শেষ হয়েছে', 'bg-ink/5 text-mute');
                         markAllTracksStopped();
+                        stopQualitySampling();
                         pc?.close();
                     }
                 }
@@ -471,6 +550,7 @@
 
     stopBtn.addEventListener('click', async () => {
         polling = false;
+        stopQualitySampling();
         pc?.close();
         await fetch(stopUrl, {
             method: 'DELETE',

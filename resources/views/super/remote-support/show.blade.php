@@ -11,6 +11,17 @@
         'revoked' => ['bg-red-100 text-red-700', 'বাতিল'],
     ];
 
+    // Session history end reasons — the values RemoteSupportService::stopSession() is called with.
+    $endReasonLabels = [
+        'stopped_by_admin' => 'অ্যাডমিন বন্ধ করেছেন',
+        'device_declined' => 'ডিভাইস বন্ধ করেছে',
+        'device_offline' => 'ডিভাইস অফলাইন',
+        'expired' => 'মেয়াদ শেষ',
+        'abandoned_no_connection' => 'সংযোগ হয়নি',
+        'timeout' => 'সময় শেষ',
+        'ice_failed' => 'নেটওয়ার্ক ব্যর্থ',
+    ];
+
     // App consent / Android access — a SEPARATE layer from the session
     // status above (device-lifecycle.md status / liveStatus()). Never
     // implies "Connected" == "Consent Enabled" — see
@@ -195,6 +206,41 @@
                         <p class="text-mute text-[10px]" title="📁 ফাইল/স্টোরেজ ও 📶 ব্লুটুথ এই unified panel-এ নেই — কোনো admin-initiated request path নেই (স্টোরেজ: Document Picker, permission লাগে না; ব্লুটুথ: এই অ্যাপ ব্যবহার করে না)">
                             📁 ফাইল/স্টোরেজ: permission লাগে না (Document Picker) · 📶 ব্লুটুথ: প্রযোজ্য নয়
                         </p>
+
+                        {{-- Lightweight session history (RemoteSupportController::show()'s
+                             $sessionHistory, already tenant-scoped). Read-only — only
+                             what remote_support_sessions itself recorded. --}}
+                        @php
+                            $history = $sessionHistory->get($d->id, collect());
+                        @endphp
+                        <details class="text-[10px]" data-session-history="{{ $d->id }}">
+                            <summary class="cursor-pointer text-mute">🕘 সেশন ইতিহাস ({{ $history->count() }})</summary>
+                            @if ($history->isEmpty())
+                                <p class="text-mute mt-1">এখনো কোনো সেশন হয়নি।</p>
+                            @else
+                                <ul class="mt-1 space-y-1">
+                                    @foreach ($history as $s)
+                                        @php
+                                            $caps = collect(['include_screen' => '🎥', 'include_camera' => '📷', 'include_microphone' => '🎙', 'include_device_audio' => '🔊'])
+                                                ->filter(fn ($icon, $col) => (bool) $s->{$col})
+                                                ->implode(' ');
+                                        @endphp
+                                        <li class="text-mute">
+                                            {{ $s->started_at?->format('d M, H:i') ?? '—' }}
+                                            {{ $caps }}
+                                            · {{ $s->connected_at ? 'সংযুক্ত হয়েছিল' : 'সংযুক্ত হয়নি' }}
+                                            @if ($s->connected_at && $s->ended_at)
+                                                · {{ $s->connected_at->diffForHumans($s->ended_at, \Carbon\CarbonInterface::DIFF_ABSOLUTE, true) }}
+                                            @endif
+                                            · {{ $s->status === 'ended' ? ($endReasonLabels[$s->end_reason] ?? ($s->end_reason ?? 'শেষ')) : 'চলমান' }}
+                                            @if ($s->startedBy)
+                                                · {{ $s->startedBy->name }}
+                                            @endif
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            @endif
+                        </details>
                     </div>
                 </td>
                 <td class="px-4 py-3 text-mute text-xs">{{ $d->last_seen_at?->diffForHumans() ?? '—' }}</td>

@@ -190,6 +190,46 @@ class RemoteSupportWakeTest extends TestCase
         ]));
     }
 
+    public function test_wake_clears_a_dead_fcm_token_on_unregistered(): void
+    {
+        $this->fakeFcmConfigured();
+        Http::fake([
+            'oauth2.googleapis.com/*' => Http::response(['access_token' => 'fake-token'], 200),
+            'fcm.googleapis.com/*' => Http::response([
+                'error' => [
+                    'code' => 404,
+                    'status' => 'NOT_FOUND',
+                    'details' => [['errorCode' => 'UNREGISTERED']],
+                ],
+            ], 404),
+        ]);
+
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, ['fcm_token' => 'dead-tok']);
+        $service = app(RemoteSupportService::class);
+
+        $this->assertFalse($service->sendWakeSignal($device));
+        $this->assertNull($device->fresh()->fcm_token, 'a dead (UNREGISTERED) token must be cleared');
+    }
+
+    public function test_wake_keeps_the_token_on_a_transient_server_error(): void
+    {
+        $this->fakeFcmConfigured();
+        Http::fake([
+            'oauth2.googleapis.com/*' => Http::response(['access_token' => 'fake-token'], 200),
+            'fcm.googleapis.com/*' => Http::response(['error' => ['status' => 'UNAVAILABLE']], 503),
+        ]);
+
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id, ['fcm_token' => 'live-tok']);
+        $service = app(RemoteSupportService::class);
+
+        $this->assertFalse($service->sendWakeSignal($device));
+        $this->assertSame('live-tok', $device->fresh()->fcm_token, 'a transient 5xx must NOT clear a healthy token');
+    }
+
     public function test_wake_falls_back_to_the_general_push_fcm_credentials_when_no_dedicated_file_is_configured(): void
     {
         config([

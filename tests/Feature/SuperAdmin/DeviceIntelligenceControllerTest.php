@@ -260,6 +260,30 @@ class DeviceIntelligenceControllerTest extends TestCase
         $response->assertSee('অ্যান্ড্রয়েড অনুমতির অপেক্ষায়');
     }
 
+    public function test_notifications_tab_distinguishes_not_supported_build_from_permission_required(): void
+    {
+        $admin = $this->makeSuperAdmin();
+        $tenant = $this->makeTenant();
+        $user = $this->makeUser($tenant->id);
+        $device = $this->makeDevice($tenant->id, $user->id);
+        // A `direct`-flavor build reports notification_listener as
+        // not_supported: the listener service isn't in its manifest, so no
+        // Android permission screen can ever grant it.
+        DeviceIntelligenceFeatureState::create([
+            'tenant_id' => $tenant->id, 'mobile_device_id' => $device->id, 'feature' => 'notification_monitoring',
+            'app_consent_status' => 'enabled', 'android_access' => ['notification_listener' => 'not_supported'],
+            'activation_status' => 'not_supported',
+        ]);
+
+        $response = $this->actingAs($admin, 'super_admin')
+            ->get(route('super.device-intelligence.devices.show', [$tenant, $device]).'?tab=notifications');
+
+        $response->assertOk();
+        $response->assertSee('এই বিল্ডে সমর্থিত নয়');
+        // Must NOT tell the tenant to wait for a permission that can't exist.
+        $response->assertDontSee('অ্যান্ড্রয়েড অনুমতির অপেক্ষায়');
+    }
+
     public function test_usage_tab_shows_today_seven_day_and_thirty_day_totals(): void
     {
         $admin = $this->makeSuperAdmin();

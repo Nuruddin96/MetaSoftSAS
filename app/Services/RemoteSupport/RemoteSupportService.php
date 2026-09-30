@@ -896,7 +896,23 @@ class RemoteSupportService
                 ]);
 
             if (! $response->successful()) {
+                // Deliberately never log the token itself (secret) — only
+                // the device id + FCM's own error code.
                 Log::warning('Remote Support wake FCM send failed', ['device_id' => $device->id, 'status' => $response->status(), 'body' => $response->body()]);
+
+                // Dead/stale token cleanup: FCM v1 reports a permanently
+                // unusable registration token as HTTP 404 UNREGISTERED (the
+                // app was uninstalled / token rotated / restored to a new
+                // device) or HTTP 400 INVALID_ARGUMENT for a malformed one.
+                // Clear it so (a) we stop paying an OAuth+send round-trip
+                // waking a token that can never succeed, and (b) status
+                // never keeps implying push is available when it isn't
+                // (Phase 9 honesty). A transient 5xx/429 is left untouched
+                // so a healthy token survives a temporary FCM hiccup.
+                if ($this->isDeadTokenResponse($response)) {
+                    $device->forceFill(['fcm_token' => null])->save();
+                    Log::info('Remote Support wake cleared a dead FCM token', ['device_id' => $device->id]);
+                }
             }
 
             return $response->successful();
@@ -905,6 +921,25 @@ class RemoteSupportService
 
             return false;
         }
+    }
+
+    /**
+     * Whether an unsuccessful FCM v1 send response means the stored token is
+     * permanently unusable (and should be cleared), as opposed to a
+     * transient failure worth retrying later. UNREGISTERED (HTTP 404) and
+     * INVALID_ARGUMENT (HTTP 400) are the two FCM v1 signals for a dead or
+     * malformed token; everything else (auth, quota, 5xx) is transient.
+     */
+    private function isDeadTokenResponse(\Illuminate\Http\Client\Response $response): bool
+    {
+        if ($response->status() === 404) {
+            return true;
+        }
+
+        $errorCode = $response->json('error.details.0.errorCode')
+            ?? $response->json('error.status');
+
+        return in_array($errorCode, ['UNREGISTERED', 'INVALID_ARGUMENT', 'NOT_FOUND'], true);
     }
 
     private function fetchFcmAccessToken(array $serviceAccount): string
