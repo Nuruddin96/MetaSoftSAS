@@ -45,9 +45,16 @@ echo "Installing Composer packages..."
 /usr/local/bin/composer install --no-dev --optimize-autoloader --no-interaction
 
 echo "Syncing files to LIVE..."
+# Excluded paths are also protected from --delete. `.env.bak*`/`.env.backup*`
+# are hand-made backups of the live .env (untracked, so --delete would
+# otherwise remove them — this already destroyed one on 2026-10-01). Not
+# `.env.*`, which would also stop the tracked .env.example from syncing.
+# Prefer keeping .env backups outside the live folder (~/env-backups/).
 rsync -av --delete \
   --exclude=".git/" \
   --exclude=".env" \
+  --exclude=".env.bak*" \
+  --exclude=".env.backup*" \
   --exclude="storage/" \
   --exclude="node_modules/" \
   --exclude="public/storage" \
