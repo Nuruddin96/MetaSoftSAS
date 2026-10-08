@@ -43,7 +43,7 @@ class Showcase
             ['girls-secret', 'Girls Secret', 'GS', 'E9B949', '9A6B0A', 'Beauty & Skincare', 'Bangladesh', 'Bangladesh', 'Beauty parlour for women — hair, skin and bridal care.', 'editor', 'brand1-logo.png.jpg', 'brand1-cover.jpg.png'],
             ['li-ummati', 'Li Ummati', 'LU', '3F3F46', '0A0A0A', 'Beauty & Skincare', 'Bangladesh', 'Bangladesh', 'Sunnah-inspired attar and perfumes — including make-your-own perfume blends.', null, 'brand2-logo.png.jpg', 'brand2-cover.jpg.jpg'],
             ['ayat-fashion', 'Ayat Fashion', 'AF', 'E11D48', '881337', 'Fashion & Apparel', 'Dhaka', 'Dhaka', 'Women’s fashion and occasion wear — outlet at Grand Plaza, Moghbazar, Dhaka.', 'editor', 'brand3-logo.png.jpg', 'brand3-cover.jpg.jpg'],
-            ['respit-care', 'Respit Care', 'RC', '1E5BB8', '0B2E6B', 'Healthcare & Pharmacy', 'Bangladesh', 'Bangladesh', 'Home health care — nursing, ICU-level home care, physiotherapy, elderly and mother & baby care.', 'editor', 'brand4-logo.png.jpg', 'brand4-cover.jpg.png'],
+            ['respite-care', 'Respite Care', 'RC', '1E5BB8', '0B2E6B', 'Healthcare & Pharmacy', 'Bangladesh', 'Bangladesh', 'Home health care — nursing, ICU-level home care, physiotherapy, elderly and mother & baby care.', 'editor', 'brand4-logo.png.jpg', 'brand4-cover.jpg.png'],
             ['ragdhanu-mart', 'Ragdhanu Mart', 'RM', 'F59E0B', '0E7490', 'Retail & Consumer Products', 'Bangladesh', 'Bangladesh', 'Gadgets, skin care and imported products in one colourful mart.', null, 'brand5-logo.png.jpg', 'brand5-cover.jpg.png'],
             ['sariha-art', 'Sariha Art', 'SA', 'C8A27A', '7C5A3A', 'Jewelry & Accessories', 'Bangladesh', 'Bangladesh', 'Handmade floral jewellery and bridal accessories for weddings, gaye holud and special occasions.', 'editor', 'brand6-logo.png.jpg', 'brand6-cover.jpg.jpg'],
         ];
@@ -84,7 +84,7 @@ class Showcase
     /** Featured row: the editorial picks among the demo brands (no paid placement is shown for them). */
     public static function featuredBrands(): array
     {
-        return array_map(fn ($s) => self::brand($s), ['ayat-fashion', 'girls-secret', 'respit-care', 'sariha-art']);
+        return array_map(fn ($s) => self::brand($s), ['ayat-fashion', 'girls-secret', 'respite-care', 'sariha-art']);
     }
 
     public static function categories(): array
@@ -108,7 +108,7 @@ class Showcase
     {
         $rows = [
             ['girls-secret', 'Beauty, hair and bridal care — in a parlour made just for women.'],
-            ['respit-care', 'Professional nursing, ICU-level care and physiotherapy at the comfort of your home. Always beside you.'],
+            ['respite-care', 'Professional nursing, ICU-level care and physiotherapy at the comfort of your home. Always beside you.'],
             ['ayat-fashion', 'Style that inspires — women’s fashion and occasion wear, now at our Grand Plaza outlet in Moghbazar.'],
             ['sariha-art', 'Handmade floral jewellery and bridal accessories for weddings, gaye holud and every special occasion.'],
             ['li-ummati', 'Follow the Sunnah: attar and perfumes — or make your own perfume blend.'],
@@ -205,7 +205,7 @@ class Showcase
             'rising' => ['Rising Brand', [['ayat-fashion', 4820], ['ragdhanu-mart', 3610], ['sariha-art', 2490], ['li-ummati', 1780]]],
             'fashion' => ['Fashion & Accessories', [['ayat-fashion', 5140], ['sariha-art', 3920]]],
             'beauty' => ['Beauty & Skincare', [['girls-secret', 4410], ['li-ummati', 4030], ['ragdhanu-mart', 1960]]],
-            'services' => ['Health & Services', [['respit-care', 3890], ['girls-secret', 2240]]],
+            'services' => ['Health & Services', [['respite-care', 3890], ['girls-secret', 2240]]],
         ];
 
         $out = [];
@@ -234,10 +234,10 @@ class Showcase
     public static function trending(): array
     {
         $tabs = [
-            'trending' => ['Trending', 'flame', [['ayat-fashion', '▲ 86%', [2, 3, 3, 5, 4, 7, 9, 12]], ['sariha-art', '▲ 74%', [4, 4, 5, 5, 6, 7, 7, 9]], ['girls-secret', '▲ 61%', [1, 2, 2, 3, 5, 5, 6, 8]], ['ragdhanu-mart', '▲ 58%', [3, 3, 4, 4, 5, 6, 6, 8]], ['li-ummati', '▲ 44%', [2, 2, 3, 4, 4, 5, 6, 7]], ['respit-care', '▲ 39%', [3, 4, 4, 5, 5, 5, 6, 7]]]],
-            'viewed' => ['Most Viewed', 'eye', [['ayat-fashion', '12.4K views', [5, 6, 5, 7, 8, 8, 10, 11]], ['ragdhanu-mart', '9.8K views', [6, 6, 7, 7, 8, 9, 9, 10]], ['girls-secret', '8.6K views', [4, 5, 6, 5, 7, 7, 8, 9]], ['respit-care', '7.1K views', [6, 5, 6, 7, 7, 8, 8, 9]], ['li-ummati', '6.3K views', [6, 5, 7, 6, 8, 7, 9, 10]], ['sariha-art', '5.9K views', [3, 4, 4, 5, 6, 6, 7, 8]]]],
-            'voted' => ['Most Voted', 'vote', [['ayat-fashion', '5,140 votes', [3, 4, 5, 6, 8, 9, 10, 12]], ['girls-secret', '4,410 votes', [3, 4, 4, 6, 7, 8, 9, 11]], ['li-ummati', '4,030 votes', [2, 3, 5, 5, 6, 8, 9, 10]], ['sariha-art', '3,920 votes', [3, 4, 6, 6, 8, 9, 9, 12]], ['respit-care', '3,890 votes', [2, 4, 4, 6, 7, 7, 9, 10]], ['ragdhanu-mart', '3,610 votes', [1, 2, 4, 5, 6, 7, 9, 11]]]],
-            'rising' => ['Rising', 'rocket', [['sariha-art', 'New listing', [1, 1, 2, 3, 3, 5, 6, 8]], ['respit-care', 'New listing', [1, 2, 2, 2, 4, 4, 6, 7]], ['ragdhanu-mart', '▲ 58%', [3, 4, 4, 5, 5, 5, 6, 7]], ['li-ummati', '▲ 44%', [2, 3, 3, 4, 4, 5, 5, 6]], ['ayat-fashion', '▲ 86%', [1, 2, 2, 3, 5, 5, 6, 8]], ['girls-secret', '▲ 61%', [2, 3, 3, 5, 4, 7, 9, 12]]]],
+            'trending' => ['Trending', 'flame', [['ayat-fashion', '▲ 86%', [2, 3, 3, 5, 4, 7, 9, 12]], ['sariha-art', '▲ 74%', [4, 4, 5, 5, 6, 7, 7, 9]], ['girls-secret', '▲ 61%', [1, 2, 2, 3, 5, 5, 6, 8]], ['ragdhanu-mart', '▲ 58%', [3, 3, 4, 4, 5, 6, 6, 8]], ['li-ummati', '▲ 44%', [2, 2, 3, 4, 4, 5, 6, 7]], ['respite-care', '▲ 39%', [3, 4, 4, 5, 5, 5, 6, 7]]]],
+            'viewed' => ['Most Viewed', 'eye', [['ayat-fashion', '12.4K views', [5, 6, 5, 7, 8, 8, 10, 11]], ['ragdhanu-mart', '9.8K views', [6, 6, 7, 7, 8, 9, 9, 10]], ['girls-secret', '8.6K views', [4, 5, 6, 5, 7, 7, 8, 9]], ['respite-care', '7.1K views', [6, 5, 6, 7, 7, 8, 8, 9]], ['li-ummati', '6.3K views', [6, 5, 7, 6, 8, 7, 9, 10]], ['sariha-art', '5.9K views', [3, 4, 4, 5, 6, 6, 7, 8]]]],
+            'voted' => ['Most Voted', 'vote', [['ayat-fashion', '5,140 votes', [3, 4, 5, 6, 8, 9, 10, 12]], ['girls-secret', '4,410 votes', [3, 4, 4, 6, 7, 8, 9, 11]], ['li-ummati', '4,030 votes', [2, 3, 5, 5, 6, 8, 9, 10]], ['sariha-art', '3,920 votes', [3, 4, 6, 6, 8, 9, 9, 12]], ['respite-care', '3,890 votes', [2, 4, 4, 6, 7, 7, 9, 10]], ['ragdhanu-mart', '3,610 votes', [1, 2, 4, 5, 6, 7, 9, 11]]]],
+            'rising' => ['Rising', 'rocket', [['sariha-art', 'New listing', [1, 1, 2, 3, 3, 5, 6, 8]], ['respite-care', 'New listing', [1, 2, 2, 2, 4, 4, 6, 7]], ['ragdhanu-mart', '▲ 58%', [3, 4, 4, 5, 5, 5, 6, 7]], ['li-ummati', '▲ 44%', [2, 3, 3, 4, 4, 5, 5, 6]], ['ayat-fashion', '▲ 86%', [1, 2, 2, 3, 5, 5, 6, 8]], ['girls-secret', '▲ 61%', [2, 3, 3, 5, 4, 7, 9, 12]]]],
         ];
 
         $out = [];
@@ -297,7 +297,7 @@ class Showcase
                 'cover' => self::art('covers', 'brand3-cover.jpg.jpg'),
             ],
             'list' => [
-                ['tag' => 'Interview', 'title' => 'Respit Care on bringing nursing and ICU-level care into the home', 'meta' => '6 min read', 'from' => '#1E5BB8', 'to' => '#0B2E6B', 'bn' => false, 'cover' => self::art('covers', 'brand4-cover.jpg.png')],
+                ['tag' => 'Interview', 'title' => 'Respite Care on bringing nursing and ICU-level care into the home', 'meta' => '6 min read', 'from' => '#1E5BB8', 'to' => '#0B2E6B', 'bn' => false, 'cover' => self::art('covers', 'brand4-cover.jpg.png')],
                 ['tag' => 'Brand Journey', 'title' => 'ফুলের গয়নায় বিয়ের সাজ: সারিহা আর্টের গল্প', 'meta' => '৫ মিনিট', 'from' => '#C8A27A', 'to' => '#7C5A3A', 'bn' => true, 'cover' => self::art('covers', 'brand6-cover.jpg.jpg')],
                 ['tag' => 'Success Story', 'title' => 'Girls Secret: beauty, hair and bridal care in a parlour made for women', 'meta' => '4 min read', 'from' => '#E9B949', 'to' => '#9A6B0A', 'bn' => false, 'cover' => self::art('covers', 'brand1-cover.jpg.png')],
                 ['tag' => 'Business Feature', 'title' => 'Ragdhanu Mart: gadgets, skin care and imported products under one roof', 'meta' => '4 min read', 'from' => '#F59E0B', 'to' => '#0E7490', 'bn' => false, 'cover' => self::art('covers', 'brand5-cover.jpg.png')],
