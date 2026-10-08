@@ -21,6 +21,13 @@ class VoteCampaign extends Model
         'ended' => 'Voting ended',
     ];
 
+    /** vote_limit: how often one phone number may vote. 'program' spans every category and every campaign of the same award. */
+    public const VOTE_LIMITS = [
+        'daily' => 'One vote per number per category, every day',
+        'once' => 'One vote per number per category, for the whole campaign',
+        'program' => 'One vote per number in the entire award programme',
+    ];
+
     protected $guarded = [];
 
     protected $casts = [
@@ -84,7 +91,23 @@ class VoteCampaign extends Model
 
     public function periodKey(): string
     {
-        return $this->vote_limit === 'once' ? 'once' : now()->toDateString();
+        return in_array($this->vote_limit, ['once', 'program'], true) ? 'once' : now()->toDateString();
+    }
+
+    /** Campaign ids that share one 'program' vote: every campaign of the same award (or just this one when it has no award). */
+    public function programCampaignIds(): array
+    {
+        return $this->award_id ? self::where('award_id', $this->award_id)->pluck('id')->all() : [$this->id];
+    }
+
+    /** Short public wording of the vote rule. */
+    public function voteRuleText(): string
+    {
+        return match ($this->vote_limit) {
+            'program' => 'One vote per mobile number in the entire '.($this->award?->title ?? 'programme'),
+            'once' => 'One vote per mobile number per category for this campaign',
+            default => 'One vote per mobile number per category each day',
+        };
     }
 
     public static function uniqueSlug(string $title, ?int $exceptId = null): string

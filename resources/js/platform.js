@@ -178,7 +178,8 @@ async function drawShareCard(canvas, d) {
 
     ctx.fillStyle = '#E9C46A';
     ctx.font = `800 30px ${font}`;
-    ctx.fillText((d.campaign || 'MetaSoft BD Awards').toUpperCase().slice(0, 44), 90, 140);
+    // Award name can be long ("Bangladesh Brand & Entrepreneur Awards 2026"): wrap to two lines.
+    wrapText(ctx, (d.campaign || 'Bangladesh Brand & Entrepreneur Awards 2026').toUpperCase(), 90, 120, S - 420, 38, 2);
 
     // logo tile
     roundRect(ctx, 90, 210, 240, 240, 48);
@@ -206,7 +207,9 @@ async function drawShareCard(canvas, d) {
     const yEnd = wrapText(ctx, d.name, 90, 560, 900, 84, 2);
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.font = `600 36px ${font}`;
-    ctx.fillText(d.category ? `Nominee · ${d.category}` : 'Nominee', 90, yEnd + 66);
+    // "Nominee" only when the brand really is in voting; otherwise just its category.
+    const sub = d.nominee === '1' ? ['Nominee', d.category].filter(Boolean).join(' · ') : (d.category || 'Brand');
+    ctx.fillText(sub, 90, yEnd + 66);
 
     // CTA pill
     ctx.font = `800 44px ${font}`;

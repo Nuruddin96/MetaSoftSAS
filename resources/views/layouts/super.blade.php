@@ -37,7 +37,7 @@
                 ['super.source.orders', 'সোর্স — অর্ডার', '📥'],
                 ['super.affiliates', 'অ্যাফিলিয়েট', '💰'],
                 // Brand & Entrepreneur Recognition Platform (routes/platform-admin.php).
-                ['super.brands.index', 'ব্র্যান্ড প্ল্যাটফর্ম', '🏅', ['super.brands*', 'super.brand-categories*', 'super.awards*', 'super.campaigns*', 'super.platform-*']],
+                ['super.brands.index', 'ব্র্যান্ড প্ল্যাটফর্ম', '🏅', ['super.brands*', 'super.brand-categories*', 'super.awards*', 'super.campaigns*', 'super.homepage*', 'super.platform-*']],
             ]; @endphp
             @foreach ($nav as $item)
                 @php [$route, $label, $icon] = $item; $patterns = $item[3] ?? [str_replace('.index','',$route).'*']; @endphp

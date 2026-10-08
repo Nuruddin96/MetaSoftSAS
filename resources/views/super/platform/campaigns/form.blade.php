@@ -26,8 +26,7 @@
     <p class="-mt-2 text-xs text-mute">Times are Bangladesh time. Once started, a campaign opens and closes on these dates automatically; leave empty to open/close manually.</p>
     <label class="{{ $lbl }}">Vote limit
         <select name="vote_limit" class="{{ $field }}">
-            <option value="daily" @selected(old('vote_limit', $campaign->vote_limit) === 'daily')>One vote per mobile number per category, every day</option>
-            <option value="once" @selected(old('vote_limit', $campaign->vote_limit) === 'once')>One vote per mobile number per category, for the whole campaign</option>
+            @foreach(\App\Models\VoteCampaign::VOTE_LIMITS as $k => $l)<option value="{{ $k }}" @selected(old('vote_limit', $campaign->vote_limit) === $k)>{{ $l }}</option>@endforeach
         </select></label>
     <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="show_counts" value="1" @checked(old('show_counts', $campaign->show_counts))> Show live vote counts and rankings to the public</label>
     <label class="{{ $lbl }}">Description<textarea name="description" rows="4" class="{{ $field }}">{{ old('description', $campaign->description) }}</textarea></label>

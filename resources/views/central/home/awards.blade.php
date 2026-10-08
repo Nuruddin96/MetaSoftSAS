@@ -30,17 +30,19 @@
 
                 <div class="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
                     <div>
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/55">Voting closes</p>
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/55">{{ $award['closes_title'] ?? 'Voting closes' }}</p>
                         <p class="font-bold">{{ $award['closes_label'] }}</p>
                     </div>
-                    <div class="flex gap-2" data-countdown="{{ $award['closes_at'] }}" aria-label="Time left to vote">
-                        @foreach(['days', 'hrs', 'min', 'sec'] as $unit)
-                            <div class="w-14 rounded-xl bg-white/[0.08] py-2 text-center">
-                                <span class="block text-xl font-extrabold tabular-nums" data-unit="{{ $unit }}">--</span>
-                                <span class="text-[10px] text-white/55">{{ $unit }}</span>
-                            </div>
-                        @endforeach
-                    </div>
+                    @if($award['closes_at'])
+                        <div class="flex gap-2" data-countdown="{{ $award['closes_at'] }}" aria-label="Time left">
+                            @foreach(['days', 'hrs', 'min', 'sec'] as $unit)
+                                <div class="w-14 rounded-xl bg-white/[0.08] py-2 text-center">
+                                    <span class="block text-xl font-extrabold tabular-nums" data-unit="{{ $unit }}">--</span>
+                                    <span class="text-[10px] text-white/55">{{ $unit }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
                 </div>
 
                 <ol class="mt-7 grid grid-cols-2 gap-3 sm:flex sm:items-center sm:gap-2" aria-label="Award process">
@@ -60,7 +62,7 @@
 
                 <div class="mt-7 flex flex-col gap-3 sm:flex-row">
                     <a href="#voting" class="inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-6 py-3 text-[15px] font-bold text-night hover:brightness-105">Vote now <x-plat.icon name="arrow-right" class="w-4 h-4" /></a>
-                    <a href="#recognition" class="inline-flex items-center justify-center rounded-xl border border-white/30 px-6 py-3 text-[15px] font-bold hover:bg-white/10">View categories & rules</a>
+                    <a href="{{ ($award['live'] ?? false) ? $award['url'] : '#recognition' }}" class="inline-flex items-center justify-center rounded-xl border border-white/30 px-6 py-3 text-[15px] font-bold hover:bg-white/10">View categories & rules</a>
                 </div>
             </article>
 

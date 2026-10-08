@@ -16,7 +16,7 @@
 <form method="POST" action="{{ $award->exists ? route('super.awards.update', $award) : route('super.awards.store') }}" class="max-w-3xl space-y-4 rounded-xl border border-ink/5 bg-white p-5">
     @csrf @if($award->exists) @method('PUT') @endif
     <div class="grid gap-4 sm:grid-cols-[1fr_120px]">
-        <label class="{{ $lbl }}">Award name *<input name="title" value="{{ old('title', $award->title) }}" required maxlength="200" placeholder="MetaSoft BD Brand Awards" class="{{ $field }}"></label>
+        <label class="{{ $lbl }}">Award name *<input name="title" value="{{ old('title', $award->title) }}" required maxlength="200" placeholder="{{ config('platform.award_name') }}" class="{{ $field }}"></label>
         <label class="{{ $lbl }}">Year *<input type="number" name="year" value="{{ old('year', $award->year) }}" required min="2020" max="2100" class="{{ $field }}"></label>
     </div>
     <label class="{{ $lbl }}">Bangla name<input name="bn_title" value="{{ old('bn_title', $award->bn_title) }}" class="{{ $field }}"></label>

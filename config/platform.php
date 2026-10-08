@@ -21,6 +21,31 @@
 return [
     'showcase_preview' => env('PLATFORM_SHOWCASE_PREVIEW', true),
 
+    /*
+    | The national award programme's public name (MetaSoft BD is the
+    | platform that runs it). Used wherever no specific award/campaign is in
+    | context — share-card fallback, homepage strip, admin defaults.
+    */
+    'award_name' => 'Bangladesh Brand & Entrepreneur Awards 2026',
+    'award_name_bn' => 'বাংলাদেশ ব্র্যান্ড ও উদ্যোক্তা অ্যাওয়ার্ড ২০২৬',
+
+    /*
+    | Default categories for Super Admin's one-click programme setup
+    | (AwardController::setupProgram): 25 categories × {People's Choice,
+    | Jury Choice} = 50 awards. Editable in Super Admin after setup.
+    */
+    'award_categories' => [
+        'Best Fashion & Clothing Brand', 'Best Ethnic & Traditional Wear Brand', 'Best Food Brand',
+        'Best Restaurant & Café', 'Best Home-Made Food Business', 'Best Beauty & Skincare Brand',
+        'Best Health & Wellness Brand', 'Best Jewellery & Accessories Brand', 'Best Handicraft & Artisan Brand',
+        'Best Home & Living Brand', 'Best Agro & Organic Brand', 'Best Tech Startup',
+        'Best E-commerce Business', 'Best F-commerce Business', 'Best Education & Training Brand',
+        'Best Service Business', 'Best Travel & Tourism Brand', 'Best Electronics & Gadgets Brand',
+        'Best Sustainable Brand', 'Best Export-Oriented Brand', 'Best Women-Led Business',
+        'Best Young Entrepreneur', 'Rising Brand of the Year', 'Best Customer Service',
+        'Entrepreneur of the Year',
+    ],
+
     // Email copies of owner notifications through the app's existing
     // mailer. In-app notifications are always created.
     'notify_email' => env('PLATFORM_NOTIFY_EMAIL', false),

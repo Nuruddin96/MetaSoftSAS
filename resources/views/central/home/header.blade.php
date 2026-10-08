@@ -8,6 +8,7 @@
         ['Events', '#events', 'calendar'],
         ['Media', '#stories', 'newspaper'],
     ];
+    $navLinks = array_values(array_filter($navLinks, fn ($l) => ! in_array($l[1], $hiddenAnchors, true)));
 @endphp
 
 {{-- Utility strip: live award + sample-preview notice --}}
@@ -15,7 +16,7 @@
     <div class="{{ $wrap }} flex items-center justify-between gap-4 py-2 text-xs">
         <a href="#awards" class="flex min-w-0 items-center gap-2 rounded hover:text-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold">
             <span class="relative flex h-2 w-2 shrink-0"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-flag opacity-75"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-flag"></span></span>
-            <span class="truncate text-white/85">Awards 2026 · Public voting closes 30 Nov</span>
+            <span class="truncate text-white/85">{{ $home['announcement'] }}</span>
             <span class="hidden shrink-0 font-bold text-gold sm:inline">Vote now →</span>
         </a>
         <div class="flex shrink-0 items-center gap-4">
@@ -23,7 +24,7 @@
                 <span class="hidden rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white/80 md:inline" title="Brands, people and numbers on this page are sample content.">Preview · sample data</span>
             @endif
             <a href="#recognition" class="hidden text-white/70 hover:text-white md:inline">Award rules</a>
-            <a href="#sponsors" class="hidden text-white/70 hover:text-white md:inline">For sponsors</a>
+            @unless(in_array('#sponsors', $hiddenAnchors, true))<a href="#sponsors" class="hidden text-white/70 hover:text-white md:inline">For sponsors</a>@endunless
             <span class="font-body text-white/70" lang="bn">বাংলা + English</span>
         </div>
     </div>

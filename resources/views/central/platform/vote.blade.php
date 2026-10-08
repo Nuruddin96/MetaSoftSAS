@@ -1,9 +1,11 @@
 @extends('layouts.platform')
 
-@section('title', 'Vote for '.$brand->name.' — MetaSoft BD')
-@section('meta_description', 'Support '.$brand->name.' — cast your vote on MetaSoft BD. One vote per mobile number per category.')
-@section('og_title', 'Vote for '.$brand->name)
-@section('og_description', ($entries->first()?->campaign->title ?? 'MetaSoft BD Awards').' — tap to vote.')
+@php $awardName = $entries->first()?->campaign->award?->title ?? $entries->first()?->campaign->title ?? config('platform.award_name'); @endphp
+@section('title', 'Vote for '.$brand->name.' — '.$awardName.' | MetaSoft BD')
+@section('meta_description', 'Support '.$brand->name.' in '.$awardName.' — cast your vote on MetaSoft BD.')
+{{-- Shared links (Facebook, WhatsApp, Messenger) unfurl into a clickable preview card built from these tags. --}}
+@section('og_title', 'Vote for '.$brand->name.' — '.$awardName)
+@section('og_description', ($brand->category?->name ? $brand->category->name.' · ' : '').$brand->district.' — tap to vote on MetaSoft BD.')
 @if($brand->logoUrl())
     @section('og_image', $brand->logoUrl())
 @endif
@@ -69,7 +71,7 @@
                             </button>
                         </div>
                         @if($turnstileKey)<div class="cf-turnstile mt-3" data-sitekey="{{ $turnstileKey }}"></div>@endif
-                        <p class="mt-2 text-xs text-slate2">One vote per mobile number per category {{ $c->vote_limit === 'daily' ? 'each day' : 'for this campaign' }}. Your number is never shown publicly.</p>
+                        <p class="mt-2 text-xs text-slate2">{{ $c->voteRuleText() }}. Your number is never shown publicly.</p>
                     </div>
                     <div data-vote-msg aria-live="polite">
                         @if($errors->has('vote') && old('entry_id') == $entry->id)
