@@ -50,6 +50,10 @@ echo "Syncing files to LIVE..."
 # otherwise remove them — this already destroyed one on 2026-10-01). Not
 # `.env.*`, which would also stop the tracked .env.example from syncing.
 # Prefer keeping .env backups outside the live folder (~/env-backups/).
+# public/puzzle is the separate puzzle app (~/domains/metasoftbd.com/puzzle),
+# linked into the live public/ folder by hand and not tracked in git — an
+# earlier deploy's --delete removed it and broke metasoftbd.com/puzzle.
+# Never sync or delete it from here.
 rsync -av --delete \
   --exclude=".git/" \
   --exclude=".env" \
@@ -58,6 +62,7 @@ rsync -av --delete \
   --exclude="storage/" \
   --exclude="node_modules/" \
   --exclude="public/storage" \
+  --exclude="/public/puzzle" \
   "$GIT_PROJECT/" \
   "$LIVE_PROJECT/"
 

@@ -14,7 +14,8 @@
 
 @php
     $wa = fn (string $text) => 'https://wa.me/'.$whatsapp.'?text='.rawurlencode($text);
-    $joinUrl = $wa('আসসালামু আলাইকুম! আমি MetaSoft BD-তে আমার ব্র্যান্ড লিস্ট করতে চাই। (I want to list my brand on MetaSoft BD.)');
+    // Self-service registration (BrandOwner\RegisterController) — replaces sending details over WhatsApp.
+    $joinUrl = route('owner.register');
     $wrap = 'mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8';
 @endphp
 

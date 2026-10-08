@@ -15,6 +15,9 @@ use App\Services\AI\Providers\OpenAiProvider;
 use App\Services\AI\Tools\AiToolRegistry;
 use App\Services\Domain\DomainDriver;
 use App\Services\Domain\ManualProvisionDriver;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -61,5 +64,9 @@ class AppServiceProvider extends ServiceProvider
         ProductVariant::observe(ProductVariantWordPressObserver::class);
         Category::observe(CategoryWordPressObserver::class);
         Inventory::observe(InventoryWordPressObserver::class);
+
+        // Recognition platform — public vote submissions per IP
+        // (App\Http\Controllers\Platform\VoteController::cast()).
+        RateLimiter::for('platform-vote', fn (Request $request) => Limit::perMinute((int) config('platform.voting.attempts_per_minute', 12))->by('vote:'.$request->ip()));
     }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Affiliate;
+use App\Models\BrandOwner;
 use App\Models\SuperAdmin;
 use App\Models\User;
 
@@ -23,6 +24,11 @@ return [
             'driver' => 'session',
             'provider' => 'affiliates',
         ],
+        // Brand & Entrepreneur Recognition Platform — brand owner dashboard.
+        'brand_owner' => [
+            'driver' => 'session',
+            'provider' => 'brand_owners',
+        ],
         // Laravel default guard name kept for compatibility
         'web' => [
             'driver' => 'session',
@@ -42,6 +48,10 @@ return [
         'affiliates' => [
             'driver' => 'eloquent',
             'model' => Affiliate::class,
+        ],
+        'brand_owners' => [
+            'driver' => 'eloquent',
+            'model' => BrandOwner::class,
         ],
     ],
 

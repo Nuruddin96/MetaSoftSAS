@@ -16,12 +16,12 @@
                     @endforeach
                 </ul>
                 <div class="mt-8 flex flex-col gap-3 sm:flex-row">
-                    <a href="{{ $joinUrl }}" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-6 py-3.5 text-[15px] font-bold text-night hover:brightness-105">
-                        @include('partials.icon', ['platform' => 'whatsapp', 'class' => 'w-[18px] h-[18px]']) Create your brand profile
+                    <a href="{{ $joinUrl }}" class="inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-6 py-3.5 text-[15px] font-bold text-night hover:brightness-105">
+                        <x-plat.icon name="user-plus" class="w-[18px] h-[18px]" /> List your brand — free
                     </a>
                     <a href="#brands" class="inline-flex items-center justify-center rounded-xl border border-white/30 px-6 py-3.5 text-[15px] font-bold hover:bg-white/10">Explore brands</a>
                 </div>
-                <p class="mt-3 text-xs text-white/55">Our team sets up your profile with you on WhatsApp — usually within 24 hours.</p>
+                <p class="mt-3 text-xs text-white/55">Register in 2 minutes. Our team reviews every brand — usually within 24 hours.</p>
             </div>
 
             {{-- Growth loop --}}

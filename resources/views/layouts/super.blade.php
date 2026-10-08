@@ -36,10 +36,13 @@
                 ['super.source.products', 'সোর্স — পণ্য', '📦'],
                 ['super.source.orders', 'সোর্স — অর্ডার', '📥'],
                 ['super.affiliates', 'অ্যাফিলিয়েট', '💰'],
+                // Brand & Entrepreneur Recognition Platform (routes/platform-admin.php).
+                ['super.brands.index', 'ব্র্যান্ড প্ল্যাটফর্ম', '🏅', ['super.brands*', 'super.brand-categories*', 'super.awards*', 'super.campaigns*', 'super.platform-*']],
             ]; @endphp
-            @foreach ($nav as [$route, $label, $icon])
+            @foreach ($nav as $item)
+                @php [$route, $label, $icon] = $item; $patterns = $item[3] ?? [str_replace('.index','',$route).'*']; @endphp
                 <a href="{{ route($route) }}"
-                   class="flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 {{ request()->routeIs(str_replace('.index','',$route).'*') ? 'bg-white/10 border-l-2 border-amber' : '' }}">
+                   class="flex items-center gap-3 px-4 py-2.5 hover:bg-white/10 {{ request()->routeIs(...$patterns) ? 'bg-white/10 border-l-2 border-amber' : '' }}">
                     <span>{{ $icon }}</span> {{ $label }}
                 </a>
             @endforeach

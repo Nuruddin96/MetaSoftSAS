@@ -118,7 +118,7 @@ function openProfile(key) {
     logo.style.background = grad;
     logo.style.borderRadius = p.type === 'person' ? '9999px' : '20px';
     logo.textContent = p.initials;
-    $('#pdName').innerHTML = `${esc(p.name)} <svg class="w-5 h-5 text-sky-500" viewBox="0 0 24 24" aria-label="Verified"><path fill="currentColor" d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+    $('#pdName').innerHTML = `${esc(p.name)} <svg class="w-5 h-5 text-sky-500" viewBox="0 0 24 24" aria-label="MetaSoft BD verified"><path fill="currentColor" d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path fill="#fff" d="M6.2 7.6h4.1L12 10.7l1.7-3.1h4.1l-.55 9.3-2.35-5.2L12 15.3l-2.9-3.6-2.35 5.2Z"/></svg>`;
     $('#pdSubtitle').textContent = p.subtitle;
     $('#pdDesc').textContent = p.description;
     $('#pdSponsored').classList.toggle('hidden', !p.sponsored);

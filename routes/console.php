@@ -67,3 +67,10 @@ Schedule::command('permission-requests:sweep-expired')
     ->everyFiveMinutes()
     ->onOneServer()
     ->withoutOverlapping();
+
+// Recognition platform: date-driven voting starts/ends and their one-time
+// "voting started/ended" owner notifications — see PlatformCampaignTick.
+Schedule::command('platform:campaign-tick')
+    ->everyFiveMinutes()
+    ->onOneServer()
+    ->withoutOverlapping();
