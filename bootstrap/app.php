@@ -4,7 +4,9 @@ use App\Http\Middleware\BindTenantFromSanctumUser;
 use App\Http\Middleware\BindTenantFromWordPressConnection;
 use App\Http\Middleware\CheckMobileSubscription;
 use App\Http\Middleware\CheckSubscription;
+use App\Http\Middleware\EnsureBrandOwnerActive;
 use App\Http\Middleware\EnsureFeatureEnabled;
+use App\Http\Middleware\EnsurePlatformReady;
 use App\Http\Middleware\RequireOnboarding;
 use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\ResolveTenant;
@@ -29,6 +31,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'check.subscription' => CheckSubscription::class,
             'require.onboarding' => RequireOnboarding::class,
             'feature' => EnsureFeatureEnabled::class,
+            // Recognition platform (database/sql/chunk64.sql) — see each
+            // middleware's docblock.
+            'platform.ready' => EnsurePlatformReady::class,
+            'owner.active' => EnsureBrandOwnerActive::class,
             // Mobile API only — see that middleware's docblock for why
             // resolve.tenant (URL-driven) doesn't apply to API requests.
             'bind.tenant.token' => BindTenantFromSanctumUser::class,
@@ -110,6 +116,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
             if ($request->routeIs('affiliate.*')) {
                 return route('affiliate.login');
+            }
+
+            if ($request->routeIs('owner.*')) {
+                return route('owner.login');
             }
 
             $tenantSlug = $request->route('tenant_slug');

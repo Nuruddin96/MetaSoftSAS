@@ -123,6 +123,9 @@ Route::domain(config('app.central_domain'))->group(function () {
         });
     });
 
+    /* ---------------- BRAND PLATFORM (directory, voting, brand owners) ---------------- */
+    require __DIR__.'/platform.php';
+
     /* ---------------- SUPER ADMIN ---------------- */
     Route::prefix('super-admin')->name('super.')->group(function () {
         Route::get('login', [AuthController::class, 'show'])->name('login');
@@ -301,6 +304,9 @@ Route::domain(config('app.central_domain'))->group(function () {
             Route::post('commissions/{commission}/paid', [SuperAffiliateController::class, 'markPaid'])->name('affiliates.commission.paid');
             Route::post('leads/{lead}/commission', [SuperAffiliateController::class, 'addServiceCommission'])->name('affiliates.lead.commission');
             Route::put('leads/{lead}', [SuperAffiliateController::class, 'updateLead'])->name('affiliates.lead.update');
+
+            // Brand & Entrepreneur Recognition Platform control center.
+            require __DIR__.'/platform-admin.php';
         });
     });
 });

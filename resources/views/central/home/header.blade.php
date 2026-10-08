@@ -58,7 +58,7 @@
                 <x-plat.icon name="arrow-up-right" class="w-3.5 h-3.5 opacity-60 transition group-hover:opacity-100" />
             </a>
             <a href="{{ route('central.login') }}" class="hidden rounded-lg px-3 py-2 text-sm font-semibold text-night hover:bg-cloud focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf sm:inline-flex">Login</a>
-            <a href="{{ $joinUrl }}" target="_blank" rel="noopener"
+            <a href="{{ $joinUrl }}"
                class="hidden whitespace-nowrap rounded-xl bg-leaf px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-leafdk focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 sm:inline-flex">
                 List your brand
             </a>
@@ -101,7 +101,7 @@
         </div>
         <div class="grid grid-cols-2 gap-2 border-t border-hair p-4">
             <a href="{{ route('central.login') }}" class="rounded-xl border border-hair py-3 text-center text-sm font-bold">Login</a>
-            <a href="{{ $joinUrl }}" target="_blank" rel="noopener" class="rounded-xl bg-leaf py-3 text-center text-sm font-bold text-white">List your brand</a>
+            <a href="{{ $joinUrl }}" class="rounded-xl bg-leaf py-3 text-center text-sm font-bold text-white">List your brand</a>
         </div>
     </div>
 </div>

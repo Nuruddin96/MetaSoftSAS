@@ -15,6 +15,7 @@
         "vite": "^7.0.7"
     },
     "dependencies": {
+        "qrcode-generator": "^1.4.4",
         "sortablejs": "^1.15.7"
     }
 }
