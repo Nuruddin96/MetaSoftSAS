@@ -170,6 +170,12 @@ class AwardsHomepageTest extends TestCase
         $award = Award::where('title', self::AWARD)->firstOrFail();
 
         $this->assertSame(25, $award->categories()->count());
+        $names = $award->categories()->pluck('name')->all();
+        $this->assertSame(config('platform.award_categories'), $names);
+        $this->assertSame('Fashion & Apparel', $names[0]);
+        $this->assertSame('Social Impact & Innovation', $names[24]);
+        $this->assertNotContains('Entrepreneur of the Year', $names);
+        $this->assertNotContains('Best Women-Led Business', $names);
         $this->assertSame('draft', $award->status);
         $campaign = $award->campaigns()->firstOrFail();
         $this->assertSame('program', $campaign->vote_limit);
