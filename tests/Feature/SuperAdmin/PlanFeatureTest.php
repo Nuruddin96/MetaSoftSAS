@@ -168,7 +168,7 @@ class PlanFeatureTest extends TestCase
             'features' => ['facebook', 'whatsapp'],
         ]);
 
-        $response = $this->get('/');
+        $response = $this->get('/automation');
 
         $response->assertOk();
         $response->assertSee('Facebook');
@@ -184,7 +184,7 @@ class PlanFeatureTest extends TestCase
 
         config(['features.list' => ['totally_new_feature' => 'একটি নতুন ফিচার']]);
 
-        $response = $this->get('/');
+        $response = $this->get('/automation');
 
         $response->assertOk();
         $response->assertSee('একটি নতুন ফিচার');
@@ -216,7 +216,7 @@ class PlanFeatureTest extends TestCase
     {
         $this->makePlan(['is_active' => 1, 'tagline' => 'সবচেয়ে জনপ্রিয় প্ল্যান']);
 
-        $this->get('/')->assertOk()->assertSee('সবচেয়ে জনপ্রিয় প্ল্যান');
+        $this->get('/automation')->assertOk()->assertSee('সবচেয়ে জনপ্রিয় প্ল্যান');
     }
 
     public function test_landing_page_popular_badge_follows_is_featured_not_iteration_order(): void
@@ -227,7 +227,7 @@ class PlanFeatureTest extends TestCase
         $this->makePlan(['name' => 'Pro', 'slug' => 'pro', 'sort_order' => 2, 'is_active' => 1, 'is_featured' => false]);
         $this->makePlan(['name' => 'Business', 'slug' => 'business', 'sort_order' => 3, 'is_active' => 1, 'is_featured' => true]);
 
-        $response = $this->get('/');
+        $response = $this->get('/automation');
 
         $response->assertOk();
         // The badge text appears exactly once — attached to the 3rd (not

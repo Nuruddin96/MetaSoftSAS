@@ -29,6 +29,24 @@
     --font-disp: "Noto Serif Bengali", serif;
 
     /*
+     * Central homepage (Entrepreneur & Brand Recognition Platform) palette.
+     * Additive only — nothing in the panel/store/super layouts uses these.
+     * Plus Jakarta Sans covers Latin; Bangla glyphs fall through to Hind
+     * Siliguri in the same stack.
+     */
+    --font-plat: "Plus Jakarta Sans", "Hind Siliguri", sans-serif;
+    --color-night: #0A1428;
+    --color-navy: #0E2350;
+    --color-gold: #E9C46A;
+    --color-golddk: #9A6B0A;
+    --color-mint: #E8F5EF;
+    --color-cloud: #F4F6FA;
+    --color-cream: #FAF7F0;
+    --color-hair: #E5E8EF;
+    --color-slate2: #5A6478;
+    --color-flag: #E5383B;
+
+    /*
      * Shared corner-radius scale. Use these instead of ad-hoc rounded-lg/
      * rounded-xl/rounded-2xl choices so every button/card/pill across the
      * SaaS shares the same three radii.
