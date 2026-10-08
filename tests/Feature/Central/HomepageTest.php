@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Central;
 
+use App\Models\PlatformSetting;
 use App\Support\Home\Showcase;
+use App\Support\Platform\PlatformSchema;
 use Tests\TestCase;
 
 /**
@@ -12,6 +14,14 @@ use Tests\TestCase;
  */
 class HomepageTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // No platform tables here: the homepage must fall back to sample content.
+        PlatformSchema::flush();
+        PlatformSetting::flush();
+    }
+
     public function test_homepage_renders_every_platform_section(): void
     {
         $response = $this->get('/');

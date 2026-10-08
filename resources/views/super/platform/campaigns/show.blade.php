@@ -21,7 +21,7 @@
         <h1 class="font-disp text-2xl font-bold">{{ $campaign->title }}</h1>
         <p class="text-sm text-mute">
             <b>{{ $campaign->phaseLabel() }}</b> · {{ $campaign->starts_at?->format('d M Y H:i') ?? 'manual start' }} → {{ $campaign->ends_at?->format('d M Y H:i') ?? 'manual end' }}
-            · {{ $campaign->vote_limit === 'daily' ? 'daily vote' : 'one vote' }} · counts {{ $campaign->show_counts ? 'public' : 'hidden' }}
+            · {{ \App\Models\VoteCampaign::VOTE_LIMITS[$campaign->vote_limit] ?? $campaign->vote_limit }} · counts {{ $campaign->show_counts ? 'public' : 'hidden' }}
             @if($status !== 'draft') · <a href="{{ route('voting.campaign', $campaign->slug) }}" target="_blank" class="text-leaf hover:underline">public page</a>@endif
         </p>
     </div>

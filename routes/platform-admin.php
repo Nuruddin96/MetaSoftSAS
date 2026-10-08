@@ -15,6 +15,7 @@ use App\Http\Controllers\SuperAdmin\Platform\AuditController as PlatformAuditCon
 use App\Http\Controllers\SuperAdmin\Platform\AwardController as PlatformAwardController;
 use App\Http\Controllers\SuperAdmin\Platform\BrandCategoryController as PlatformCategoryController;
 use App\Http\Controllers\SuperAdmin\Platform\BrandController as PlatformBrandController;
+use App\Http\Controllers\SuperAdmin\Platform\HomepageController as PlatformHomepageController;
 use App\Http\Controllers\SuperAdmin\Platform\VoteCampaignController as PlatformCampaignController;
 use Illuminate\Support\Facades\Route;
 
@@ -44,6 +45,9 @@ Route::middleware('platform.ready')->group(function () {
 
     Route::get('awards', [PlatformAwardController::class, 'index'])->name('awards.index');
     Route::get('awards/create', [PlatformAwardController::class, 'create'])->name('awards.create');
+    Route::post('awards/setup-program', [PlatformAwardController::class, 'setupProgram'])->name('awards.setup-program');
+    Route::post('awards/{award}/nominations/bulk', [PlatformAwardController::class, 'bulkNominations'])->whereNumber('award')->name('awards.nominations.bulk');
+    Route::put('award-categories/{category}', [PlatformAwardController::class, 'updateCategory'])->whereNumber('category')->name('awards.categories.update');
     Route::post('awards', [PlatformAwardController::class, 'store'])->name('awards.store');
     Route::get('awards/{award}', [PlatformAwardController::class, 'show'])->whereNumber('award')->name('awards.show');
     Route::get('awards/{award}/edit', [PlatformAwardController::class, 'edit'])->whereNumber('award')->name('awards.edit');
@@ -73,6 +77,10 @@ Route::middleware('platform.ready')->group(function () {
     Route::post('campaigns/{campaign}/votes/invalidate', [PlatformCampaignController::class, 'invalidate'])->whereNumber('campaign')->name('campaigns.votes.invalidate');
     Route::post('votes/{vote}/restore', [PlatformCampaignController::class, 'restoreVote'])->whereNumber('vote')->name('campaigns.votes.restore');
     Route::get('campaigns/{campaign}/export', [PlatformCampaignController::class, 'export'])->whereNumber('campaign')->name('campaigns.export');
+
+    Route::get('homepage', [PlatformHomepageController::class, 'edit'])->name('homepage.edit');
+    Route::put('homepage', [PlatformHomepageController::class, 'update'])->name('homepage.update');
+    Route::post('homepage/reset', [PlatformHomepageController::class, 'reset'])->name('homepage.reset');
 
     Route::get('platform-audit', [PlatformAuditController::class, 'index'])->name('platform-audit');
     Route::get('platform-notifications', [PlatformAuditController::class, 'notifications'])->name('platform-notifications');

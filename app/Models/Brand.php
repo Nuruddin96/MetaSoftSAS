@@ -271,6 +271,7 @@ class Brand extends Model
             'tag' => $this->isSponsoredNow() ? 'sponsored' : ($this->is_featured ? 'editor' : null),
             'founder' => $this->founder_name,
             'url' => $this->profileUrl(),
+            'vote_url' => $this->voteUrl(),
         ];
     }
 }

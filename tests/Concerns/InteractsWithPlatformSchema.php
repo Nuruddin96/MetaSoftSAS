@@ -3,6 +3,7 @@
 namespace Tests\Concerns;
 
 use App\Models\BrandCategory;
+use App\Models\PlatformSetting;
 use App\Models\SuperAdmin;
 use App\Support\Platform\BdLocations;
 use App\Support\Platform\PlatformSchema;
@@ -256,8 +257,16 @@ trait InteractsWithPlatformSchema
             $t->unique(['vote_category_id', 'voter_hash', 'period_key']);
         });
 
+        // database/sql/chunk65.sql
+        Schema::create('platform_settings', function (Blueprint $t) {
+            $t->string('key', 80)->primary();
+            $t->json('value')->nullable();
+            $t->timestamps();
+        });
+
         PlatformSchema::flush();
         BdLocations::flush();
+        PlatformSetting::flush();
     }
 
     protected function makePlatformCategory(string $name = 'Fashion & Apparel', array $attrs = []): BrandCategory

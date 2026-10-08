@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-/** An award season (e.g. "Bangladesh Brand Awards 2026"), managed by Super Admin. */
+/** An award season (e.g. "Bangladesh Brand & Entrepreneur Awards 2026"), managed by Super Admin. */
 class Award extends Model
 {
     public const STATUSES = [

@@ -16,6 +16,8 @@
     $wa = fn (string $text) => 'https://wa.me/'.$whatsapp.'?text='.rawurlencode($text);
     // Self-service registration (BrandOwner\RegisterController) — replaces sending details over WhatsApp.
     $joinUrl = route('owner.register');
+    // Anchors of sections hidden in Super Admin → Homepage, so no menu links to them.
+    $hiddenAnchors = array_keys(array_filter(['#stories' => ! $home['show_stories'], '#events' => ! $home['show_events'], '#sponsors' => ! $home['show_sponsors']]));
     $wrap = 'mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8';
 @endphp
 
@@ -39,10 +41,11 @@
         @include('central.home.entrepreneurs')
         @include('central.home.recognition')
         @include('central.home.join')
-        @include('central.home.stories')
-        @include('central.home.events')
+        {{-- Sample-content sections; each can be hidden in Super Admin → Homepage. --}}
+        @if($home['show_stories'])@include('central.home.stories')@endif
+        @if($home['show_events'])@include('central.home.events')@endif
         @include('central.home.automation')
-        @include('central.home.sponsors')
+        @if($home['show_sponsors'])@include('central.home.sponsors')@endif
     </main>
 
     @include('central.home.footer')

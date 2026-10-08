@@ -11,6 +11,10 @@
     <div class="relative h-28 shrink-0 overflow-hidden sm:h-32" style="background:linear-gradient(135deg,{{ $brand['from'] }},{{ $brand['to'] }})">
         <span class="absolute -right-6 -top-10 h-40 w-40 rounded-full bg-white/10"></span>
         <span class="absolute left-10 top-12 h-32 w-32 rounded-full bg-white/[0.07]"></span>
+        @if(($brand['sample'] ?? false) && ! config('platform.showcase_preview'))
+            {{-- Sample fill-in (no real brand for this slot yet); the global "Preview" notice covers it while preview mode is on. --}}
+            <span class="absolute left-3 top-3 rounded-full bg-white/90 px-2 py-0.5 text-[10.5px] font-semibold text-slate2">Sample</span>
+        @endif
         <div class="absolute right-3 top-3">
             @if($brand['tag'] === 'sponsored')
                 <x-plat.badge type="sponsored" label="Sponsored" size="xs" />

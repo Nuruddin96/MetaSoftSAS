@@ -4,6 +4,7 @@
         'For business' => [['List your brand', $joinUrl], ['Business Automation', route('automation')], ['Sponsorship', '#sponsors'], ['Refer & earn', route('affiliate.register')]],
         'Trust' => [['Award & voting rules', '#recognition'], ['How labels are earned', '#recognition'], ['Privacy policy', null], ['Terms of use', null]],
     ];
+    $cols = array_map(fn ($links) => array_values(array_filter($links, fn ($l) => ! in_array($l[1], $hiddenAnchors, true))), $cols);
 @endphp
 <footer class="bg-night text-white">
     <div class="{{ $wrap }} py-14 lg:py-16">

@@ -6,6 +6,7 @@
         ['super.brand-categories.index', 'Categories', 'super.brand-categories.*', 0],
         ['super.awards.index', 'Awards', 'super.awards.*', \App\Models\AwardNomination::where('status', 'submitted')->count()],
         ['super.campaigns.index', 'Voting', 'super.campaigns.*', 0],
+        ['super.homepage.edit', 'Homepage', 'super.homepage.*', 0],
         ['super.platform-notifications', 'Notifications', 'super.platform-notifications', \App\Models\PlatformNotification::forAdmins()->unread()->count()],
         ['super.platform-audit', 'Audit log', 'super.platform-audit', 0],
     ];

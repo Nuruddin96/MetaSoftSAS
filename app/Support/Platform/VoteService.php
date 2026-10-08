@@ -5,8 +5,10 @@ namespace App\Support\Platform;
 use App\Models\PlatformAuditLog;
 use App\Models\Vote;
 use App\Models\VoteEntry;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -16,6 +18,9 @@ use Illuminate\Support\Facades\DB;
  * there is no OTP yet — see config/platform.php):
  *   - one vote per phone number, per category, per period — enforced by
  *     the votes.uq_vote unique index, not just an application check
+ *   - campaigns with vote_limit 'program': one vote per phone number in the
+ *     whole award programme (every category, every campaign of that award),
+ *     checked under a per-number lock so parallel requests can't both pass
  *   - a device cookie may vote for at most N different phone numbers per
  *     category per period (blocks one person cycling fake numbers)
  *   - a hard daily cap per IP per campaign; softer per-IP thresholds only
@@ -61,18 +66,36 @@ class VoteService
      */
     public function cast(VoteEntry $entry, string $phone, ?string $deviceId, ?string $ip, ?string $userAgent): Vote
     {
-        $entry->loadMissing('campaign', 'brand');
+        $normalized = self::normalizePhone($phone) ?? throw new VoteRejected('Enter a valid Bangladeshi mobile number (e.g. 01712345678).');
+
+        // One number's votes are processed one at a time, so the programme-wide
+        // check below can't be raced by parallel submissions.
+        try {
+            return Cache::lock('platform-vote:'.self::voterHash($normalized), 10)
+                ->block(5, fn () => $this->castLocked($entry, $normalized, $deviceId, $ip, $userAgent));
+        } catch (LockTimeoutException) {
+            throw new VoteRejected('Your vote is already being processed. Please wait a moment.');
+        }
+    }
+
+    private function castLocked(VoteEntry $entry, string $phone, ?string $deviceId, ?string $ip, ?string $userAgent): Vote
+    {
+        $entry->loadMissing('campaign.award', 'brand');
         $campaign = $entry->campaign;
 
         if (! $entry->is_active || ! $campaign || ! $campaign->isOpen() || ! $entry->brand?->isPublished()) {
             throw new VoteRejected('Voting for this brand is not open right now.');
         }
 
-        $phone = self::normalizePhone($phone) ?? throw new VoteRejected('Enter a valid Bangladeshi mobile number (e.g. 01712345678).');
         $voter = self::voterHash($phone);
         $device = self::deviceHash($deviceId);
         $period = $campaign->periodKey();
         $cfg = config('platform.voting');
+
+        if ($campaign->vote_limit === 'program'
+            && Vote::whereIn('campaign_id', $campaign->programCampaignIds())->where('voter_hash', $voter)->exists()) {
+            throw new VoteRejected('This number has already voted in '.($campaign->award?->title ?? 'this programme').'. Each mobile number can vote only once in the whole programme.');
+        }
 
         $already = Vote::where('vote_category_id', $entry->vote_category_id)->where('voter_hash', $voter)->where('period_key', $period)->exists();
         if ($already) {

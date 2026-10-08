@@ -15,7 +15,7 @@
         <meta property="og:description" content="@yield('og_description', 'Bangladesh’s Entrepreneur & Brand Growth Network.')">
         <meta property="og:type" content="website">
         <meta property="og:url" content="{{ url()->current() }}">
-        @hasSection('og_image')<meta property="og:image" content="@yield('og_image')">@endif
+        <meta property="og:image" content="@hasSection('og_image')@yield('og_image')@else{{ asset('images/icons/icon-512.png') }}@endif">
         <meta name="twitter:card" content="summary">
     @endif
     @vite('resources/js/platform.js')

@@ -10,8 +10,10 @@ use App\Models\AwardRecognition;
 use App\Models\Brand;
 use App\Models\BrandCategory;
 use App\Models\PlatformAuditLog;
+use App\Models\VoteCampaign;
 use App\Support\Platform\PlatformNotifier;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -57,6 +59,11 @@ class AwardController extends Controller
                 ->when(request('status'), fn ($q) => $q->where('status', request('status')))
                 ->orderBy('award_category_id')->latest()->get()->groupBy('award_category_id'),
             'brandCategories' => BrandCategory::ordered()->get(),
+            // Every approved brand can be picked as a nominee; nothing is nominated automatically.
+            'approvedBrands' => Brand::published()->with('category')->orderBy('name')->get(['id', 'name', 'slug', 'brand_category_id', 'district', 'is_verified']),
+            'nominatedPairs' => $award->nominations()->get(['award_category_id', 'brand_id'])
+                ->map(fn ($n) => $n->award_category_id.':'.$n->brand_id)->flip()->all(),
+            'statusCounts' => $award->nominations()->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status'),
         ]);
     }
 
@@ -109,28 +116,144 @@ class AwardController extends Controller
         return back()->with('success', 'Category removed.');
     }
 
-    /** Super Admin nominates a brand directly (e.g. editorial or jury nomination). */
+    /**
+     * Super Admin nominates approved brands into one category: picked from
+     * the approved-brand list (brand_ids[]) or typed (brand = id/slug/name).
+     * They start as "Nominee" (accepted). Approval or verification alone
+     * never creates a nomination.
+     */
     public function storeNomination(Request $request, Award $award)
     {
         $data = $request->validate([
             'award_category_id' => ['required', Rule::exists('award_categories', 'id')->where('award_id', $award->id)],
-            'brand' => 'required|string|max:160',
+            'brand_ids' => 'nullable|array|max:200',
+            'brand_ids.*' => 'integer',
+            'brand' => 'nullable|string|max:160',
         ]);
-        $brand = $this->findBrand($data['brand']);
+        $category = AwardCategory::findOrFail($data['award_category_id']);
 
-        $nomination = AwardNomination::firstOrCreate(
-            ['award_category_id' => $data['award_category_id'], 'brand_id' => $brand->id],
-            ['award_id' => $award->id, 'source' => 'admin', 'status' => 'accepted'],
-        );
-        if (! $nomination->wasRecentlyCreated) {
-            return back()->with('error', $brand->name.' is already nominated in this category.');
+        $brands = Brand::published()->whereIn('id', $data['brand_ids'] ?? [])->get();
+        if (filled($data['brand'] ?? null)) {
+            $brands->push($this->findBrand($data['brand']));
+        }
+        if ($brands->isEmpty()) {
+            throw ValidationException::withMessages(['brand_ids' => 'Select at least one approved brand.']);
         }
 
-        PlatformAuditLog::record('nomination.added_by_admin', $nomination, ['brand_id' => $brand->id]);
-        PlatformNotifier::owner($brand, 'nomination_status', 'Your brand was nominated: '.$nomination->category->name,
-            $award->title, route('owner.awards'));
+        $added = [];
+        $skipped = [];
+        foreach ($brands->unique('id') as $brand) {
+            if (! $category->accepts($brand)) {
+                $skipped[] = $brand->name.' (not eligible)';
 
-        return back()->with('success', $brand->name.' nominated.');
+                continue;
+            }
+            $nomination = AwardNomination::firstOrCreate(
+                ['award_category_id' => $category->id, 'brand_id' => $brand->id],
+                ['award_id' => $award->id, 'source' => 'admin', 'status' => 'accepted'],
+            );
+            if (! $nomination->wasRecentlyCreated) {
+                $skipped[] = $brand->name.' (already nominated)';
+
+                continue;
+            }
+            PlatformAuditLog::record('nomination.added_by_admin', $nomination, ['brand_id' => $brand->id]);
+            PlatformNotifier::owner($brand, 'nomination_status', 'Your brand was nominated: '.$category->name, $award->title, route('owner.awards'));
+            $added[] = $brand->name;
+        }
+
+        $msg = $added ? count($added).' nominee(s) added to '.$category->name.'.' : 'No nominees added.';
+        if ($skipped) {
+            $msg .= ' Skipped: '.implode(', ', $skipped).'.';
+        }
+
+        return back()->with($added ? 'success' : 'error', $msg);
+    }
+
+    /** Move several nominations to one status (Nominee → Shortlisted → Finalist …) in one go. */
+    public function bulkNominations(Request $request, Award $award)
+    {
+        $data = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'integer',
+            'status' => ['required', Rule::in(array_keys(AwardNomination::STATUSES))],
+        ]);
+
+        $n = 0;
+        foreach ($award->nominations()->whereIn('id', $data['ids'])->get() as $nomination) {
+            if ($nomination->status !== $data['status']) {
+                $this->applyNominationStatus($nomination, $data['status'], null);
+                $n++;
+            }
+        }
+
+        return back()->with('success', $n.' nomination(s) moved to '.AwardNomination::STATUSES[$data['status']].'.');
+    }
+
+    public function updateCategory(Request $request, AwardCategory $category)
+    {
+        $data = $request->validate([
+            'name' => 'required|string|max:150',
+            'description' => 'nullable|string|max:500',
+            'brand_category_id' => 'nullable|exists:brand_categories,id',
+        ]);
+        $category->fill($data);
+        $dirty = $category->getDirty();
+        $category->save();
+        PlatformAuditLog::record('award.category_updated', $category->award, ['category_id' => $category->id, 'changes' => $dirty]);
+
+        return back()->with('success', 'Category saved.');
+    }
+
+    /**
+     * One-click setup of the national programme (config('platform.award_name')):
+     * 25 categories (config('platform.award_categories')), each later
+     * awarded twice — People's Choice and Jury Choice — plus a draft voting
+     * campaign with one vote per phone number for the whole programme.
+     * Runs once; afterwards it just opens the existing programme.
+     */
+    public function setupProgram()
+    {
+        $title = (string) config('platform.award_name');
+        $year = (int) (preg_match('/\b(20\d\d)\b/', $title, $m) ? $m[1] : now()->year);
+
+        if ($existing = Award::where('title', $title)->where('year', $year)->first()) {
+            return redirect()->route('super.awards.show', $existing)->with('success', 'This programme is already set up.');
+        }
+
+        $award = DB::transaction(function () use ($title, $year) {
+            $award = Award::create([
+                'title' => $title,
+                'bn_title' => config('platform.award_name_bn'),
+                'year' => $year,
+                'slug' => Award::uniqueSlug($title, $year),
+                'status' => 'draft',
+                'description' => 'Recognising Bangladeshi brands and entrepreneurs across 25 categories. Every category has two awards: People’s Choice (decided by verified public votes) and Jury Choice (decided by an independent jury).',
+                'rules' => "1. Only approved brands on MetaSoft BD can be nominated.\n2. Each category awards People’s Choice and Jury Choice separately.\n3. One mobile number can cast only one vote in the whole programme.\n4. Sponsorship or paid placement never affects nominations, votes or results.",
+            ]);
+            foreach (config('platform.award_categories') as $i => $name) {
+                $award->categories()->create(['name' => $name, 'sort_order' => $i + 1]);
+            }
+
+            $campaign = VoteCampaign::create([
+                'award_id' => $award->id,
+                'title' => $title.' — People’s Choice',
+                'slug' => VoteCampaign::uniqueSlug($title.' peoples choice'),
+                'status' => 'draft',
+                'vote_limit' => 'program',
+                'show_counts' => true,
+                'description' => 'People’s Choice voting. One mobile number can vote only once in the whole programme.',
+            ]);
+            foreach ($award->categories()->get() as $ac) {
+                $campaign->categories()->create(['award_category_id' => $ac->id, 'name' => $ac->name, 'sort_order' => $ac->sort_order]);
+            }
+
+            return $award;
+        });
+
+        PlatformAuditLog::record('award.program_setup', $award, ['categories' => $award->categories()->count()]);
+
+        return redirect()->route('super.awards.show', $award)->with('success', 'Programme created as a draft: 25 categories × People’s Choice + Jury Choice, with a draft voting campaign (one vote per number for the whole programme).');
     }
 
     public function updateNomination(Request $request, AwardNomination $nomination)
@@ -139,9 +262,17 @@ class AwardController extends Controller
             'status' => ['required', Rule::in(array_keys(AwardNomination::STATUSES))],
             'admin_note' => 'nullable|string|max:500',
         ]);
+        $this->applyNominationStatus($nomination, $data['status'], $data['admin_note'] ?? null);
+
+        return back()->with('success', 'Nomination updated.');
+    }
+
+    /** Status change + audit + owner notification, shared by the single and bulk actions. */
+    private function applyNominationStatus(AwardNomination $nomination, string $status, ?string $note): void
+    {
         $from = $nomination->status;
-        $nomination->update($data);
-        PlatformAuditLog::record('nomination.status', $nomination, ['status' => [$from, $nomination->status]], $data['admin_note'] ?? null);
+        $nomination->update(['status' => $status, 'admin_note' => $note ?? $nomination->admin_note]);
+        PlatformAuditLog::record('nomination.status', $nomination, ['status' => [$from, $nomination->status]], $note);
 
         if ($from !== $nomination->status && $nomination->status !== 'withdrawn') {
             $nomination->load('award', 'category', 'brand');
@@ -153,11 +284,9 @@ class AwardController extends Controller
                 default => 'Nomination update: '.$nomination->category->name,
             };
             PlatformNotifier::owner($nomination->brand, $nomination->status === 'finalist' ? 'finalist' : 'nomination_status', $title,
-                $nomination->award->title.' — status: '.$nomination->statusLabel().($data['admin_note'] ?? null ? '. Note: '.$data['admin_note'] : ''),
+                $nomination->award->title.' — status: '.$nomination->statusLabel().($note ? '. Note: '.$note : ''),
                 route('owner.awards'));
         }
-
-        return back()->with('success', 'Nomination updated.');
     }
 
     public function storeRecognition(Request $request, Award $award)

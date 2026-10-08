@@ -53,7 +53,7 @@
             <div class="rounded-xl bg-cloud p-3"><dt class="text-xs font-semibold text-slate2">{{ $c->phase() === 'scheduled' ? 'Starts' : 'Ends' }}</dt>
                 <dd class="text-sm font-bold">{{ ($c->phase() === 'scheduled' ? $c->starts_at : $c->ends_at)?->format('j M, g:i A') ?? '—' }}</dd></div>
         </dl>
-        @if($c->starts_at)<p class="mt-2 text-xs text-slate2">Voting period: {{ $c->starts_at->format('j M Y') }} – {{ $c->ends_at?->format('j M Y') ?? 'until closed' }} · {{ $c->vote_limit === 'daily' ? 'one vote per number per day' : 'one vote per number' }}</p>@endif
+        @if($c->starts_at)<p class="mt-2 text-xs text-slate2">Voting period: {{ $c->starts_at->format('j M Y') }} – {{ $c->ends_at?->format('j M Y') ?? 'until closed' }} · {{ lcfirst($c->voteRuleText()) }}</p>@endif
         @unless($c->show_counts)<p class="mt-2 text-xs text-slate2">Counts are hidden from the public during this campaign; only you can see your own numbers.</p>@endunless
     </section>
 @empty
@@ -69,9 +69,11 @@
         <section class="{{ $card }}">
             <h2 class="font-extrabold">Ready-made share card</h2>
             <p class="mt-0.5 text-sm text-slate2">Post it on Facebook, WhatsApp status or Instagram — no design work needed.</p>
+            <p class="mt-2 rounded-xl bg-cloud px-3 py-2 text-xs text-slate2">A picture can’t contain a clickable link. When you post the card, paste your voting link <b class="font-mono text-night">{{ Str::after($voteUrl, '://') }}</b> in the caption — or use the Facebook / WhatsApp buttons above, which share the link itself with a clickable preview.</p>
             <canvas id="shareCard" data-share-card width="1080" height="1080"
                     data-name="{{ $brand->name }}" data-initials="{{ $brand->initials() }}" data-logo="{{ $brand->logoUrl() }}"
-                    data-category="{{ $current?->category->name }}" data-campaign="{{ $current?->campaign->title ?? 'MetaSoft BD Awards '.now()->year }}"
+                    data-category="{{ $current?->category->name ?? $brand->category?->name }}" data-nominee="{{ $current ? 1 : 0 }}"
+                    data-campaign="{{ $current?->campaign->award?->title ?? $current?->campaign->title ?? config('platform.award_name') }}"
                     data-url="{{ $voteUrl }}" data-cta="Vote Now"
                     class="mt-4 aspect-square w-full max-w-[420px] rounded-2xl border border-hair bg-night" aria-label="Share card preview"></canvas>
             <div class="mt-3 flex flex-wrap gap-2">

@@ -311,7 +311,7 @@ class VoteCampaignController extends Controller
             'description' => 'nullable|string|max:5000',
             'starts_at' => 'nullable|date',
             'ends_at' => 'nullable|date|after:starts_at',
-            'vote_limit' => 'required|in:daily,once',
+            'vote_limit' => 'required|in:'.implode(',', array_keys(VoteCampaign::VOTE_LIMITS)),
         ]);
         $data['show_counts'] = $request->boolean('show_counts');
 

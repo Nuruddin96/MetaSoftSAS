@@ -144,10 +144,10 @@ class Showcase
             'closes_at' => '2026-11-30T23:59:00+06:00',
             'closes_label' => '30 Nov 2026, 11:59 PM',
             'stats' => [
-                ['value' => '14', 'label' => 'Categories'],
+                ['value' => '25', 'label' => 'Categories'],
+                ['value' => '50', 'label' => 'Awards'],
                 ['value' => '2,380', 'label' => 'Nominees'],
                 ['value' => '1.2M', 'label' => 'Verified votes'],
-                ['value' => '21', 'label' => 'Jury members'],
             ],
             'steps' => [
                 ['label' => 'Nomination', 'meta' => 'Free · closed', 'state' => 'done'],

@@ -1,4 +1,4 @@
-@php $rising = $voting['rising']; @endphp
+@php $rising = $heroRising; /* decorative hero mock-up (sample) */ @endphp
 <section class="relative isolate overflow-hidden bg-night text-white">
     {{-- Decorative: deep green field + soft red sun, a quiet nod to the flag --}}
     <div aria-hidden="true" class="absolute inset-0 -z-10">
@@ -11,16 +11,16 @@
     <div class="{{ $wrap }} grid items-center gap-12 py-12 sm:py-16 lg:grid-cols-[1.1fr_0.9fr] lg:gap-10 lg:py-20">
         <div>
             <a href="#voting" class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3.5 py-1.5 text-[13px] font-medium text-white/90 transition hover:bg-white/10">
-                <span class="h-2 w-2 rounded-full bg-flag"></span> Awards 2026 · voting live in 14 categories
+                <span class="h-2 w-2 rounded-full bg-flag"></span> {{ $home['hero_pill'] }}
                 <x-plat.icon name="chevron-right" class="w-3.5 h-3.5 text-white/60" />
             </a>
 
             <h1 class="mt-6 text-[38px] font-extrabold leading-[1.06] tracking-[-0.03em] sm:text-5xl lg:text-[58px]">
-                Discover the brands & entrepreneurs <span class="text-gold">building Bangladesh.</span>
+                {{ $home['hero_title'] }} <span class="text-gold">{{ $home['hero_highlight'] }}</span>
             </h1>
             <p class="mt-4 font-body text-lg font-medium text-emerald-200 sm:text-xl" lang="bn">বাংলাদেশের উদ্যোক্তা ও ব্র্যান্ডদের জাতীয় প্ল্যাটফর্ম</p>
             <p class="mt-4 max-w-xl text-base leading-relaxed text-white/75 sm:text-[17px]">
-                Explore verified brand profiles, celebrate founders, vote in transparent national awards and connect with opportunities — all in one trusted network.
+                {{ $home['hero_sub'] }}
             </p>
 
             <form action="{{ url('/') }}#results" method="get" role="search" class="mt-7 flex max-w-xl items-center gap-2 rounded-2xl bg-white p-2 shadow-2xl shadow-black/25">
