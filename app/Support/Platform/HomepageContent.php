@@ -82,8 +82,9 @@ class HomepageContent
     public function discover(int $slots = 8): array
     {
         $real = $this->published()->take($slots)->map->toCard()->values()->all();
+        // Samples not already in the Featured row come first, then the rest, so the row stays full.
         $featuredSamples = array_column(Showcase::featuredBrands(), 'slug');
-        $samples = array_values(array_filter(Showcase::brands(), fn ($b) => ! in_array($b['slug'], $featuredSamples, true)));
+        $samples = collect(Showcase::brands())->sortBy(fn ($b) => in_array($b['slug'], $featuredSamples, true) ? 1 : 0)->values()->all();
 
         return $this->fill($real, $samples, $slots);
     }

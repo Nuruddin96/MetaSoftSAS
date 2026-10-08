@@ -28,7 +28,7 @@
                     <p class="mt-4 text-5xl font-extrabold leading-none text-gold" aria-hidden="true">“</p>
                     <blockquote class="text-lg font-medium italic leading-relaxed sm:text-[19px]">{{ $lead['story'] }}</blockquote>
                     <div class="mt-auto pt-6">
-                        <p class="flex items-center gap-1.5 text-lg font-extrabold">{{ $lead['name'] }} <x-plat.verified /></p>
+                        <p class="flex items-center gap-1.5 text-lg font-extrabold">{{ $lead['name'] }} @if($lead['verified'] ?? true)<x-plat.verified />@endif</p>
                         <p class="text-[13px] text-white/60">{{ $lead['role'] }}, {{ $lead['brand'] }} · {{ $lead['category'] }} · {{ $lead['district'] }}</p>
                         <div class="mt-3 flex gap-4">
                             <button type="button" data-profile="person:{{ $lead['slug'] }}" class="text-sm font-bold text-gold hover:underline underline-offset-4">View profile →</button>

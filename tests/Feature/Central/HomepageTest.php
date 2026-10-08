@@ -42,16 +42,47 @@ class HomepageTest extends TestCase
         $response->assertSee('wa.me/', false);
     }
 
-    public function test_sponsored_placement_is_labelled_and_never_carries_an_award_badge(): void
+    public function test_showcase_brands_carry_no_paid_placement_awards_or_verification_claims(): void
     {
-        $sponsored = array_filter(Showcase::brands(), fn ($b) => $b['tag'] === 'sponsored');
-
-        $this->assertNotEmpty($sponsored);
-        foreach ($sponsored as $brand) {
-            $this->assertSame([], $brand['badges'], "{$brand['name']} is a paid placement and must not show earned recognition.");
+        foreach (Showcase::brands() as $brand) {
+            $this->assertNotSame('sponsored', $brand['tag'], "{$brand['name']} is a showcase brand, not a paid placement.");
+            $this->assertSame([], $brand['badges'], "{$brand['name']} must not show invented recognition.");
+            $this->assertFalse($brand['verified'], "{$brand['name']} must not claim MetaSoft BD verification.");
         }
 
+        // The legend still explains what "Sponsored" means.
         $this->get('/')->assertSee('Sponsored');
+    }
+
+    public function test_the_six_supplied_showcase_brands_use_their_supplied_images(): void
+    {
+        $expected = [
+            'Girls Secret' => ['brand1-logo.png.jpg', 'brand1-cover.jpg.png'],
+            'Li Ummati' => ['brand2-logo.png.jpg', 'brand2-cover.jpg.jpg'],
+            'Ayat Fashion' => ['brand3-logo.png.jpg', 'brand3-cover.jpg.jpg'],
+            'Respit Care' => ['brand4-logo.png.jpg', 'brand4-cover.jpg.png'],
+            'Ragdhanu Mart' => ['brand5-logo.png.jpg', 'brand5-cover.jpg.png'],
+            'Sariha Art' => ['brand6-logo.png.jpg', 'brand6-cover.jpg.jpg'],
+        ];
+        $brands = collect(Showcase::brands())->keyBy('name');
+
+        $this->assertSame(array_keys($expected), $brands->keys()->all());
+        foreach ($expected as $name => [$logo, $cover]) {
+            $this->assertSame(asset('images/showcase/logos/'.$logo), $brands[$name]['logo']);
+            $this->assertSame(asset('images/showcase/covers/'.$cover), $brands[$name]['cover']);
+            $this->assertFileExists(public_path('images/showcase/logos/'.$logo));
+            $this->assertFileExists(public_path('images/showcase/covers/'.$cover));
+        }
+
+        $home = $this->get('/')->assertOk();
+        foreach ($expected as $name => [$logo, $cover]) {
+            $home->assertSee($name)->assertSee('images/showcase/logos/'.$logo, false)->assertSee('images/showcase/covers/'.$cover, false);
+        }
+        // Previous demo brands and their generated artwork are gone.
+        foreach (['Nakshi Ghor', 'Krishi Bondhu', 'Jamdani House', 'PayDesh', 'Tanvir Ahmed'] as $old) {
+            $home->assertDontSee($old);
+        }
+        $this->assertDoesNotMatchRegularExpression('#images/showcase/[a-z]+/[^"\']+\.svg#', $home->getContent());
     }
 
     public function test_preview_notice_follows_config(): void
@@ -65,11 +96,11 @@ class HomepageTest extends TestCase
 
     public function test_search_filters_brands_by_district(): void
     {
-        $response = $this->get('/?q=Rajshahi');
+        $response = $this->get('/?q=Moghbazar');
 
         $response->assertOk();
         $response->assertSee('id="results"', false);
-        $response->assertSee('Krishi Bondhu');
+        $response->assertSee('Ayat Fashion');
         $response->assertSee('Search results');
     }
 
@@ -86,7 +117,7 @@ class HomepageTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('All brands');
-        $response->assertSee('Brahmaputra Bamboo');
+        $response->assertSee('Sariha Art')->assertSee('Respit Care');
     }
 
     public function test_search_query_is_escaped(): void

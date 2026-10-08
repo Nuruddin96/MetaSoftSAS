@@ -133,11 +133,11 @@ function openProfile(key) {
     logo.style.background = grad;
     logo.style.borderRadius = p.type === 'person' ? '9999px' : '20px';
     setLogo(logo, p.logo, p.initials);
-    $('#pdName').innerHTML = `${esc(p.name)} <img src="/images/badges/metasoft-verified.png" alt="MetaSoft BD verified" class="inline-block w-5 h-5">`;
+    $('#pdName').innerHTML = esc(p.name) + (p.verified === false ? '' : ' <img src="/images/badges/metasoft-verified.png" alt="MetaSoft BD verified" class="inline-block w-5 h-5">');
     $('#pdSubtitle').textContent = p.subtitle;
     $('#pdDesc').textContent = p.description;
     $('#pdSponsored').classList.toggle('hidden', !p.sponsored);
-    $('#pdBadges').innerHTML = (p.badges.length ? p.badges : [{ label: 'Verified business', type: 'verified' }])
+    $('#pdBadges').innerHTML = (p.badges.length ? p.badges : (p.verified === false ? [] : [{ label: 'Verified business', type: 'verified' }]))
         .map((b) => `<span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClass[b.type] || badgeClass.finalist}">${esc(b.label)}</span>`).join('');
     $('#pdFacts').innerHTML = p.facts
         .map(([k, v]) => `<div class="rounded-xl bg-[#F4F6FA] p-3"><dt class="text-[11px] text-[#5A6478]">${esc(k)}</dt><dd class="truncate text-sm font-bold">${esc(v)}</dd></div>`).join('');

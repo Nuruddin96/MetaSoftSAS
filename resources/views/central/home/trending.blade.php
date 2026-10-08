@@ -21,7 +21,7 @@
                                 <span class="w-7 shrink-0 text-lg font-extrabold tabular-nums {{ $rank <= 3 ? 'text-leaf' : 'text-slate-300' }}">{{ str_pad($rank, 2, '0', STR_PAD_LEFT) }}</span>
                                 <x-plat.logo :initials="$b['initials']" :from="$b['from']" :to="$b['to']" :size="44" :src="$b['logo'] ?? null" :alt="$b['name'].' logo'" />
                                 <button type="button" data-profile="brand:{{ $b['slug'] }}" class="min-w-0 flex-1 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf">
-                                    <span class="flex items-center gap-1.5 text-[15px] font-bold"><span class="truncate">{{ $b['name'] }}</span><x-plat.verified size="w-3.5 h-3.5" /></span>
+                                    <span class="flex items-center gap-1.5 text-[15px] font-bold"><span class="truncate">{{ $b['name'] }}</span>@if($b['verified'] ?? true)<x-plat.verified size="w-3.5 h-3.5" />@endif</span>
                                     <span class="block truncate text-xs text-slate2">{{ $b['category'] }} · {{ $b['district'] }}</span>
                                 </button>
                                 <svg class="hidden h-6 w-[72px] shrink-0 sm:block" viewBox="0 0 72 24" fill="none" aria-hidden="true"><path d="{{ $row['spark'] }}" stroke="{{ $row['up'] ? '#12A06E' : '#94A3B8' }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
