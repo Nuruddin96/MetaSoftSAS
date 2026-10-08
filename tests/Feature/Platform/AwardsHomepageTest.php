@@ -10,6 +10,7 @@ use App\Models\BrandOwner;
 use App\Models\PlatformSetting;
 use App\Models\VoteCampaign;
 use App\Models\VoteEntry;
+use App\Support\Home\Showcase;
 use App\Support\Platform\HomepageContent;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Str;
@@ -256,15 +257,16 @@ class AwardsHomepageTest extends TestCase
     {
         $content = fn () => app(HomepageContent::class);
 
+        $samples = count(Showcase::brands());
         $empty = $content()->discover();
-        $this->assertCount(8, $empty);
+        $this->assertCount($samples, $empty, 'Every showcase brand fills the row while there are no real brands.');
         $this->assertTrue(collect($empty)->every(fn ($b) => $b['sample'] ?? false));
 
         $this->brand('Real One');
         $one = $content()->discover();
         $this->assertSame('Real One', $one[0]['name']);
-        $this->assertCount(8, $one);
-        $this->assertCount(7, array_filter($one, fn ($b) => $b['sample'] ?? false));
+        $this->assertCount(min(8, $samples + 1), $one);
+        $this->assertCount(min(7, $samples), array_filter($one, fn ($b) => $b['sample'] ?? false));
 
         foreach (range(2, 9) as $i) {
             $this->brand('Real '.$i);
@@ -288,8 +290,8 @@ class AwardsHomepageTest extends TestCase
 
         foreach ($cards->where('sample', true) as $sample) {
             $this->assertStringContainsString('images/showcase/logos/', $sample['logo']);
-            $this->assertFileExists(public_path('images/showcase/logos/'.$sample['slug'].'.svg'));
-            $this->assertFileExists(public_path('images/showcase/covers/'.$sample['slug'].'.svg'));
+            $this->assertFileExists(public_path(ltrim(parse_url($sample['logo'], PHP_URL_PATH), '/')));
+            $this->assertFileExists(public_path(ltrim(parse_url($sample['cover'], PHP_URL_PATH), '/')));
         }
 
         $this->get('/')->assertOk()->assertSee($real->logoUrl(), false)->assertSee('images/showcase/logos/', false);

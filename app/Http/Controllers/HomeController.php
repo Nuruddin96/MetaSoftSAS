@@ -46,7 +46,7 @@ class HomeController extends Controller
             'preview' => (bool) config('platform.showcase_preview'),
             'home' => $content->settings(),
             'stats' => Showcase::stats(),
-            'heroBrand' => Showcase::brand('nakshi-ghor'),
+            'heroBrand' => Showcase::brand('ayat-fashion'),
             'heroRising' => Showcase::votingCategories()['rising'],
             'award' => $content->award(),
             'otherAwards' => Showcase::otherAwards(),

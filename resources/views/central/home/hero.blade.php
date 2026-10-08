@@ -73,13 +73,15 @@
                     <div class="flex items-start gap-3">
                         <x-plat.logo :initials="$heroBrand['initials']" :from="$heroBrand['from']" :to="$heroBrand['to']" :size="64" ring :src="$heroBrand['logo'] ?? null" :alt="$heroBrand['name'].' logo'" />
                         <div class="pt-9">
-                            <p class="flex items-center gap-1.5 text-lg font-extrabold">{{ $heroBrand['name'] }} <x-plat.verified /></p>
+                            <p class="flex items-center gap-1.5 text-lg font-extrabold">{{ $heroBrand['name'] }} @if($heroBrand['verified'] ?? false)<x-plat.verified />@endif</p>
                             <p class="text-[13px] text-slate2">{{ $heroBrand['category'] }} · {{ $heroBrand['district'] }}</p>
                         </div>
                     </div>
                     <p class="mt-3 text-sm leading-relaxed text-slate2">{{ $heroBrand['description'] }}</p>
-                    <div class="mt-3 flex gap-1.5"><x-plat.badge type="people" label="People’s Choice 2025" size="xs" /><x-plat.badge type="finalist" label="Women-led" size="xs" /></div>
-                    <div class="mt-4 flex gap-5 text-[13px]"><b>★ {{ $heroBrand['rating'] }}</b><span class="text-slate2">{{ $heroBrand['followers'] }} followers</span><span class="text-slate2">metasoftbd.com/{{ $heroBrand['slug'] }}</span></div>
+                    @if($heroBrand['badges'])
+                        <div class="mt-3 flex gap-1.5">@foreach($heroBrand['badges'] as $b)<x-plat.badge :type="$b['type']" :label="$b['label']" size="xs" />@endforeach</div>
+                    @endif
+                    <div class="mt-4 flex gap-5 text-[13px]">@if($heroBrand['rating'])<b>★ {{ $heroBrand['rating'] }}</b>@endif @if($heroBrand['followers'])<span class="text-slate2">{{ $heroBrand['followers'] }} followers</span>@endif<span class="text-slate2">metasoftbd.com/{{ $heroBrand['slug'] }}</span></div>
                 </div>
             </div>
 
@@ -97,9 +99,10 @@
             </div>
 
             <div class="absolute right-0 top-0 flex items-center gap-3 rounded-full bg-white py-2.5 pl-2.5 pr-4 text-night shadow-2xl shadow-black/40">
-                <x-plat.logo initials="TA" from="#0EA5E9" to="#1E3A8A" :size="40" round :src="\App\Support\Home\Showcase::art('logos', 'krishi-bondhu')" alt="Krishi Bondhu logo" />
-                <div><p class="text-sm font-bold">Tanvir Ahmed</p><p class="text-xs text-slate2">Founder, Krishi Bondhu</p></div>
-                <span class="rounded-full bg-navy px-2 py-0.5 text-[10px] font-bold text-white">Jury Pick</span>
+                @php $chip = \App\Support\Home\Showcase::brand('respit-care'); @endphp
+                <x-plat.logo :initials="$chip['initials']" :from="$chip['from']" :to="$chip['to']" :size="40" round :src="$chip['logo']" :alt="$chip['name'].' logo'" />
+                <div><p class="text-sm font-bold">{{ $chip['name'] }}</p><p class="text-xs text-slate2">{{ $chip['category'] }}</p></div>
+                <span class="rounded-full bg-navy px-2 py-0.5 text-[10px] font-bold text-white">Showcase</span>
             </div>
 
             <div class="absolute bottom-20 right-0 flex items-center gap-3 rounded-2xl bg-night/95 px-4 py-3 shadow-2xl ring-1 ring-white/10">

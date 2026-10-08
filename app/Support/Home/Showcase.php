@@ -2,8 +2,6 @@
 
 namespace App\Support\Home;
 
-use Illuminate\Support\Str;
-
 /**
  * Sample content for the central homepage (metasoftbd.com) — the
  * Entrepreneur & Brand Recognition Platform.
@@ -28,33 +26,30 @@ class Showcase
         ];
     }
 
-    /** Keyed by slug. `tag` is the placement label: 'editor' (earned/editorial) or 'sponsored' (paid). */
+    /**
+     * The homepage's demo/showcase brands, keyed by slug. Logos and covers
+     * are the supplied files in public/images/showcase/{logos,covers}
+     * (used exactly as provided). Descriptions only restate what each
+     * brand's own artwork says; no awards, follower counts, ratings or
+     * founding years are invented for them, and none is marked verified
+     * or sponsored. `tag` 'editor' = shown in the editorial Featured row.
+     * Real approved brands always take these slots first
+     * (App\Support\Platform\HomepageContent).
+     */
     public static function brands(): array
     {
         $rows = [
-            ['Nakshi Ghor', 'NG', 'F59E0B', 'B45309', 'Handicrafts', 'Jashore', 'Khulna', 'Hand-stitched nakshi kantha by 300+ rural women artisans of Jashore.', 2014, [['People’s Choice 2025', 'people']], '18.2K', 4.9, 'editor', 'nusrat-jahan'],
-            ['Krishi Bondhu', 'KB', '16A34A', '14532D', 'AgriTech', 'Rajshahi', 'Rajshahi', 'An app connecting 40,000 farmers directly to wholesale buyers.', 2021, [['Jury Pick 2026', 'jury']], '22.6K', 4.8, null, 'tanvir-ahmed'],
-            ['Rong Tuli', 'RT', 'EC4899', '9D174D', 'Home Décor', 'Narayanganj', 'Dhaka', 'Hand-painted rickshaw-art home décor shipped nationwide.', 2020, [['Finalist 2026', 'finalist']], '15.1K', 4.8, null, 'sadia-islam'],
-            ['Mati Ceramics', 'MC', 'D97706', '78350F', 'Home & Living', 'Bogura', 'Rajshahi', 'Contemporary terracotta crafted with traditional potters.', 2019, [], '7.4K', 4.7, null, null],
-            ['GreenCycle BD', 'GC', '0D9488', '134E4A', 'Sustainability', 'Gazipur', 'Dhaka', 'Turning garment waste into recycled yarn and textiles.', 2022, [['Rising Brand finalist', 'finalist']], '9.9K', 4.7, null, null],
-            ['Jamdani House', 'JH', '7C3AED', '3B0764', 'Fashion', 'Narayanganj', 'Dhaka', 'Handwoven Jamdani sarees from third-generation weavers on the Shitalakshya.', 2011, [['Brand of the Year 2025', 'winner']], '26.4K', 4.9, 'editor', null],
-            ['Sylhet Leaf Tea Co.', 'SL', '16A34A', '14532D', 'Food & Beverage', 'Moulvibazar', 'Sylhet', 'Single-estate teas sourced directly from small gardens in Srimangal.', 2017, [['Jury Choice 2025', 'jury']], '14.9K', 4.8, 'editor', 'farhana-rahman'],
-            ['PayDesh', 'PD', '2563EB', '1E3A8A', 'Fintech', 'Dhaka', 'Dhaka', 'Simple digital payments and invoicing for 60,000 small shops.', 2020, [['Rising Brand finalist', 'finalist']], '31.2K', 4.6, 'editor', 'arif-hossain'],
-            ['Sundarban Madhu', 'SM', 'D97706', '78350F', 'Organic Food', 'Khulna', 'Khulna', 'Raw mangrove honey collected with licensed mouals of the Sundarbans.', 2018, [], '9.8K', 4.7, 'sponsored', null],
-            ['Bhorer Pitha', 'BP', 'F43F5E', '881337', 'Food', 'Cumilla', 'Chattogram', 'Winter pitha, made fresh every morning and delivered across Cumilla.', 2023, [], '11.3K', 4.9, null, null],
-            ['ShikkhaPath', 'SP', '0EA5E9', '0C4A6E', 'EdTech', 'Chattogram', 'Chattogram', 'Bangla-first video lessons used by 210,000 SSC & HSC students.', 2019, [['Jury Choice 2024', 'jury']], '48.2K', 4.7, null, null],
-            ['Dhaka Threads', 'DT', '8B5CF6', '4C1D95', 'Fashion', 'Dhaka', 'Dhaka', 'Everyday streetwear cut and sewn in small Mirpur workshops.', 2022, [], '19.7K', 4.6, null, null],
-            ['Padma Leather', 'PL', '78716C', '292524', 'Leather Goods', 'Dhaka', 'Dhaka', 'Full-grain leather bags made by Hazaribagh-trained craftsmen in Savar.', 2016, [], '21.7K', 4.7, null, null],
-            ['Shonar Bangla Spices', 'SB', 'EAB308', '713F12', 'Food', 'Bogura', 'Rajshahi', 'Stone-ground spices sourced from farmers across the north.', 2021, [], '6.2K', 4.8, null, null],
-            ['Nirvana Skincare', 'NS', '14B8A6', '134E4A', 'Beauty', 'Dhaka', 'Dhaka', 'Clean skincare formulated for South Asian skin and humid weather.', 2021, [['People’s Choice nominee', 'finalist']], '28.5K', 4.6, null, null],
-            ['Rangpur Shatranji', 'RS', 'DC2626', '7F1D1D', 'Handicrafts', 'Rangpur', 'Rangpur', 'Revived shatranji flat-weave rugs from Nisbetganj, sold in 11 countries.', 2015, [['District winner 2025', 'people']], '8.1K', 4.9, null, null],
-            ['Kirtonkhola Foods', 'KF', '0891B2', '164E63', 'Food & Beverage', 'Barishal', 'Barishal', 'River-fresh hilsa and frozen seafood with a cold chain from Barishal.', 2020, [], '5.6K', 4.6, null, null],
-            ['Brahmaputra Bamboo', 'BB', '65A30D', '365314', 'Sustainability', 'Mymensingh', 'Mymensingh', 'Bamboo furniture and home goods replacing single-use plastic.', 2022, [], '4.3K', 4.7, null, null],
+            // slug, name, initials, from, to, category, district, division, description, tag, logo file, cover file
+            ['girls-secret', 'Girls Secret', 'GS', 'E9B949', '9A6B0A', 'Beauty & Skincare', 'Bangladesh', 'Bangladesh', 'Beauty parlour for women — hair, skin and bridal care.', 'editor', 'brand1-logo.png.jpg', 'brand1-cover.jpg.png'],
+            ['li-ummati', 'Li Ummati', 'LU', '3F3F46', '0A0A0A', 'Beauty & Skincare', 'Bangladesh', 'Bangladesh', 'Sunnah-inspired attar and perfumes — including make-your-own perfume blends.', null, 'brand2-logo.png.jpg', 'brand2-cover.jpg.jpg'],
+            ['ayat-fashion', 'Ayat Fashion', 'AF', 'E11D48', '881337', 'Fashion & Apparel', 'Dhaka', 'Dhaka', 'Women’s fashion and occasion wear — outlet at Grand Plaza, Moghbazar, Dhaka.', 'editor', 'brand3-logo.png.jpg', 'brand3-cover.jpg.jpg'],
+            ['respit-care', 'Respit Care', 'RC', '1E5BB8', '0B2E6B', 'Healthcare & Pharmacy', 'Bangladesh', 'Bangladesh', 'Home health care — nursing, ICU-level home care, physiotherapy, elderly and mother & baby care.', 'editor', 'brand4-logo.png.jpg', 'brand4-cover.jpg.png'],
+            ['ragdhanu-mart', 'Ragdhanu Mart', 'RM', 'F59E0B', '0E7490', 'Retail & Consumer Products', 'Bangladesh', 'Bangladesh', 'Gadgets, skin care and imported products in one colourful mart.', null, 'brand5-logo.png.jpg', 'brand5-cover.jpg.png'],
+            ['sariha-art', 'Sariha Art', 'SA', 'C8A27A', '7C5A3A', 'Jewelry & Accessories', 'Bangladesh', 'Bangladesh', 'Handmade floral jewellery and bridal accessories for weddings, gaye holud and special occasions.', 'editor', 'brand6-logo.png.jpg', 'brand6-cover.jpg.jpg'],
         ];
 
         $brands = [];
-        foreach ($rows as [$name, $ini, $from, $to, $cat, $district, $division, $desc, $founded, $badges, $followers, $rating, $tag, $founder]) {
-            $slug = Str::slug($name);
+        foreach ($rows as [$slug, $name, $ini, $from, $to, $cat, $district, $division, $desc, $tag, $logo, $cover]) {
             $brands[$slug] = [
                 'slug' => $slug,
                 'name' => $name,
@@ -65,17 +60,16 @@ class Showcase
                 'district' => $district,
                 'division' => $division,
                 'description' => $desc,
-                'founded' => $founded,
-                'verified' => true,
-                'badges' => array_map(fn ($b) => ['label' => $b[0], 'type' => $b[1]], $badges),
-                'followers' => $followers,
-                'rating' => $rating,
+                'founded' => null,
+                'verified' => false,
+                'badges' => [],
+                'followers' => null,
+                'rating' => null,
                 'tag' => $tag,
-                'founder' => $founder,
+                'founder' => null,
                 'url' => '/brand/'.$slug,
-                // Original demo artwork (resources/branding/showcase-art.php) — sample brands only.
-                'logo' => self::art('logos', $slug),
-                'cover' => self::art('covers', $slug),
+                'logo' => self::art('logos', $logo),
+                'cover' => self::art('covers', $cover),
             ];
         }
 
@@ -87,10 +81,10 @@ class Showcase
         return self::brands()[$slug] ?? null;
     }
 
-    /** Featured brands row (mixes editorial picks with one clearly labelled sponsored placement). */
+    /** Featured row: the editorial picks among the demo brands (no paid placement is shown for them). */
     public static function featuredBrands(): array
     {
-        return array_map(fn ($s) => self::brand($s), ['jamdani-house', 'sylhet-leaf-tea-co', 'paydesh', 'sundarban-madhu']);
+        return array_map(fn ($s) => self::brand($s), ['ayat-fashion', 'girls-secret', 'respit-care', 'sariha-art']);
     }
 
     public static function categories(): array
@@ -105,34 +99,41 @@ class Showcase
         ];
     }
 
+    /**
+     * Entrepreneur spotlight for the demo brands. No founder names are
+     * invented for these businesses: each card presents the brand's team,
+     * and the line is a restatement of the brand's own artwork.
+     */
     public static function entrepreneurs(): array
     {
         $rows = [
-            ['Nusrat Jahan', 'NJ', 'B45309', '7C2D12', 'nakshi-ghor', 'Founder', 'We started with 12 women in one courtyard in Jashore. Today 300 artisans earn a steady income from their own craft.', ['Entrepreneur of the Year 2025', 'winner']],
-            ['Tanvir Ahmed', 'TA', '0EA5E9', '1E3A8A', 'krishi-bondhu', 'Co-founder & CEO', 'Left a bank job to build a marketplace for 40,000 farmers in the north.', ['Jury Pick 2026', 'jury']],
-            ['Farhana Rahman', 'FR', '16A34A', '14532D', 'sylhet-leaf-tea-co', 'Founder', 'Bringing Srimangal’s small tea gardens to shelves in 9 countries.', ['Women Entrepreneur finalist', 'finalist']],
-            ['Arif Hossain', 'AH', '6366F1', '312E81', 'paydesh', 'Founder & CEO', 'Built a payments app for corner shops after his father’s grocery went cashless.', ['Rising Founder 2025', 'people']],
-            ['Sadia Islam', 'SI', 'EC4899', '831843', 'rong-tuli', 'Founder & Designer', 'Turning rickshaw art into a design brand loved by a new generation.', ['People’s Choice nominee', 'finalist']],
+            ['girls-secret', 'Beauty, hair and bridal care — in a parlour made just for women.'],
+            ['respit-care', 'Professional nursing, ICU-level care and physiotherapy at the comfort of your home. Always beside you.'],
+            ['ayat-fashion', 'Style that inspires — women’s fashion and occasion wear, now at our Grand Plaza outlet in Moghbazar.'],
+            ['sariha-art', 'Handmade floral jewellery and bridal accessories for weddings, gaye holud and every special occasion.'],
+            ['li-ummati', 'Follow the Sunnah: attar and perfumes — or make your own perfume blend.'],
         ];
 
         return array_map(function ($r) {
-            [$name, $ini, $from, $to, $brandSlug, $role, $story, $rec] = $r;
+            [$brandSlug, $story] = $r;
             $brand = self::brand($brandSlug);
 
             return [
-                'slug' => Str::slug($name),
-                'name' => $name,
-                'initials' => $ini,
-                'from' => '#'.$from,
-                'to' => '#'.$to,
-                'role' => $role,
+                'slug' => $brandSlug.'-team',
+                'name' => $brand['name'].' team',
+                'initials' => $brand['initials'],
+                'from' => $brand['from'],
+                'to' => $brand['to'],
+                'role' => 'Founders',
                 'brand' => $brand['name'],
                 'brand_slug' => $brandSlug,
                 'category' => $brand['category'],
                 'district' => $brand['district'],
                 'story' => $story,
-                'recognition' => ['label' => $rec[0], 'type' => $rec[1]],
-                'url' => '/entrepreneur/'.Str::slug($name),
+                'recognition' => ['label' => 'Showcase brand', 'type' => 'editor'],
+                'url' => $brand['url'],
+                'verified' => false,
+                'avatar' => $brand['logo'],
                 'brand_logo' => $brand['logo'],
                 'cover' => $brand['cover'],
             ];
@@ -166,19 +167,17 @@ class Showcase
 
     public static function otherAwards(): array
     {
-        $art = ['award-women', 'award-startup', 'award-food'];
-
-        return array_map(fn ($a, $i) => $a + ['art' => $art[$i], 'logo' => self::art('logos', $art[$i])], [
+        return [
             ['title' => 'Women Entrepreneur Awards 2026', 'category' => 'Leadership & Impact', 'nominees' => 186, 'status' => 'Nominations open', 'state' => 'nominate', 'when' => 'Closes 15 Nov', 'initials' => 'WE', 'from' => '#DB2777', 'to' => '#831843'],
             ['title' => 'Bangladesh Startup Awards', 'category' => 'Tech & Innovation', 'nominees' => 412, 'status' => 'Jury review', 'state' => 'jury', 'when' => 'Results 20 Dec', 'initials' => 'SA', 'from' => '#2563EB', 'to' => '#1E3A8A'],
             ['title' => 'Best Local Food Brand — Dhaka', 'category' => 'Food & Beverage · District round', 'nominees' => 96, 'status' => 'Voting open', 'state' => 'voting', 'when' => 'Closes 25 Nov', 'initials' => 'FB', 'from' => '#F97316', 'to' => '#9A3412'],
-        ], [0, 1, 2]);
+        ];
     }
 
-    /** URL of a generated demo artwork file (public/images/showcase/{logos|covers}/{name}.svg). */
-    public static function art(string $kind, string $name): string
+    /** URL of a supplied showcase image: public/images/showcase/{logos|covers}/{file} (file name used verbatim). */
+    public static function art(string $kind, string $file): string
     {
-        return asset('images/showcase/'.$kind.'/'.$name.'.svg');
+        return asset('images/showcase/'.$kind.'/'.$file);
     }
 
     /** District → Division → National ladder, with brand counts per division (sum = headline brand count). */
@@ -203,12 +202,10 @@ class Showcase
     public static function votingCategories(): array
     {
         $cats = [
-            'rising' => ['Rising Brand', [['krishi-bondhu', 4820], ['rong-tuli', 3610], ['mati-ceramics', 2490], ['greencycle-bd', 1780]]],
-            'fashion' => ['Fashion', [['jamdani-house', 5140], ['dhaka-threads', 3920], ['padma-leather', 2210]]],
-            'food' => ['Food & Beverage', [['bhorer-pitha', 4410], ['sylhet-leaf-tea-co', 4030], ['shonar-bangla-spices', 1960], ['kirtonkhola-foods', 1220]]],
-            'tech' => ['Tech & Startups', [['shikkhapath', 6020], ['paydesh', 5470], ['krishi-bondhu', 3180]]],
-            'crafts' => ['Handicrafts', [['nakshi-ghor', 3890], ['rangpur-shatranji', 3240], ['mati-ceramics', 1870]]],
-            'women' => ['Women-led', [['nakshi-ghor', 4720], ['nirvana-skincare', 3360], ['rong-tuli', 2950], ['sylhet-leaf-tea-co', 2400]]],
+            'rising' => ['Rising Brand', [['ayat-fashion', 4820], ['ragdhanu-mart', 3610], ['sariha-art', 2490], ['li-ummati', 1780]]],
+            'fashion' => ['Fashion & Accessories', [['ayat-fashion', 5140], ['sariha-art', 3920]]],
+            'beauty' => ['Beauty & Skincare', [['girls-secret', 4410], ['li-ummati', 4030], ['ragdhanu-mart', 1960]]],
+            'services' => ['Health & Services', [['respit-care', 3890], ['girls-secret', 2240]]],
         ];
 
         $out = [];
@@ -237,10 +234,10 @@ class Showcase
     public static function trending(): array
     {
         $tabs = [
-            'trending' => ['Trending', 'flame', [['bhorer-pitha', '▲ 212%', [2, 3, 3, 5, 4, 7, 9, 12]], ['rong-tuli', '▲ 74%', [4, 4, 5, 5, 6, 7, 7, 9]], ['dhaka-threads', '▲ 96%', [1, 2, 2, 3, 5, 5, 6, 8]], ['rangpur-shatranji', '▲ 61%', [3, 3, 4, 4, 5, 6, 6, 8]], ['shonar-bangla-spices', '▲ 58%', [2, 2, 3, 4, 4, 5, 6, 7]], ['greencycle-bd', '▲ 44%', [3, 4, 4, 5, 5, 5, 6, 7]]]],
-            'viewed' => ['Most Viewed', 'eye', [['shikkhapath', '48.2K views', [5, 6, 5, 7, 8, 8, 10, 11]], ['paydesh', '31.7K views', [6, 6, 7, 7, 8, 9, 9, 10]], ['nirvana-skincare', '28.5K views', [4, 5, 6, 5, 7, 7, 8, 9]], ['jamdani-house', '26.4K views', [6, 5, 6, 7, 7, 8, 8, 9]], ['padma-leather', '21.7K views', [6, 5, 7, 6, 8, 7, 9, 10]], ['nakshi-ghor', '18.2K views', [3, 4, 4, 5, 6, 6, 7, 8]]]],
-            'voted' => ['Most Voted', 'vote', [['shikkhapath', '6,020 votes', [3, 4, 5, 6, 8, 9, 10, 12]], ['paydesh', '5,470 votes', [3, 4, 4, 6, 7, 8, 9, 11]], ['jamdani-house', '5,140 votes', [2, 3, 5, 5, 6, 8, 9, 10]], ['krishi-bondhu', '4,820 votes', [3, 4, 6, 6, 8, 9, 9, 12]], ['nakshi-ghor', '4,720 votes', [2, 4, 4, 6, 7, 7, 9, 10]], ['bhorer-pitha', '4,410 votes', [1, 2, 4, 5, 6, 7, 9, 11]]]],
-            'rising' => ['Rising', 'rocket', [['brahmaputra-bamboo', 'New · Mymensingh', [1, 1, 2, 3, 3, 5, 6, 8]], ['kirtonkhola-foods', 'New · Barishal', [1, 2, 2, 2, 4, 4, 6, 7]], ['greencycle-bd', '▲ 44%', [3, 4, 4, 5, 5, 5, 6, 7]], ['mati-ceramics', '▲ 39%', [2, 3, 3, 4, 4, 5, 5, 6]], ['dhaka-threads', '▲ 96%', [1, 2, 2, 3, 5, 5, 6, 8]], ['bhorer-pitha', '▲ 212%', [2, 3, 3, 5, 4, 7, 9, 12]]]],
+            'trending' => ['Trending', 'flame', [['ayat-fashion', '▲ 86%', [2, 3, 3, 5, 4, 7, 9, 12]], ['sariha-art', '▲ 74%', [4, 4, 5, 5, 6, 7, 7, 9]], ['girls-secret', '▲ 61%', [1, 2, 2, 3, 5, 5, 6, 8]], ['ragdhanu-mart', '▲ 58%', [3, 3, 4, 4, 5, 6, 6, 8]], ['li-ummati', '▲ 44%', [2, 2, 3, 4, 4, 5, 6, 7]], ['respit-care', '▲ 39%', [3, 4, 4, 5, 5, 5, 6, 7]]]],
+            'viewed' => ['Most Viewed', 'eye', [['ayat-fashion', '12.4K views', [5, 6, 5, 7, 8, 8, 10, 11]], ['ragdhanu-mart', '9.8K views', [6, 6, 7, 7, 8, 9, 9, 10]], ['girls-secret', '8.6K views', [4, 5, 6, 5, 7, 7, 8, 9]], ['respit-care', '7.1K views', [6, 5, 6, 7, 7, 8, 8, 9]], ['li-ummati', '6.3K views', [6, 5, 7, 6, 8, 7, 9, 10]], ['sariha-art', '5.9K views', [3, 4, 4, 5, 6, 6, 7, 8]]]],
+            'voted' => ['Most Voted', 'vote', [['ayat-fashion', '5,140 votes', [3, 4, 5, 6, 8, 9, 10, 12]], ['girls-secret', '4,410 votes', [3, 4, 4, 6, 7, 8, 9, 11]], ['li-ummati', '4,030 votes', [2, 3, 5, 5, 6, 8, 9, 10]], ['sariha-art', '3,920 votes', [3, 4, 6, 6, 8, 9, 9, 12]], ['respit-care', '3,890 votes', [2, 4, 4, 6, 7, 7, 9, 10]], ['ragdhanu-mart', '3,610 votes', [1, 2, 4, 5, 6, 7, 9, 11]]]],
+            'rising' => ['Rising', 'rocket', [['sariha-art', 'New listing', [1, 1, 2, 3, 3, 5, 6, 8]], ['respit-care', 'New listing', [1, 2, 2, 2, 4, 4, 6, 7]], ['ragdhanu-mart', '▲ 58%', [3, 4, 4, 5, 5, 5, 6, 7]], ['li-ummati', '▲ 44%', [2, 3, 3, 4, 4, 5, 5, 6]], ['ayat-fashion', '▲ 86%', [1, 2, 2, 3, 5, 5, 6, 8]], ['girls-secret', '▲ 61%', [2, 3, 3, 5, 4, 7, 9, 12]]]],
         ];
 
         $out = [];
@@ -290,20 +287,20 @@ class Showcase
     {
         return [
             'lead' => [
-                'tag' => 'Founder Story',
-                'title' => 'From a Jashore courtyard to 300 artisans: how Nakshi Ghor rebuilt the kantha economy',
-                'excerpt' => 'Nusrat Jahan never planned to run a company. A decade later her brand ships hand-stitched kantha to 14 countries — and pays artisans 3× the local average.',
-                'author' => 'Rafiq Karim',
-                'meta' => '2 Oct 2026 · 8 min read',
+                'tag' => 'Brand Story',
+                'title' => 'Ayat Fashion opens its new outlet at Grand Plaza, Moghbazar',
+                'excerpt' => 'The women’s fashion brand brings its occasion wear to a new outlet at Grand Plaza, Moghbazar (Level 1, Shop 116) — style that inspires, for moments that belong to you.',
+                'author' => 'MetaSoft BD Desk',
+                'meta' => 'Brand feature · 5 min read',
                 'video' => '4:12',
-                'from' => '#B45309', 'to' => '#431407',
-                'cover' => self::art('covers', 'nakshi-ghor'),
+                'from' => '#E11D48', 'to' => '#881337',
+                'cover' => self::art('covers', 'brand3-cover.jpg.jpg'),
             ],
             'list' => [
-                ['tag' => 'Interview', 'title' => 'Tanvir Ahmed on why agritech in Bangladesh needs patience, not hype', 'meta' => '6 min read · 28 Sep', 'from' => '#0EA5E9', 'to' => '#0C4A6E', 'bn' => false, 'cover' => self::art('covers', 'krishi-bondhu')],
-                ['tag' => 'Brand Journey', 'title' => 'পাটের ব্যাগ দিয়ে ইউরোপ জয়: এক তরুণ উদ্যোক্তার গল্প', 'meta' => '৫ মিনিট · ২৫ সেপ্টেম্বর', 'from' => '#65A30D', 'to' => '#365314', 'bn' => true, 'cover' => self::art('covers', 'greencycle-bd')],
-                ['tag' => 'Success Story', 'title' => 'How PayDesh signed 60,000 corner shops without a single billboard', 'meta' => '7 min read · 21 Sep', 'from' => '#2563EB', 'to' => '#1E3A8A', 'bn' => false, 'cover' => self::art('covers', 'paydesh')],
-                ['tag' => 'Business Feature', 'title' => 'Inside Bogura’s terracotta revival: 5 brands to watch', 'meta' => '4 min read · 18 Sep', 'from' => '#D97706', 'to' => '#78350F', 'bn' => false, 'cover' => self::art('covers', 'mati-ceramics')],
+                ['tag' => 'Interview', 'title' => 'Respit Care on bringing nursing and ICU-level care into the home', 'meta' => '6 min read', 'from' => '#1E5BB8', 'to' => '#0B2E6B', 'bn' => false, 'cover' => self::art('covers', 'brand4-cover.jpg.png')],
+                ['tag' => 'Brand Journey', 'title' => 'ফুলের গয়নায় বিয়ের সাজ: সারিহা আর্টের গল্প', 'meta' => '৫ মিনিট', 'from' => '#C8A27A', 'to' => '#7C5A3A', 'bn' => true, 'cover' => self::art('covers', 'brand6-cover.jpg.jpg')],
+                ['tag' => 'Success Story', 'title' => 'Girls Secret: beauty, hair and bridal care in a parlour made for women', 'meta' => '4 min read', 'from' => '#E9B949', 'to' => '#9A6B0A', 'bn' => false, 'cover' => self::art('covers', 'brand1-cover.jpg.png')],
+                ['tag' => 'Business Feature', 'title' => 'Ragdhanu Mart: gadgets, skin care and imported products under one roof', 'meta' => '4 min read', 'from' => '#F59E0B', 'to' => '#0E7490', 'bn' => false, 'cover' => self::art('covers', 'brand5-cover.jpg.png')],
             ],
             'tags' => ['All stories', 'Founder Stories', 'Brand Journeys', 'Success Stories', 'Interviews', 'Business Features'],
         ];
@@ -385,12 +382,13 @@ class Showcase
                 'initials' => $b['initials'],
                 'from' => $b['from'],
                 'to' => $b['to'],
-                'subtitle' => $b['category'].' · '.$b['district'].', '.$b['division'],
+                'subtitle' => $b['category'].' · '.implode(', ', array_unique([$b['district'], $b['division']])),
                 'description' => $b['description'],
-                'facts' => [['Founded', (string) $b['founded']], ['Followers', $b['followers']], ['Rating', '★ '.$b['rating']]],
+                'facts' => [['Category', $b['category']], ['Location', $b['district']]],
                 'badges' => $b['badges'],
                 'sponsored' => $b['tag'] === 'sponsored',
                 'url' => $b['url'],
+                'verified' => $b['verified'],
                 'logo' => $b['logo'],
                 'cover' => $b['cover'],
             ];
@@ -408,7 +406,8 @@ class Showcase
                 'badges' => [$e['recognition']],
                 'sponsored' => false,
                 'url' => $e['url'],
-                'logo' => null,
+                'verified' => $e['verified'],
+                'logo' => $e['avatar'] ?? null,
                 'cover' => $e['cover'],
             ];
         }
