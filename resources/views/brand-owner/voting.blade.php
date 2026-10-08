@@ -72,9 +72,10 @@
             <p class="mt-2 rounded-xl bg-cloud px-3 py-2 text-xs text-slate2">A picture can’t contain a clickable link. When you post the card, paste your voting link <b class="font-mono text-night">{{ Str::after($voteUrl, '://') }}</b> in the caption — or use the Facebook / WhatsApp buttons above, which share the link itself with a clickable preview.</p>
             <canvas id="shareCard" data-share-card width="1080" height="1080"
                     data-name="{{ $brand->name }}" data-initials="{{ $brand->initials() }}" data-logo="{{ $brand->logoUrl() }}"
+                    data-cover="{{ $brand->galleryUrls()[0] ?? '' }}" data-verified="{{ $brand->is_verified ? 1 : 0 }}" data-badge="{{ asset('images/badges/metasoft-verified.png') }}"
                     data-category="{{ $current?->category->name ?? $brand->category?->name }}" data-nominee="{{ $current ? 1 : 0 }}"
-                    data-campaign="{{ $current?->campaign->award?->title ?? $current?->campaign->title ?? config('platform.award_name') }}"
-                    data-url="{{ $voteUrl }}" data-cta="Vote Now"
+                    data-campaign="{{ $current?->campaign->award?->title ?? $current?->campaign->title ?? \App\Models\Award::public()->where('status', '!=', 'archived')->latest('year')->latest('id')->value('title') ?? config('platform.award_name') }}"
+                    data-url="{{ $voteUrl }}" data-join-url="{{ route('owner.register') }}" data-cta="Vote Now"
                     class="mt-4 aspect-square w-full max-w-[420px] rounded-2xl border border-hair bg-night" aria-label="Share card preview"></canvas>
             <div class="mt-3 flex flex-wrap gap-2">
                 <button type="button" data-share-card-download="shareCard" data-filename="{{ $slugName }}-vote-card.png" class="rounded-xl bg-night px-4 py-2.5 text-sm font-bold text-white hover:bg-navy">Download card</button>
