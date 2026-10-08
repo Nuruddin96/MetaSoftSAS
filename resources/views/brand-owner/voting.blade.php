@@ -24,7 +24,7 @@
             <span class="min-w-0 flex-1 truncate font-mono text-sm sm:text-[15px]" title="{{ $voteUrl }}">{{ Str::after($voteUrl, '://') }}</span>
         </div>
         <p class="mt-2 text-xs text-white/60">This link is permanent and always points to your brand’s voting page.</p>
-        <x-plat.share-kit class="mt-4 text-night" :url="$voteUrl" :title="'Vote for '.$brand->name"
+        <x-plat.share-kit class="mt-4 text-night" on-dark :url="$voteUrl" :title="'Vote for '.$brand->name"
             :text="'Please vote for '.$brand->name.($current ? ' in '.$current->campaign->title : '').' on MetaSoft BD 🙏'" />
     </section>
 @endif
