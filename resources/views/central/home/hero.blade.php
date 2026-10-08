@@ -99,7 +99,7 @@
             </div>
 
             <div class="absolute right-0 top-0 flex items-center gap-3 rounded-full bg-white py-2.5 pl-2.5 pr-4 text-night shadow-2xl shadow-black/40">
-                @php $chip = \App\Support\Home\Showcase::brand('respit-care'); @endphp
+                @php $chip = \App\Support\Home\Showcase::brand('respite-care'); @endphp
                 <x-plat.logo :initials="$chip['initials']" :from="$chip['from']" :to="$chip['to']" :size="40" round :src="$chip['logo']" :alt="$chip['name'].' logo'" />
                 <div><p class="text-sm font-bold">{{ $chip['name'] }}</p><p class="text-xs text-slate2">{{ $chip['category'] }}</p></div>
                 <span class="rounded-full bg-navy px-2 py-0.5 text-[10px] font-bold text-white">Showcase</span>

@@ -60,7 +60,7 @@ class HomepageTest extends TestCase
             'Girls Secret' => ['brand1-logo.png.jpg', 'brand1-cover.jpg.png'],
             'Li Ummati' => ['brand2-logo.png.jpg', 'brand2-cover.jpg.jpg'],
             'Ayat Fashion' => ['brand3-logo.png.jpg', 'brand3-cover.jpg.jpg'],
-            'Respit Care' => ['brand4-logo.png.jpg', 'brand4-cover.jpg.png'],
+            'Respite Care' => ['brand4-logo.png.jpg', 'brand4-cover.jpg.png'],
             'Ragdhanu Mart' => ['brand5-logo.png.jpg', 'brand5-cover.jpg.png'],
             'Sariha Art' => ['brand6-logo.png.jpg', 'brand6-cover.jpg.jpg'],
         ];
@@ -117,7 +117,7 @@ class HomepageTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('All brands');
-        $response->assertSee('Sariha Art')->assertSee('Respit Care');
+        $response->assertSee('Sariha Art')->assertSee('Respite Care');
     }
 
     public function test_search_query_is_escaped(): void
