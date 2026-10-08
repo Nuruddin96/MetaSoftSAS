@@ -61,13 +61,17 @@
         {{-- Platform composition: a live profile, a live vote and recognition chips --}}
         <div class="relative mx-auto hidden h-[560px] w-full max-w-[520px] lg:block" aria-hidden="true">
             <div class="absolute left-12 top-10 w-[380px] overflow-hidden rounded-3xl bg-white text-night shadow-2xl shadow-black/40">
-                <div class="relative h-36" style="background:linear-gradient(135deg,#C2410C,#7C2D12)">
-                    <span class="absolute -right-8 -top-10 h-44 w-44 rounded-full bg-white/10"></span>
+                <div class="relative h-36 overflow-hidden" style="background:linear-gradient(135deg,#C2410C,#7C2D12)">
+                    @if(! empty($heroBrand['cover']))
+                        <img src="{{ $heroBrand['cover'] }}" alt="" class="absolute inset-0 h-full w-full object-cover">
+                    @else
+                        <span class="absolute -right-8 -top-10 h-44 w-44 rounded-full bg-white/10"></span>
+                    @endif
                     <span class="absolute left-3 top-3"><x-plat.badge type="editor" label="Editor’s pick" size="xs" /></span>
                 </div>
                 <div class="relative -mt-8 px-6 pb-6">
                     <div class="flex items-start gap-3">
-                        <x-plat.logo :initials="$heroBrand['initials']" :from="$heroBrand['from']" :to="$heroBrand['to']" :size="64" ring />
+                        <x-plat.logo :initials="$heroBrand['initials']" :from="$heroBrand['from']" :to="$heroBrand['to']" :size="64" ring :src="$heroBrand['logo'] ?? null" :alt="$heroBrand['name'].' logo'" />
                         <div class="pt-9">
                             <p class="flex items-center gap-1.5 text-lg font-extrabold">{{ $heroBrand['name'] }} <x-plat.verified /></p>
                             <p class="text-[13px] text-slate2">{{ $heroBrand['category'] }} · {{ $heroBrand['district'] }}</p>
@@ -93,7 +97,7 @@
             </div>
 
             <div class="absolute right-0 top-0 flex items-center gap-3 rounded-full bg-white py-2.5 pl-2.5 pr-4 text-night shadow-2xl shadow-black/40">
-                <x-plat.logo initials="TA" from="#0EA5E9" to="#1E3A8A" :size="40" round />
+                <x-plat.logo initials="TA" from="#0EA5E9" to="#1E3A8A" :size="40" round :src="\App\Support\Home\Showcase::art('logos', 'krishi-bondhu')" alt="Krishi Bondhu logo" />
                 <div><p class="text-sm font-bold">Tanvir Ahmed</p><p class="text-xs text-slate2">Founder, Krishi Bondhu</p></div>
                 <span class="rounded-full bg-navy px-2 py-0.5 text-[10px] font-bold text-white">Jury Pick</span>
             </div>

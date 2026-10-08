@@ -276,6 +276,25 @@ class AwardsHomepageTest extends TestCase
         $this->assertCount(0, array_filter($content()->featured(), fn ($b) => $b['sample'] ?? false));
     }
 
+    public function test_real_brands_keep_their_own_assets_and_only_samples_get_demo_art(): void
+    {
+        $real = $this->brand('Shop Basket', ['logo_path' => 'brands/logos/shop-basket.jpg', 'gallery' => ['brands/gallery/1/front.jpg']]);
+        $cards = collect(app(HomepageContent::class)->discover());
+
+        $realCard = $cards->firstWhere('name', 'Shop Basket');
+        $this->assertSame($real->logoUrl(), $realCard['logo']);
+        $this->assertSame(asset('storage/brands/gallery/1/front.jpg'), $realCard['cover']);
+        $this->assertStringNotContainsString('images/showcase', $realCard['logo'].$realCard['cover']);
+
+        foreach ($cards->where('sample', true) as $sample) {
+            $this->assertStringContainsString('images/showcase/logos/', $sample['logo']);
+            $this->assertFileExists(public_path('images/showcase/logos/'.$sample['slug'].'.svg'));
+            $this->assertFileExists(public_path('images/showcase/covers/'.$sample['slug'].'.svg'));
+        }
+
+        $this->get('/')->assertOk()->assertSee($real->logoUrl(), false)->assertSee('images/showcase/logos/', false);
+    }
+
     public function test_homepage_voting_uses_real_campaign_nominees_with_vote_links(): void
     {
         $brand = $this->brand('Shop Basket');
