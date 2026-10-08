@@ -347,6 +347,27 @@ class BrandPlatformFlowTest extends TestCase
             ->assertOk()->assertSee(route('vote.show', $brand->slug))->assertSee('Copy link')->assertSee('data-qr', false);
     }
 
+    public function test_share_card_carries_programme_name_badge_flag_and_real_links(): void
+    {
+        $brand = $this->approvedBrand('Ayat Fashion');
+        $page = fn () => $this->actingAs($brand->owner->fresh(), 'brand_owner')->get(route('owner.voting'))->assertOk();
+
+        // No programme set up yet: the configured award name; unverified → no badge.
+        $page()->assertSee('data-share-card', false)
+            ->assertSee('data-campaign="'.e(config('platform.award_name')).'"', false)
+            ->assertSee('data-verified="0"', false)
+            ->assertSee('data-url="'.route('vote.show', $brand->slug).'"', false)
+            ->assertSee('data-join-url="'.route('owner.register').'"', false)
+            ->assertSee('data-badge="'.asset('images/badges/metasoft-verified.png').'"', false);
+
+        // The active programme's own name wins; drafts don't count.
+        Award::create(['title' => 'Draft Programme 2027', 'slug' => 'draft-2027', 'year' => 2027, 'status' => 'draft']);
+        Award::create(['title' => 'Test Brand Awards 2026', 'slug' => 'tba-2026', 'year' => 2026, 'status' => 'nominations_open']);
+        $brand->forceFill(['is_verified' => true, 'verified_at' => now()])->save();
+        $page()->assertSee('data-campaign="Test Brand Awards 2026"', false)->assertDontSee('Draft Programme 2027')
+            ->assertSee('data-verified="1"', false);
+    }
+
     public function test_bot_guards_reject_instant_or_honeypot_submissions(): void
     {
         $brand = $this->approvedBrand();
