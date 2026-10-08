@@ -7,7 +7,7 @@
 @php
     $box = 'rounded-xl border border-ink/5 bg-white p-4 sm:p-5';
     $field = 'w-full rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm';
-    $btn = 'rounded-lg px-3 py-2 text-sm font-semibold';
+    $btn = 'rounded-lg px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40';
     $statusCls = ['pending' => 'bg-amber/15 text-amber-700', 'approved' => 'bg-leaf/10 text-leafdk', 'rejected' => 'bg-red-50 text-red-600', 'suspended' => 'bg-ink/10 text-ink'];
     $pending = $brand->pendingChange;
     $fieldNames = ['name' => 'Brand name', 'logo_path' => 'Logo', 'brand_category_id' => 'Category', 'district' => 'District', 'division' => 'Division', 'founder_name' => 'Founder', 'phone' => 'Phone', 'email' => 'Email'];
