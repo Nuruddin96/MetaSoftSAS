@@ -71,7 +71,7 @@
                 @foreach($otherAwards as $a)
                     @php $tone = ['voting' => 'bg-rose-50 text-rose-700', 'nominate' => 'bg-mint text-leafdk', 'jury' => 'bg-indigo-50 text-indigo-700'][$a['state']]; @endphp
                     <article class="flex flex-1 items-center gap-4 rounded-2xl border border-hair bg-white p-5">
-                        <x-plat.logo :initials="$a['initials']" :from="$a['from']" :to="$a['to']" :size="54" />
+                        <x-plat.logo :initials="$a['initials']" :from="$a['from']" :to="$a['to']" :size="54" :src="$a['logo'] ?? null" :alt="$a['title'].' emblem'" />
                         <div class="min-w-0 flex-1">
                             <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold {{ $tone }}"><span class="h-1.5 w-1.5 rounded-full bg-current"></span>{{ $a['status'] }}</span>
                             <h3 class="mt-1.5 text-base font-bold leading-snug">{{ $a['title'] }}</h3>

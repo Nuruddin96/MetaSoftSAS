@@ -1,7 +1,13 @@
 @props(['person'])
 <article class="flex h-full flex-col rounded-[20px] border border-hair bg-white p-5 transition hover:shadow-[0_12px_32px_-14px_rgba(10,20,40,0.2)]">
     <div class="flex items-center gap-3.5">
-        <x-plat.logo :initials="$person['initials']" :from="$person['from']" :to="$person['to']" :size="56" round />
+        <span class="relative shrink-0">
+            <x-plat.logo :initials="$person['initials']" :from="$person['from']" :to="$person['to']" :size="56" round />
+            @if(! empty($person['brand_logo']))
+                {{-- Their brand's mark, so the card reads as founder + brand. --}}
+                <img src="{{ $person['brand_logo'] }}" alt="{{ $person['brand'] }} logo" width="26" height="26" loading="lazy" class="absolute -bottom-1 -right-1 h-[26px] w-[26px] rounded-lg ring-2 ring-white">
+            @endif
+        </span>
         <div class="min-w-0">
             <h3 class="flex items-center gap-1.5 font-plat text-base font-extrabold text-night"><span class="truncate">{{ $person['name'] }}</span><x-plat.verified size="w-3.5 h-3.5" /></h3>
             <p class="truncate text-[13px] text-slate2">{{ $person['role'] }}, {{ $person['brand'] }}</p>

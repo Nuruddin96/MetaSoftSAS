@@ -10,9 +10,18 @@
             {{-- Editorial feature --}}
             <article class="grid overflow-hidden rounded-3xl bg-night text-white sm:grid-cols-[0.85fr_1fr]">
                 <div class="relative min-h-[240px] overflow-hidden" style="background:linear-gradient(160deg,{{ $lead['from'] }},{{ $lead['to'] }})" aria-hidden="true">
-                    <span class="absolute left-1/2 top-[22%] h-24 w-24 -translate-x-1/2 rounded-full bg-white/20"></span>
-                    <span class="absolute -bottom-20 left-1/2 h-56 w-56 -translate-x-1/2 rounded-full bg-white/15"></span>
-                    <span class="absolute bottom-4 left-4 font-plat text-6xl font-extrabold text-white/25">{{ $lead['initials'] }}</span>
+                    @if(! empty($lead['cover']))
+                        <img src="{{ $lead['cover'] }}" alt="" class="absolute inset-0 h-full w-full object-cover">
+                        <span class="absolute inset-0 bg-gradient-to-t from-night/70 via-night/10 to-transparent"></span>
+                        <span class="absolute bottom-4 left-4 flex items-center gap-2.5">
+                            <img src="{{ $lead['brand_logo'] }}" alt="" width="44" height="44" class="h-11 w-11 rounded-xl ring-2 ring-white/80">
+                            <span class="text-sm font-bold text-white">{{ $lead['brand'] }}</span>
+                        </span>
+                    @else
+                        <span class="absolute left-1/2 top-[22%] h-24 w-24 -translate-x-1/2 rounded-full bg-white/20"></span>
+                        <span class="absolute -bottom-20 left-1/2 h-56 w-56 -translate-x-1/2 rounded-full bg-white/15"></span>
+                        <span class="absolute bottom-4 left-4 font-plat text-6xl font-extrabold text-white/25">{{ $lead['initials'] }}</span>
+                    @endif
                 </div>
                 <div class="flex flex-col p-6 sm:p-8">
                     <x-plat.badge :type="$lead['recognition']['type']" :label="$lead['recognition']['label']" size="xs" class="self-start" />

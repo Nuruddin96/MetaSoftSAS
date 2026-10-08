@@ -73,6 +73,9 @@ class Showcase
                 'tag' => $tag,
                 'founder' => $founder,
                 'url' => '/brand/'.$slug,
+                // Original demo artwork (resources/branding/showcase-art.php) — sample brands only.
+                'logo' => self::art('logos', $slug),
+                'cover' => self::art('covers', $slug),
             ];
         }
 
@@ -130,6 +133,8 @@ class Showcase
                 'story' => $story,
                 'recognition' => ['label' => $rec[0], 'type' => $rec[1]],
                 'url' => '/entrepreneur/'.Str::slug($name),
+                'brand_logo' => $brand['logo'],
+                'cover' => $brand['cover'],
             ];
         }, $rows);
     }
@@ -161,11 +166,19 @@ class Showcase
 
     public static function otherAwards(): array
     {
-        return [
+        $art = ['award-women', 'award-startup', 'award-food'];
+
+        return array_map(fn ($a, $i) => $a + ['art' => $art[$i], 'logo' => self::art('logos', $art[$i])], [
             ['title' => 'Women Entrepreneur Awards 2026', 'category' => 'Leadership & Impact', 'nominees' => 186, 'status' => 'Nominations open', 'state' => 'nominate', 'when' => 'Closes 15 Nov', 'initials' => 'WE', 'from' => '#DB2777', 'to' => '#831843'],
             ['title' => 'Bangladesh Startup Awards', 'category' => 'Tech & Innovation', 'nominees' => 412, 'status' => 'Jury review', 'state' => 'jury', 'when' => 'Results 20 Dec', 'initials' => 'SA', 'from' => '#2563EB', 'to' => '#1E3A8A'],
             ['title' => 'Best Local Food Brand — Dhaka', 'category' => 'Food & Beverage · District round', 'nominees' => 96, 'status' => 'Voting open', 'state' => 'voting', 'when' => 'Closes 25 Nov', 'initials' => 'FB', 'from' => '#F97316', 'to' => '#9A3412'],
-        ];
+        ], [0, 1, 2]);
+    }
+
+    /** URL of a generated demo artwork file (public/images/showcase/{logos|covers}/{name}.svg). */
+    public static function art(string $kind, string $name): string
+    {
+        return asset('images/showcase/'.$kind.'/'.$name.'.svg');
     }
 
     /** District → Division → National ladder, with brand counts per division (sum = headline brand count). */
@@ -284,12 +297,13 @@ class Showcase
                 'meta' => '2 Oct 2026 · 8 min read',
                 'video' => '4:12',
                 'from' => '#B45309', 'to' => '#431407',
+                'cover' => self::art('covers', 'nakshi-ghor'),
             ],
             'list' => [
-                ['tag' => 'Interview', 'title' => 'Tanvir Ahmed on why agritech in Bangladesh needs patience, not hype', 'meta' => '6 min read · 28 Sep', 'from' => '#0EA5E9', 'to' => '#0C4A6E', 'bn' => false],
-                ['tag' => 'Brand Journey', 'title' => 'পাটের ব্যাগ দিয়ে ইউরোপ জয়: এক তরুণ উদ্যোক্তার গল্প', 'meta' => '৫ মিনিট · ২৫ সেপ্টেম্বর', 'from' => '#65A30D', 'to' => '#365314', 'bn' => true],
-                ['tag' => 'Success Story', 'title' => 'How PayDesh signed 60,000 corner shops without a single billboard', 'meta' => '7 min read · 21 Sep', 'from' => '#2563EB', 'to' => '#1E3A8A', 'bn' => false],
-                ['tag' => 'Business Feature', 'title' => 'Inside Bogura’s terracotta revival: 5 brands to watch', 'meta' => '4 min read · 18 Sep', 'from' => '#D97706', 'to' => '#78350F', 'bn' => false],
+                ['tag' => 'Interview', 'title' => 'Tanvir Ahmed on why agritech in Bangladesh needs patience, not hype', 'meta' => '6 min read · 28 Sep', 'from' => '#0EA5E9', 'to' => '#0C4A6E', 'bn' => false, 'cover' => self::art('covers', 'krishi-bondhu')],
+                ['tag' => 'Brand Journey', 'title' => 'পাটের ব্যাগ দিয়ে ইউরোপ জয়: এক তরুণ উদ্যোক্তার গল্প', 'meta' => '৫ মিনিট · ২৫ সেপ্টেম্বর', 'from' => '#65A30D', 'to' => '#365314', 'bn' => true, 'cover' => self::art('covers', 'greencycle-bd')],
+                ['tag' => 'Success Story', 'title' => 'How PayDesh signed 60,000 corner shops without a single billboard', 'meta' => '7 min read · 21 Sep', 'from' => '#2563EB', 'to' => '#1E3A8A', 'bn' => false, 'cover' => self::art('covers', 'paydesh')],
+                ['tag' => 'Business Feature', 'title' => 'Inside Bogura’s terracotta revival: 5 brands to watch', 'meta' => '4 min read · 18 Sep', 'from' => '#D97706', 'to' => '#78350F', 'bn' => false, 'cover' => self::art('covers', 'mati-ceramics')],
             ],
             'tags' => ['All stories', 'Founder Stories', 'Brand Journeys', 'Success Stories', 'Interviews', 'Business Features'],
         ];
@@ -377,6 +391,8 @@ class Showcase
                 'badges' => $b['badges'],
                 'sponsored' => $b['tag'] === 'sponsored',
                 'url' => $b['url'],
+                'logo' => $b['logo'],
+                'cover' => $b['cover'],
             ];
         }
         foreach (self::entrepreneurs() as $e) {
@@ -392,6 +408,8 @@ class Showcase
                 'badges' => [$e['recognition']],
                 'sponsored' => false,
                 'url' => $e['url'],
+                'logo' => null,
+                'cover' => $e['cover'],
             ];
         }
 

@@ -37,7 +37,7 @@
             </a>
             <a href="{{ $b['url'] }}" class="inline-flex items-center justify-center rounded-[10px] border border-hair px-3 py-2.5 text-[13px] font-bold text-night transition hover:border-leaf hover:text-leaf focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf">Profile</a>
         @else
-            <button type="button" data-vote data-name="{{ $b['name'] }}" data-category="{{ $category }}" data-initials="{{ $b['initials'] }}" data-from="{{ $b['from'] }}" data-to="{{ $b['to'] }}" data-slug="{{ $b['slug'] }}"
+            <button type="button" data-vote data-name="{{ $b['name'] }}" data-category="{{ $category }}" data-initials="{{ $b['initials'] }}" data-from="{{ $b['from'] }}" data-to="{{ $b['to'] }}" data-slug="{{ $b['slug'] }}" data-logo="{{ $b['logo'] ?? '' }}"
                     class="inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-leaf px-3 py-2.5 text-[13px] font-bold text-white transition hover:bg-leafdk active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
                 <x-plat.icon name="check" class="w-4 h-4" stroke="2.6" /> Vote
             </button>

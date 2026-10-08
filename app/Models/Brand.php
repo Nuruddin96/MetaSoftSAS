@@ -257,6 +257,7 @@ class Brand extends Model
             'name' => $this->name,
             'initials' => $this->initials(),
             'logo' => $this->logoUrl(),
+            'cover' => $this->galleryUrls()[0] ?? null,
             'from' => $from,
             'to' => $to,
             'category' => $this->category?->name ?? 'Brand',

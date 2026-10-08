@@ -109,15 +109,30 @@ const badgeClass = {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const profileLink = (p) => `${location.origin}/?q=${encodeURIComponent(p.name)}#results`;
 
+// Logo image when the profile has one (demo artwork or a real upload), otherwise initials.
+function setLogo(el, src, initials) {
+    el.textContent = '';
+    el.style.overflow = 'hidden';
+    if (src) {
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = '';
+        img.className = 'h-full w-full object-cover';
+        el.appendChild(img);
+    } else {
+        el.textContent = initials;
+    }
+}
+
 function openProfile(key) {
     const p = profiles[key];
     if (!p || !drawer) return;
     const grad = `linear-gradient(135deg,${p.from},${p.to})`;
-    $('#pdCover').style.background = grad;
+    $('#pdCover').style.background = p.cover ? `center / cover no-repeat url("${p.cover}"), ${grad}` : grad;
     const logo = $('#pdLogo');
     logo.style.background = grad;
     logo.style.borderRadius = p.type === 'person' ? '9999px' : '20px';
-    logo.textContent = p.initials;
+    setLogo(logo, p.logo, p.initials);
     $('#pdName').innerHTML = `${esc(p.name)} <img src="/images/badges/metasoft-verified.png" alt="MetaSoft BD verified" class="inline-block w-5 h-5">`;
     $('#pdSubtitle').textContent = p.subtitle;
     $('#pdDesc').textContent = p.description;
@@ -147,8 +162,8 @@ document.addEventListener('click', (e) => {
     $('#vmCategory').textContent = current.category;
     $('#vmTitle').textContent = current.name;
     const logo = $('#vmLogo');
-    logo.textContent = current.initials;
     logo.style.background = `linear-gradient(135deg,${current.from},${current.to})`;
+    setLogo(logo, current.logo, current.initials);
     $('#voteForm').classList.remove('hidden');
     $('#voteDone').classList.add('hidden');
     $('#vmError').classList.add('hidden');
