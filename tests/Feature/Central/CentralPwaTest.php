@@ -14,6 +14,11 @@ use Tests\TestCase;
  * the whole point of this feature is that the two must stay independent
  * (different scope) while sharing the same underlying service-worker
  * script (PwaServiceWorkerBuilder) rather than each having its own copy.
+ *
+ * The Business Automation marketing page that carries the install button
+ * moved from / to /automation when the homepage became the Entrepreneur &
+ * Brand Recognition Platform (see HomeController) — its content is
+ * otherwise unchanged, so these tests now target /automation.
  */
 class CentralPwaTest extends TestCase
 {
@@ -41,7 +46,7 @@ class CentralPwaTest extends TestCase
 
     public function test_landing_page_renders_the_install_app_button_with_exact_label(): void
     {
-        $response = $this->get('/');
+        $response = $this->get('/automation');
 
         $response->assertOk();
         $response->assertSee('Install App', false);
@@ -66,7 +71,7 @@ class CentralPwaTest extends TestCase
      */
     public function test_install_banner_content_is_centered_not_pinned_to_a_corner(): void
     {
-        $response = $this->get('/');
+        $response = $this->get('/automation');
 
         $response->assertOk();
         $html = $response->getContent();
@@ -85,7 +90,7 @@ class CentralPwaTest extends TestCase
 
     public function test_landing_page_existing_content_is_unchanged(): void
     {
-        $response = $this->get('/');
+        $response = $this->get('/automation');
 
         $response->assertOk();
         $response->assertSee('MetaSoft BD');

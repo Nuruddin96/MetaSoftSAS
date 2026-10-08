@@ -22,6 +22,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="MetaSoft">
     <script>window.__swUrl = @js(route('central.pwa.sw'));</script>
+    @stack('head')
     <style>
         html { scroll-behavior: smooth; }
         /* signature: CSS barcode stripe */
@@ -47,5 +48,6 @@
         স্কিপ করে মূল কনটেন্টে যান
     </a>
     @yield('content')
+    @stack('scripts')
 </body>
 </html>

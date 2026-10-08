@@ -10,7 +10,10 @@ use Tests\TestCase;
 class ExampleTest extends TestCase
 {
     /**
-     * GET / (LandingController::index()) is the central marketing homepage
+     * GET / (HomeController::index()) is the central homepage — it renders
+     * sample content with no queries. The plans table below is still created
+     * for the Business Automation page (LandingController, now at /automation).
+     * Original note: GET / (LandingController::index()) was the central marketing homepage
      * — its only database dependency is Plan::where('is_active', 1)->get()
      * (verified: neither central/landing.blade.php nor layouts/central.blade.php
      * issue any other query). This project's real schema lives in raw SQL

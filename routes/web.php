@@ -5,6 +5,7 @@ use App\Http\Controllers\Affiliate\DashboardController as AffiliateDashboardCont
 use App\Http\Controllers\CentralAuth\CentralLoginController;
 use App\Http\Controllers\CentralAuth\RegisterController;
 use App\Http\Controllers\FacebookOAuthCallbackController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MessengerWebhookController;
 use App\Http\Controllers\PwaController;
@@ -82,7 +83,11 @@ use Illuminate\Support\Facades\Route;
 */
 Route::domain(config('app.central_domain'))->group(function () {
 
-    Route::get('/', [LandingController::class, 'index'])->name('landing');
+    // Homepage = Entrepreneur & Brand Recognition Platform. The Business
+    // Automation marketing page that used to be the homepage is served,
+    // unchanged, at /automation (linked from the homepage nav + footer).
+    Route::get('/', [HomeController::class, 'index'])->name('landing');
+    Route::get('/automation', [LandingController::class, 'index'])->name('automation');
 
     // Backs the landing page's "Install App" button — see PwaController's
     // docblock for why this can't just reuse Tenant\PwaController's
