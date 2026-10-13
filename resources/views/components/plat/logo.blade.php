@@ -2,7 +2,7 @@
 @props(['initials', 'from' => '#128155', 'to' => '#0C5C3C', 'size' => 48, 'round' => false, 'ring' => false, 'src' => null, 'alt' => ''])
 @php $r = $round ? '9999px' : round($size * 0.26).'px'; @endphp
 @if($src)
-    <img src="{{ $src }}" alt="{{ $alt }}" width="{{ $size }}" height="{{ $size }}" loading="lazy"
+    <img src="{{ $src }}" alt="{{ $alt }}" width="{{ $size }}" height="{{ $size }}" loading="lazy" decoding="async"
          {{ $attributes->merge(['class' => 'shrink-0 bg-white object-cover'.($ring ? ' ring-4 ring-white' : '')]) }}
          style="width:{{ $size }}px;height:{{ $size }}px;border-radius:{{ $r }}">
 @else

@@ -237,7 +237,7 @@ class AwardsHomepageTest extends TestCase
         $this->brand('Shop Basket');
         $this->brand('Hidden Pending', ['status' => 'pending']);
 
-        $this->get('/')->assertOk()->assertSee('Shop Basket')->assertDontSee('Hidden Pending')->assertSee('Newly listed brands');
+        $this->get('/')->assertOk()->assertSee('Shop Basket')->assertDontSee('Hidden Pending')->assertSee('Our Brands')->assertDontSee('Featured brands');
     }
 
     public function test_featured_and_sponsored_rows_stay_separate_from_approval(): void
@@ -306,6 +306,69 @@ class AwardsHomepageTest extends TestCase
         $this->get('/')->assertOk()
             ->assertSee(route('vote.show', $brand->slug), false)
             ->assertSee('One vote per mobile number in the entire '.e(self::AWARD), false);
+    }
+
+    public function test_our_brands_puts_featured_first_then_newest_and_shows_verified_seal_only_for_verified(): void
+    {
+        $this->brand('Plain Old', ['approved_at' => now()->subDays(3)]);
+        $this->brand('Fresh One', ['approved_at' => now()]);
+        $this->brand('Editor Pick', ['is_featured' => true, 'approved_at' => now()->subDays(9)]);
+        $verified = $this->brand('Trusted Co', ['is_verified' => true, 'verified_at' => now(), 'approved_at' => now()->subDays(5)]);
+
+        $names = array_column(app(HomepageContent::class)->ourBrands(), 'name');
+        $this->assertSame(['Editor Pick', 'Fresh One', 'Plain Old', 'Trusted Co'], array_slice($names, 0, 4));
+
+        $home = $this->get('/')->assertOk();
+        $html = $home->getContent();
+        // Our Brands comes right after the hero and links to the directory.
+        $this->assertLessThan(strpos($html, 'id="vote-now"'), strpos($html, 'id="brands"'));
+        $this->assertLessThan(strpos($html, 'id="brands"'), strpos($html, '<h1'));
+        $home->assertSee('View All Brands')->assertSee(route('brands.index'), false)->assertSee(route('brands.show', $verified->slug), false);
+
+        // Exactly one card seal: the verified brand's (the legend and other sections aside).
+        $grid = Str::between($html, 'id="ourBrandsTitle"', 'View All Brands');
+        $this->assertSame(1, substr_count($grid, 'images/badges/metasoft-verified.png'));
+    }
+
+    public function test_vote_entry_point_links_open_campaign_nominees_to_their_vote_pages(): void
+    {
+        $brand = $this->brand('Shop Basket');
+        $award = Award::create(['title' => self::AWARD, 'slug' => 'bbea-2026', 'year' => 2026, 'status' => 'voting']);
+        $this->campaign($award, 'program', [$brand], 'Peoples Choice');
+
+        $this->get('/')->assertOk()
+            ->assertSee('Vote for Your Favorite Brand')
+            ->assertSee('data-vote-finder', false)
+            ->assertSee('data-url="'.route('vote.show', $brand->slug).'"', false)
+            ->assertSee(route('voting.campaign', 'peoples-choice'), false);
+    }
+
+    public function test_vote_entry_point_shows_upcoming_and_ended_states_without_a_vote_finder(): void
+    {
+        $brand = $this->brand('Shop Basket');
+        [$entry] = $this->campaign(null, 'daily', [$brand], 'Later Round');
+        $entry->campaign->update(['starts_at' => now()->addDays(5)]);
+
+        $this->get('/')->assertOk()->assertSee('Starts soon')->assertSee('opens '.now()->addDays(5)->format('j M Y'))->assertDontSee('data-vote-finder', false);
+
+        $entry->campaign->update(['starts_at' => now()->subDays(10), 'ends_at' => now()->subDay()]);
+        $this->get('/')->assertOk()->assertSee('Voting ended')->assertDontSee('data-vote-finder', false);
+    }
+
+    public function test_directory_cards_show_only_logo_name_category_and_profile_link(): void
+    {
+        $brand = $this->brand('Shop Basket', ['description' => 'Secret description text', 'district' => 'Khulna', 'division' => 'Khulna']);
+
+        $html = $this->get(route('brands.index'))->assertOk()->getContent();
+        $grid = Str::between($html, '1 brand</p>', 'Own a Bangladeshi brand?');
+
+        $this->assertStringContainsString('Shop Basket', $grid);
+        $this->assertStringContainsString('View Profile', $grid);
+        $this->assertStringContainsString(route('brands.show', $brand->slug), $grid);
+        $this->assertStringContainsString(e($brand->category->name), $grid);
+        foreach (['Secret description text', 'Khulna', 'metasoft-verified.png'] as $hidden) {
+            $this->assertStringNotContainsString($hidden, $grid);
+        }
     }
 
     // --- 8. homepage admin ----------------------------------------------------------------------

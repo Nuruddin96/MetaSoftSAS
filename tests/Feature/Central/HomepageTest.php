@@ -76,7 +76,8 @@ class HomepageTest extends TestCase
 
         $home = $this->get('/')->assertOk();
         foreach ($expected as $name => [$logo, $cover]) {
-            $home->assertSee($name)->assertSee('images/showcase/logos/'.$logo, false)->assertSee('images/showcase/covers/'.$cover, false);
+            // Logos on the cards; covers in the profile dialog's JSON (compact cards carry no cover photo).
+            $home->assertSee($name)->assertSee('images/showcase/logos/'.$logo, false)->assertSee(str_replace('/', '\/', 'images/showcase/covers/'.$cover), false);
         }
         // Previous demo brands and their generated artwork are gone.
         foreach (['Nakshi Ghor', 'Krishi Bondhu', 'Jamdani House', 'PayDesh', 'Tanvir Ahmed'] as $old) {

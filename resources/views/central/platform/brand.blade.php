@@ -166,7 +166,7 @@
 @if($related->isNotEmpty())
     <section class="{{ $wrap }} pb-12">
         <h2 class="mb-4 text-lg font-extrabold">More {{ $brand->category?->name ?? '' }} brands</h2>
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="brand-grid">
             @foreach($related as $r)
                 <x-plat.brand-card :brand="$r->toCard()" />
             @endforeach

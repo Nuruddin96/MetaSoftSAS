@@ -61,7 +61,7 @@
         </div>
     @else
         <p class="mb-4 text-sm font-semibold text-slate2">{{ number_format($brands->total()) }} {{ Str::plural('brand', $brands->total()) }}</p>
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div class="brand-grid">
             @foreach($brands as $brand)
                 <x-plat.brand-card :brand="$brand->toCard()" />
             @endforeach

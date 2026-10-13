@@ -28,11 +28,14 @@
 
     <main id="main-content" tabindex="-1" class="outline-none">
         @include('central.home.hero')
+        @include('central.home.our-brands')
 
+        {{-- Search / "browse all" results; the search form jumps straight to #results. --}}
         @if($results !== null)
             @include('central.home.results')
         @endif
 
+        @include('central.home.vote-cta')
         @include('central.home.trust')
         @include('central.home.awards')
         @include('central.home.voting')

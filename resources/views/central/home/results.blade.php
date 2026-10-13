@@ -16,7 +16,7 @@
             </div>
         @else
             @if(! empty($results['brands']))
-                <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div class="brand-grid mt-6">
                     @foreach($results['brands'] as $brand)
                         <x-plat.brand-card :brand="$brand" />
                     @endforeach

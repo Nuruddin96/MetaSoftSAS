@@ -99,7 +99,7 @@ $$('[data-countdown]').forEach((el) => {
 $$('[data-copy]').forEach((b) => b.addEventListener('click', () => copyText(b.dataset.copy)));
 $$('[data-share]').forEach((b) => b.addEventListener('click', () => share(b.dataset.shareTitle || document.title, b.dataset.shareUrl || location.href)));
 
-// ---- profile quick view ----
+// ---- profile dialog ----
 const profiles = JSON.parse($('#profilesData')?.textContent || '{}');
 const drawer = $('#profileDrawer');
 const badgeClass = {
@@ -107,7 +107,9 @@ const badgeClass = {
     finalist: 'bg-[#E8F5EF] text-[#0C5C3C]', verified: 'bg-sky-50 text-sky-700',
 };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const profileLink = (p) => `${location.origin}/?q=${encodeURIComponent(p.name)}#results`;
+const profileLink = (p) => p.profile_url || `${location.origin}/?q=${encodeURIComponent(p.name)}#results`;
+const seal = '<img src="/images/badges/metasoft-verified.png" alt="MetaSoft BD verified" class="inline-block h-5 w-5">';
+const safeUrl = (u) => (/^https?:\/\//i.test(u || '') ? u : null);
 
 // Logo image when the profile has one (demo artwork or a real upload), otherwise initials.
 function setLogo(el, src, initials) {
@@ -124,26 +126,63 @@ function setLogo(el, src, initials) {
     }
 }
 
+// Show an optional section only when it has content (so no brand ever shows another's leftovers).
+function section(name, html) {
+    const s = $(`[data-pd-section="${name}"]`, drawer);
+    if (!s) return;
+    s.classList.toggle('hidden', !html);
+    const body = s.lastElementChild;
+    body.innerHTML = html || '';
+}
+
 function openProfile(key) {
     const p = profiles[key];
     if (!p || !drawer) return;
     const grad = `linear-gradient(135deg,${p.from},${p.to})`;
-    $('#pdCover').style.background = p.cover ? `center / cover no-repeat url("${p.cover}"), ${grad}` : grad;
+    $('#pdCover').style.background = p.cover ? `center / cover no-repeat url("${encodeURI(p.cover)}"), ${grad}` : grad;
     const logo = $('#pdLogo');
     logo.style.background = grad;
     logo.style.borderRadius = p.type === 'person' ? '9999px' : '20px';
     setLogo(logo, p.logo, p.initials);
-    $('#pdName').innerHTML = esc(p.name) + (p.verified === false ? '' : ' <img src="/images/badges/metasoft-verified.png" alt="MetaSoft BD verified" class="inline-block w-5 h-5">');
-    $('#pdSubtitle').textContent = p.subtitle;
-    $('#pdDesc').textContent = p.description;
+
+    // The official seal only for profiles the backend marks verified.
+    const verified = p.verified === true;
+    $('#pdName').innerHTML = esc(p.name) + (verified ? ` ${seal}` : '');
+    $('#pdSubtitle').textContent = p.subtitle || '';
+    const status = $('#pdStatus');
+    status.classList.toggle('hidden', p.type !== 'brand');
+    status.classList.toggle('flex', p.type === 'brand');
+    status.className = status.className.replace(/\btext-(sky-700|slate2)\b/g, '');
+    status.classList.add(verified ? 'text-sky-700' : 'text-slate2');
+    status.innerHTML = verified ? `${seal} Verified by MetaSoft BD` : 'Not yet verified by MetaSoft BD';
     $('#pdSponsored').classList.toggle('hidden', !p.sponsored);
-    $('#pdBadges').innerHTML = (p.badges.length ? p.badges : (p.verified === false ? [] : [{ label: 'Verified business', type: 'verified' }]))
+
+    const badges = p.badges?.length ? p.badges : (verified ? [{ label: 'Verified business', type: 'verified' }] : []);
+    $('#pdBadges').innerHTML = badges
         .map((b) => `<span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClass[b.type] || badgeClass.finalist}">${esc(b.label)}</span>`).join('');
-    $('#pdFacts').innerHTML = p.facts
-        .map(([k, v]) => `<div class="rounded-xl bg-[#F4F6FA] p-3"><dt class="text-[11px] text-[#5A6478]">${esc(k)}</dt><dd class="truncate text-sm font-bold">${esc(v)}</dd></div>`).join('');
+    $('#pdFacts').innerHTML = (p.facts || [])
+        .map(([k, v]) => `<div class="min-w-0 rounded-xl bg-[#F4F6FA] p-3"><dt class="text-[11px] text-[#5A6478]">${esc(k)}</dt><dd class="truncate text-sm font-bold" title="${esc(v)}">${esc(v)}</dd></div>`).join('');
+
+    section('desc', p.description ? esc(p.description) : '');
+    section('products', p.products ? esc(p.products) : '');
+    section('gallery', (p.gallery || []).filter(safeUrl).map((src, i) =>
+        `<a href="${esc(src)}" target="_blank" rel="noopener" class="block aspect-square overflow-hidden rounded-xl bg-[#F4F6FA]"><img src="${esc(src)}" alt="${esc(p.name)} photo ${i + 1}" loading="lazy" decoding="async" class="h-full w-full object-cover"></a>`).join(''));
+    section('links', (p.links || []).filter((l) => safeUrl(l.url)).map((l) =>
+        `<a href="${esc(l.url)}" target="_blank" rel="noopener nofollow ugc" class="inline-flex min-h-10 items-center rounded-xl border border-[#E6E9F0] px-3 text-sm font-semibold hover:border-[#12A06E]">${esc(l.label)}</a>`).join(''));
+    section('contact', (p.contact || []).map((c) =>
+        `<div class="flex gap-2 text-sm"><dt class="w-16 shrink-0 text-[#5A6478]">${esc(c.label)}</dt><dd class="min-w-0 break-words font-semibold">${safeUrl(c.href) || /^(tel|mailto):/.test(c.href || '') ? `<a href="${esc(c.href)}" class="hover:underline">${esc(c.value)}</a>` : esc(c.value)}</dd></div>`).join(''));
+
+    const full = $('#pdProfile');
+    full.classList.toggle('hidden', !p.profile_url);
+    full.classList.toggle('inline-flex', !!p.profile_url);
+    full.href = p.profile_url || '#';
+    $('#pdNote').classList.toggle('hidden', !!p.profile_url || p.type !== 'brand');
+
     const link = profileLink(p);
     $('#pdShare').onclick = () => share(`${p.name} on MetaSoft BD`, link);
     $('#pdWhatsapp').href = `https://wa.me/?text=${encodeURIComponent(`${p.name} on MetaSoft BD: ${link}`)}`;
+    const scroller = $('[data-drawer-scroll]', drawer);
+    if (scroller) scroller.scrollTop = 0;
     openLayer(drawer, '[data-close-drawer]:not(.absolute.inset-0)');
 }
 document.addEventListener('click', (e) => {
@@ -193,6 +232,32 @@ document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     [vm, drawer, menu].forEach(closeLayer);
 });
+
+// ---- keep keyboard focus inside an open dialog/menu ----
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const layer = [vm, drawer, menu].find((l) => l && !l.classList.contains('hidden'));
+    if (!layer) return;
+    const items = $$('a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])', layer)
+        .filter((el) => el.offsetParent !== null && !el.matches('.absolute.inset-0'));
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !layer.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && (document.activeElement === last || !layer.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+});
+
+// ---- "Vote for your favorite brand": a picked nominee goes straight to its /vote/{slug} page ----
+// Anything else submits normally to the campaign page, which lists every nominee.
+$$('[data-vote-finder]').forEach((form) => form.addEventListener('submit', (e) => {
+    const input = $('input', form);
+    const name = input.value.trim().toLowerCase();
+    const option = $$(`#${input.getAttribute('list')} option`).find((o) => o.value.toLowerCase() === name);
+    if (option?.dataset.url) {
+        e.preventDefault();
+        location.href = option.dataset.url;
+    }
+}));
 
 // ---- scroll-spy for the desktop nav ----
 const navLinks = $$('[data-nav]');

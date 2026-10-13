@@ -16,7 +16,7 @@
             <span class="rounded-full bg-cloud px-2.5 py-1 text-[11px] font-bold text-slate2">#{{ $nominee['rank'] }}</span>
         @endif
     </div>
-    <h3 class="mt-4 flex items-center gap-1.5 font-plat text-[17px] font-extrabold text-night"><span class="truncate">{{ $b['name'] }}</span>@if($b['verified'] ?? true)<x-plat.verified />@endif</h3>
+    <h3 class="mt-4 flex items-center gap-1.5 font-plat text-[17px] font-extrabold text-night"><span class="truncate">{{ $b['name'] }}</span>@if($b['verified'] ?? false)<x-plat.verified />@endif</h3>
     <p class="text-[13px] text-slate2">{{ $b['category'] }} · {{ $b['district'] }}</p>
     <p class="mt-3 line-clamp-2 text-sm leading-relaxed text-slate2">{{ $b['description'] }}</p>
     @if($showCounts)

@@ -89,6 +89,76 @@ class HomepageContent
         return $this->fill($real, $samples, $slots);
     }
 
+    /**
+     * "Our Brands" (first section after the hero): up to four rows of the
+     * 6-column desktop grid. Keeps the featured() order on top — editorial
+     * picks, then sponsored placements — followed by every other approved
+     * brand newest first, so no brand needs featuring to appear. Samples
+     * fill empty slots only while sample_fallback is on.
+     */
+    public function ourBrands(int $slots = 24): array
+    {
+        $picked = fn (Brand $b) => $b->is_featured || $b->isSponsoredNow();
+        $real = $this->published()->filter($picked)
+            ->sortBy(fn (Brand $b) => [$b->is_featured ? 0 : 1, $b->featured_order])
+            ->concat($this->published()->reject($picked))
+            ->take($slots)->map->toCard()->values()->all();
+
+        $featuredSamples = array_column(Showcase::featuredBrands(), 'slug');
+        $samples = collect(Showcase::brands())->sortBy(fn ($b) => in_array($b['slug'], $featuredSamples, true) ? 0 : 1)->values()->all();
+
+        return $this->fill($real, $samples, $slots);
+    }
+
+    /**
+     * The homepage "Vote for your favourite brand" entry point. Uses the
+     * same campaign as the voting section when one is open; otherwise the
+     * next scheduled campaign, else the most recent paused/ended one, so the
+     * block shows an honest upcoming/closed state instead of a vote button.
+     * Null when there is no real campaign (sample mode). Only links into
+     * the existing /vote/{slug} and /voting/{slug} flows — every vote is
+     * still validated server-side by VoteController + VoteService.
+     *
+     * @return array{phase: string, label: string, title: string, rule: string, starts: ?string, ends: ?string, url: string, nominees: array}|null
+     */
+    public function voteEntry(): ?array
+    {
+        if (! PlatformSchema::ready()) {
+            return null;
+        }
+
+        $id = $this->settings()['campaign_id'];
+        $campaign = $id ? VoteCampaign::visible()->with('award')->find($id) : null;
+        if (! $campaign) {
+            $all = VoteCampaign::visible()->with('award')->latest('id')->get();
+            $campaign = $all->first(fn ($c) => $c->isOpen() && $c->entries()->where('is_active', true)->exists())
+                ?? $all->filter(fn ($c) => $c->phase() === 'scheduled')->sortBy('starts_at')->first()
+                ?? $all->first();
+        }
+        if (! $campaign) {
+            return null;
+        }
+
+        $nominees = [];
+        if ($campaign->isOpen()) {
+            $nominees = $campaign->entries()->where('is_active', true)
+                ->whereHas('brand', fn ($b) => $b->published())->with('brand:id,name,slug')->get()
+                ->pluck('brand')->unique('id')->sortBy('name')
+                ->map(fn (Brand $b) => ['name' => $b->name, 'url' => $b->voteUrl()])->values()->all();
+        }
+
+        return [
+            'phase' => $campaign->phase(),
+            'label' => $campaign->phaseLabel(),
+            'title' => $campaign->award?->title ?? $campaign->title,
+            'rule' => $campaign->voteRuleText(),
+            'starts' => $campaign->starts_at?->format('j M Y, g:i A'),
+            'ends' => $campaign->ends_at?->format('j M Y, g:i A'),
+            'url' => route('voting.campaign', $campaign->slug),
+            'nominees' => $nominees,
+        ];
+    }
+
     public function realBrandCount(): int
     {
         return $this->published()->count();

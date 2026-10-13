@@ -74,6 +74,30 @@
 }
 
 /*
+ * Brand card grid (x-plat.brand-card): 6 per row on desktop, 4 on phones.
+ * Below 360px four cards would be ~66px wide — too narrow for a readable
+ * name and a tappable button — so the very smallest screens get 3.
+ * home/our-brands.blade.php relies on these column counts to show 4 rows.
+ */
+.brand-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+@media (min-width: 360px) {
+    .brand-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (min-width: 640px) {
+    .brand-grid { gap: 12px; }
+}
+
+@media (min-width: 1024px) {
+    .brand-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
+}
+
+/*
  * Tenant panel (layouts/panel.blade.php): hover-lift cards, submit-button
  * loading spinner, and the toast notification stack.
  */
