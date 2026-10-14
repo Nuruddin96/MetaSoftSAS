@@ -318,3 +318,109 @@
         animation: none;
     }
 }
+
+/*
+ * Homepage hero glass map (x-plat.bd-network, data from
+ * App\Support\Home\BangladeshNetwork). A translucent Bangladesh outline
+ * with routes that carry a light pulse from Dhaka; when a pulse reaches
+ * its district pointer, the pointer flashes red twice (bd-flash).
+ *
+ * Sync: routes and pointers all repeat on one shared cycle (--bd-cycle,
+ * 7s). Each route's pulse keyframes (bd-pk{i}) are generated inline by the
+ * component; each pointer's flash starts at its route's arrival time
+ * (--bd-arrive), so the flash always lands on the pulse. Over 7s the flash
+ * is: red 0.07–0.35s, normal 0.43–0.55s, red 0.62–0.90s, then normal until
+ * the next arrival. Only stroke-dashoffset, fill, opacity and transform
+ * animate; home.js pauses everything while the hero is off-screen.
+ *
+ * Desktop: right column. Tablet (640–1023px): centred below the copy, chips
+ * moved out beside it. Phone: a faded, non-interactive backdrop behind the
+ * copy. Reduced motion: static routes, normal pointer colours.
+ */
+.bd-dots {
+    left: 45%;
+    background-image: radial-gradient(rgba(157, 203, 242, .16) 1px, transparent 1.4px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(60% 60% at 60% 50%, #000, transparent);
+    mask-image: radial-gradient(60% 60% at 60% 50%, #000, transparent);
+}
+.bd-viz { position: relative; min-width: 0; display: grid; justify-items: center; gap: 14px; }
+.bd-stage { position: relative; width: min(100%, 440px); animation: bd-float 10s ease-in-out infinite; }
+.bd-stage::before {
+    content: ""; position: absolute; inset: 10% 4% 14%; border-radius: 50%; z-index: -1;
+    background: radial-gradient(closest-side, rgba(157, 203, 242, .26), rgba(23, 105, 170, .16) 60%, transparent);
+}
+.bd-map { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.bd-link { fill: none; stroke: var(--color-gold); stroke-opacity: .3; stroke-width: 1.1; }
+.bd-trail, .bd-packet { fill: none; stroke-linecap: round; stroke-dasharray: .12 2; stroke-dashoffset: -1; }
+.bd-trail { stroke: var(--color-gold); stroke-opacity: .32; stroke-width: 6; }
+.bd-packet { stroke: #F4FAFF; stroke-width: 2.2; }
+.bd-ring { fill: none; stroke: var(--color-gold); stroke-opacity: .35; stroke-width: 1; }
+.bd-dot { fill: #E6F4FF; stroke: #5FA8E6; stroke-width: 2; }
+.bd-dot.bd-hub { fill: #fff; stroke: var(--color-gold); stroke-width: 3.5; }
+.bd-dot.bd-dest { animation: bd-flash var(--bd-cycle) linear var(--bd-arrive) infinite; }
+.bd-glow { fill: url(#bdRedGlow); opacity: 0; animation: bd-glow var(--bd-cycle) linear var(--bd-arrive) infinite; }
+.bd-label { font: 600 14px var(--font-plat); fill: #DCEEFF; paint-order: stroke; stroke: rgba(6, 36, 66, .9); stroke-width: 3px; }
+.bd-label.bd-hub { font-size: 17px; font-weight: 800; fill: #fff; }
+.bd-sheen { animation: bd-sheen 11s ease-in-out infinite; }
+
+@keyframes bd-float { 50% { translate: 0 -6px; } }
+@keyframes bd-sheen {
+    0%, 30% { transform: translateX(-380px) skewX(-20deg); }
+    70%, 100% { transform: translateX(760px) skewX(-20deg); }
+}
+@keyframes bd-flash {
+    0% { fill: #E6F4FF; stroke: #5FA8E6; }
+    1%, 5% { fill: #FF4D5A; stroke: #FFB3B8; }
+    6.14%, 7.86% { fill: #E6F4FF; stroke: #5FA8E6; }
+    8.86%, 12.86% { fill: #FF4D5A; stroke: #FFB3B8; }
+    14%, 100% { fill: #E6F4FF; stroke: #5FA8E6; }
+}
+@keyframes bd-glow {
+    0% { opacity: 0; }
+    1%, 5% { opacity: 1; }
+    6.14%, 7.86% { opacity: 0; }
+    8.86%, 12.86% { opacity: 1; }
+    14%, 100% { opacity: 0; }
+}
+
+.bd-chip {
+    position: absolute; z-index: 3; display: flex; align-items: center; gap: 10px; white-space: nowrap; color: #fff;
+    background: linear-gradient(135deg, rgba(255, 255, 255, .14), rgba(255, 255, 255, .05));
+    border: 1px solid rgba(255, 255, 255, .22); border-radius: 14px; padding: 9px 13px;
+    -webkit-backdrop-filter: blur(14px) saturate(150%); backdrop-filter: blur(14px) saturate(150%);
+    box-shadow: 0 16px 36px -16px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .22);
+}
+.bd-chip p { margin: 0; font-size: 13px; font-weight: 700; }
+.bd-chip small { display: block; font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, .7); }
+.bd-chip-icon {
+    display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 9999px;
+    background: linear-gradient(135deg, var(--color-gold), var(--color-leaf)); color: var(--color-night);
+}
+/* Open sky above Sylhet/Mymensingh and open sea off the Sundarbans — checked clear of the outline. */
+.bd-chip-nation { top: 2.5%; right: -2%; }
+.bd-chip-wide { bottom: 1%; left: -4%; }
+
+.bd-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; font-size: 11.5px; color: rgba(255, 255, 255, .62); }
+.bd-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.bd-legend i { width: 9px; height: 9px; border-radius: 9999px; background: #E6F4FF; border: 2px solid #5FA8E6; }
+.bd-legend i.bd-red { background: #FF4D5A; border-color: #FFB3B8; }
+.bd-legend em { width: 18px; height: 2px; background: linear-gradient(90deg, transparent, var(--color-gold), #fff); }
+
+.bd-paused * { animation-play-state: paused !important; }
+
+@media (max-width: 1023.98px) {
+    .bd-stage { width: min(100%, 360px); }
+    .bd-chip-nation { right: -34%; }
+    .bd-chip-wide { left: -34%; }
+}
+@media (max-width: 639.98px) {
+    .bd-viz { position: absolute; top: 8px; right: -30%; width: 88%; z-index: 0; opacity: .3; pointer-events: none; }
+    .bd-stage { width: 100%; animation: none; }
+    .bd-chip, .bd-legend, .bd-label { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bd-stage, .bd-sheen, .bd-dot.bd-dest, .bd-glow { animation: none; }
+    .bd-trail, .bd-packet { display: none; }
+    .bd-link { stroke-opacity: .55; }
+}
