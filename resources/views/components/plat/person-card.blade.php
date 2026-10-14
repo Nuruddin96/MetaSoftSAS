@@ -9,7 +9,7 @@
             @endif
         </span>
         <div class="min-w-0">
-            <h3 class="flex items-center gap-1.5 font-plat text-base font-extrabold text-night"><span class="truncate">{{ $person['name'] }}</span>@if($person['verified'] ?? true)<x-plat.verified size="w-3.5 h-3.5" />@endif</h3>
+            <h3 class="flex items-center gap-1.5 font-plat text-base font-extrabold text-night"><span class="truncate">{{ $person['name'] }}</span>@if($person['verified'] ?? false)<x-plat.verified size="w-3.5 h-3.5" />@endif</h3>
             <p class="truncate text-[13px] text-slate2">{{ $person['role'] }}, {{ $person['brand'] }}</p>
         </div>
     </div>

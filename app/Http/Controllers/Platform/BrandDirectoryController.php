@@ -5,10 +5,18 @@ namespace App\Http\Controllers\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\Brand;
 use App\Models\BrandCategory;
+use App\Support\Home\Showcase;
 use App\Support\Platform\BdLocations;
+use App\Support\Platform\HomepageContent;
+use App\Support\Platform\PlatformSchema;
 use Illuminate\Http\Request;
 
-/** Public brand directory (/brands) and brand profile (/brand/{slug}) — approved brands only. */
+/**
+ * Public brand directory (/brands) and brand profile (/brand/{slug}) — approved brands only.
+ * The homepage's sample brands (Showcase) also get a profile page here while
+ * Super Admin → Homepage allows sample content; a real brand with the same
+ * slug always wins.
+ */
 class BrandDirectoryController extends Controller
 {
     public function index(Request $request)
@@ -39,9 +47,12 @@ class BrandDirectoryController extends Controller
         ]);
     }
 
-    public function show(string $slug)
+    public function show(string $slug, HomepageContent $content)
     {
-        $brand = Brand::published()->where('slug', $slug)->with('category')->firstOrFail();
+        $brand = PlatformSchema::ready() ? Brand::published()->where('slug', $slug)->with('category')->first() : null;
+        if (! $brand) {
+            return $this->sample($slug, $content);
+        }
         Brand::whereKey($brand->id)->increment('views_count');
 
         $entries = $brand->voteEntries()->where('is_active', true)->with('campaign', 'category')
@@ -55,6 +66,22 @@ class BrandDirectoryController extends Controller
             'recognitions' => $brand->recognitions()->with('award', 'category')->latest()->get(),
             'finalists' => $brand->nominations()->whereIn('status', ['finalist', 'shortlisted'])->with('award', 'category')->latest()->get(),
             'related' => Brand::published()->where('id', '!=', $brand->id)->where('brand_category_id', $brand->brand_category_id)->with(Brand::CARD_RELATIONS)->inRandomOrder()->take(4)->get(),
+        ]);
+    }
+
+    /** Sample (showcase) brand profile — clearly labelled and kept out of search engines. */
+    private function sample(string $slug, HomepageContent $content)
+    {
+        $brand = $content->settings()['sample_fallback'] ? Showcase::brand($slug) : null;
+        if (! $brand) {
+            // Same friendly 503 as the platform.ready middleware until chunk64.sql is imported.
+            abort_unless(PlatformSchema::ready(), response()->view('central.platform.coming-soon', [], 503));
+            abort(404);
+        }
+
+        return view('central.platform.sample-brand', [
+            'brand' => $brand,
+            'related' => array_values(array_filter(Showcase::brands(), fn ($b) => $b['slug'] !== $slug && $b['category'] === $brand['category'])),
         ]);
     }
 }

@@ -1,5 +1,5 @@
 {{-- Brand/person logo: the uploaded image when there is one (`src`), otherwise a monogram on a gradient. --}}
-@props(['initials', 'from' => '#128155', 'to' => '#0C5C3C', 'size' => 48, 'round' => false, 'ring' => false, 'src' => null, 'alt' => ''])
+@props(['initials', 'from' => '#1769AA', 'to' => '#073B66', 'size' => 48, 'round' => false, 'ring' => false, 'src' => null, 'alt' => ''])
 @php $r = $round ? '9999px' : round($size * 0.26).'px'; @endphp
 @if($src)
     <img src="{{ $src }}" alt="{{ $alt }}" width="{{ $size }}" height="{{ $size }}" loading="lazy" decoding="async"

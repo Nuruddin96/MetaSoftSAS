@@ -69,7 +69,7 @@
         <div class="mt-8">{{ $brands->links() }}</div>
     @endif
 
-    <div class="mt-12 flex flex-col items-start justify-between gap-4 rounded-[24px] bg-[linear-gradient(135deg,#00513C,#0A1428)] p-6 text-white sm:flex-row sm:items-center sm:p-8">
+    <div class="mt-12 flex flex-col items-start justify-between gap-4 rounded-[24px] bg-[linear-gradient(135deg,#1769AA,#052B4C)] p-6 text-white sm:flex-row sm:items-center sm:p-8">
         <div>
             <h2 class="text-xl font-extrabold">Own a Bangladeshi brand?</h2>
             <p class="mt-1 text-sm text-white/75">List it free — get a permanent profile, your own link and a chance at national awards.</p>

@@ -92,6 +92,78 @@ class AwardsHomepageTest extends TestCase
         $this->get(route('brands.show', $plain->slug))->assertDontSee('images/badges/metasoft-verified.png', false);
     }
 
+    public function test_badge_follows_admin_approval_on_cards_and_profile_pages(): void
+    {
+        $approved = $this->brand('Approved Verified Co', ['is_verified' => true]);
+        $pending = $this->brand('Pending Co', ['status' => 'pending', 'is_verified' => true]);
+        $pending->update(['slug' => 'pending-co']);
+
+        $grid = $this->get('/')->assertOk()->getContent();
+        $this->assertMatchesRegularExpression('#metasoft-verified\.png"[^>]*alt="Verified brand"#', $grid);
+        $this->assertStringNotContainsString('Pending Co', $grid);
+
+        $this->get(route('brands.show', $approved->slug))->assertOk()->assertSee('alt="Verified brand"', false);
+        // Not approved = not public, whatever its verification flag says.
+        $this->get('/brand/pending-co')->assertNotFound();
+    }
+
+    public function test_voting_cues_need_a_campaign_the_server_confirms_is_open(): void
+    {
+        $brand = $this->brand('Shop Basket');
+        $award = Award::create(['title' => self::AWARD, 'slug' => 'bbea-2026', 'year' => 2026, 'status' => 'voting', 'is_featured' => true]);
+        $this->campaign($award, 'program', [$brand], 'Peoples Choice');
+        $campaign = VoteCampaign::firstOrFail();
+        $campaign->update(['ends_at' => now()->addDays(3)]);
+
+        $this->assertTrue(app(HomepageContent::class)->votingOpen());
+        $this->get('/')->assertOk()
+            ->assertSee('Vote now')->assertSee('>LIVE<', false)->assertSee('data-countdown', false)
+            ->assertSee(route('vote.show', $brand->slug), false);
+
+        foreach ([['status' => 'paused'], ['status' => 'ended'], ['starts_at' => now()->addDay()], ['ends_at' => now()->subMinute()]] as $state) {
+            $campaign->update(array_merge(['status' => 'active', 'starts_at' => null, 'ends_at' => null], $state));
+            $this->assertFalse(app(HomepageContent::class)->votingOpen(), json_encode($state));
+            $this->get('/')->assertOk()
+                ->assertDontSee('Vote now')->assertDontSee('>LIVE<', false)->assertDontSee('data-countdown', false)
+                ->assertDontSee(route('vote.show', $brand->slug), false)
+                ->assertSee('Voting not open');
+        }
+    }
+
+    public function test_award_rule_figures_appear_only_when_configured(): void
+    {
+        $home = $this->get('/')->assertOk();
+        foreach (['jury of 21', 'under 3 years', '40% vote', '60% jury'] as $claim) {
+            $home->assertDontSee($claim);
+        }
+
+        config(['platform.award_rules' => ['jury_size' => 9, 'public_vote_weight' => 30, 'rising_brand_max_years' => 2]]);
+        $this->get('/')->assertSee('Selected by a jury of 9.')->assertSee('30% vote · 70% jury')->assertSee('For brands under 2 years old.');
+    }
+
+    public function test_hero_figures_are_real_counts_only(): void
+    {
+        $this->brand('Counted One');
+        $this->brand('Counted Two');
+        $this->brand('Not Yet Approved', ['status' => 'pending']);
+
+        $this->assertSame([['value' => '2', 'label' => 'Brand profiles', 'n' => 2]], app(HomepageContent::class)->stats());
+        $this->get('/')->assertOk()->assertSee('Brand profiles')->assertDontSee('Votes counted')->assertDontSee('1.2M');
+    }
+
+    public function test_sample_brand_pages_yield_to_real_brands_and_the_sample_switch(): void
+    {
+        $this->get('/brand/ayat-fashion')->assertOk()->assertSee('Sample profile')->assertSee('noindex', false);
+        $this->get('/brand/no-such-brand')->assertNotFound();
+
+        $real = $this->brand('Ayat Fashion');
+        $this->assertSame('ayat-fashion', $real->slug);
+        $this->get('/brand/ayat-fashion')->assertOk()->assertDontSee('Sample profile')->assertDontSee('noindex', false);
+
+        PlatformSetting::put('homepage', ['sample_fallback' => false] + HomepageContent::defaults());
+        $this->get('/brand/girls-secret')->assertNotFound();
+    }
+
     // --- 3. share card / vote URL -----------------------------------------------------------
 
     public function test_share_card_and_social_links_use_the_permanent_vote_url(): void

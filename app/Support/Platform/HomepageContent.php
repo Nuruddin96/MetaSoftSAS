@@ -32,14 +32,17 @@ class HomepageContent
 
     private ?Collection $published = null;
 
+    private ?Collection $openCampaigns = null;
+
     public static function defaults(): array
     {
         return [
-            'announcement' => config('platform.award_name').' · Public voting closes 30 Nov',
+            // No dates or voting status here: the header adds "Vote now" only while a campaign is open.
+            'announcement' => config('platform.award_name'),
             'hero_pill' => config('platform.award_name').' · '.count(config('platform.award_categories')).' categories',
             'hero_title' => 'Discover the brands & entrepreneurs',
             'hero_highlight' => 'building Bangladesh.',
-            'hero_sub' => 'Explore verified brand profiles, celebrate founders, vote in transparent national awards and connect with opportunities — all in one trusted network.',
+            'hero_sub' => 'Discover trusted brands, meet founders and explore national awards.',
             'award_id' => null,
             'campaign_id' => null,
             'sample_fallback' => true,
@@ -164,6 +167,23 @@ class HomepageContent
         return $this->published()->count();
     }
 
+    /**
+     * Hero figures, from real records only: published brand profiles and
+     * valid votes. Zero counts are left out, and nothing is shown before
+     * the platform tables exist — sample numbers are never displayed.
+     */
+    public function stats(): array
+    {
+        if (! PlatformSchema::ready()) {
+            return [];
+        }
+
+        return array_values(array_filter([
+            ['value' => number_format($this->realBrandCount()), 'label' => 'Brand profiles', 'n' => $this->realBrandCount()],
+            ['value' => number_format($votes = Vote::where('status', 'valid')->count()), 'label' => 'Votes counted', 'n' => $votes],
+        ], fn ($s) => $s['n'] > 0));
+    }
+
     /** Homepage search: matching real brands first, then sample matches. */
     public function search(string $q): array
     {
@@ -186,6 +206,66 @@ class HomepageContent
         return array_merge($real, $this->samples() ? array_values(Showcase::brands()) : []);
     }
 
+    /**
+     * Visible campaigns the server confirms are open right now (phase()
+     * === 'open': not draft/paused/ended, inside their start/end window)
+     * and that have at least one active entry for a published brand.
+     * Nothing on the homepage says "Voting open", shows a voting countdown
+     * or a "Vote" button unless this is non-empty.
+     */
+    public function openCampaigns(): Collection
+    {
+        if (! PlatformSchema::ready()) {
+            return collect();
+        }
+
+        return $this->openCampaigns ??= VoteCampaign::visible()->get()
+            ->filter(fn ($c) => $c->isOpen() && $c->entries()->where('is_active', true)->whereHas('brand', fn ($b) => $b->published())->exists())
+            ->values();
+    }
+
+    public function votingOpen(): bool
+    {
+        return $this->openCampaigns()->isNotEmpty();
+    }
+
+    /**
+     * The smaller award cards beside the featured one: other real public
+     * awards only (never invented programmes), with the same server-checked
+     * voting rule as the featured card.
+     */
+    public function otherAwards(string $exceptTitle): array
+    {
+        if (! PlatformSchema::ready()) {
+            return [];
+        }
+
+        return Award::public()->where('status', '!=', 'archived')->where('title', '!=', $exceptTitle)
+            ->latest('year')->latest('id')->take(3)->get()
+            ->map(function (Award $a) {
+                $campaign = $this->openCampaigns()->firstWhere('award_id', $a->id);
+                $state = match (true) {
+                    $campaign !== null => 'voting',
+                    $a->acceptsNominations() => 'nominate',
+                    $a->status === 'jury_review' => 'jury',
+                    default => 'info',
+                };
+                $ends = $state === 'voting' ? ($campaign->ends_at ?? $a->voting_ends_at) : ($state === 'nominate' ? $a->nomination_ends_at : null);
+
+                return [
+                    'title' => $a->title,
+                    'category' => 'National · '.$a->year,
+                    'status' => $a->status === 'voting' && ! $campaign ? 'Voting not open' : $a->statusLabel(),
+                    'state' => $state,
+                    'when' => $ends ? 'Closes '.$ends->format('j M') : null,
+                    'initials' => mb_strtoupper(collect(preg_split('/\s+/', $a->title))->take(2)->map(fn ($w) => mb_substr($w, 0, 1))->implode('')),
+                    'from' => '#1769AA',
+                    'to' => '#073B66',
+                    'url' => route('awards.show', $a->slug),
+                ];
+            })->all();
+    }
+
     /** Featured award card: the award chosen in Super Admin, else a public featured award, else the sample. */
     public function award(): array
     {
@@ -201,25 +281,33 @@ class HomepageContent
 
         $award->loadCount(['categories', 'nominations as nominees_count' => fn ($q) => $q->whereIn('status', ['accepted', 'shortlisted', 'finalist'])]);
         $votes = Vote::whereIn('campaign_id', $award->campaigns()->pluck('id'))->where('status', 'valid')->count();
-        $closes = $award->voting_ends_at ?? $award->nomination_ends_at;
         $order = ['nominations_open' => 0, 'voting' => 1, 'jury_review' => 2, 'completed' => 3, 'archived' => 3];
         $at = $order[$award->status] ?? 0;
         $state = fn ($i) => $i < $at ? 'done' : ($i === $at ? 'current' : 'next');
 
+        // Countdown only for a window the server confirms: an open campaign of this award, or open nominations.
+        $campaign = $this->openCampaigns()->firstWhere('award_id', $award->id);
+        [$closes, $closesTitle] = match (true) {
+            $campaign !== null => [$campaign->ends_at ?? $award->voting_ends_at, 'Voting closes'],
+            $award->acceptsNominations() => [$award->nomination_ends_at, 'Nominations close'],
+            default => [null, null],
+        };
+
         return [
             'live' => true,
+            'voting_open' => $campaign !== null,
             'title' => $award->title,
             'bn' => $award->bn_title ?? '',
             'edition' => 'National · '.$award->year,
-            'status' => $award->statusLabel(),
+            // The award's own status says "Public voting", but votes can only be cast in an open campaign.
+            'status' => $award->status === 'voting' && ! $campaign ? 'Voting not open' : $award->statusLabel(),
             'closes_at' => $closes?->toIso8601String() ?? '',
-            'closes_label' => $closes?->format('j M Y, g:i A') ?? 'To be announced',
-            'closes_title' => $award->voting_ends_at ? 'Voting closes' : 'Nominations close',
+            'closes_label' => $closesTitle ? ($closes?->format('j M Y, g:i A') ?? 'To be announced') : null,
+            'closes_title' => $closesTitle,
             'stats' => [
                 ['value' => (string) $award->categories_count, 'label' => 'Categories'],
-                ['value' => (string) ($award->categories_count * 2), 'label' => 'Awards'],
                 ['value' => number_format($award->nominees_count), 'label' => 'Nominees'],
-                ['value' => number_format($votes), 'label' => 'Verified votes'],
+                ['value' => number_format($votes), 'label' => 'Votes counted'],
             ],
             'steps' => [
                 ['label' => 'Nomination', 'meta' => $award->nomination_ends_at ? 'Until '.$award->nomination_ends_at->format('j M') : 'Free', 'state' => $state(0)],
@@ -263,6 +351,8 @@ class HomepageContent
                     'heading' => $cat->name.' · '.($campaign->award?->title ?? $campaign->title),
                     'total' => $total,
                     'show_counts' => $campaign->show_counts,
+                    // Vote buttons only while the server confirms this campaign is open.
+                    'open' => $campaign->isOpen(),
                     'nominees' => $entries->map(fn ($e, $i) => [
                         'brand' => $e->brand->toCard(),
                         'votes' => $e->votes_count,
@@ -278,7 +368,7 @@ class HomepageContent
             return [$tabs, $campaign->voteRuleText().'. Votes are checked for duplicate numbers, devices and unusual patterns.'];
         }
 
-        return [Showcase::votingCategories(), 'Public votes count for 40% of each final result — the jury decides the other 60%. One verified vote per person, per category, per day.'];
+        return [Showcase::votingCategories(), 'Sample brands shown for preview. Voting opens when an award campaign starts.'];
     }
 
     /** Real cards first, then sample cards (if allowed) until the slots are full. */

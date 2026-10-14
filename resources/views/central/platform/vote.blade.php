@@ -16,7 +16,7 @@
 
 @section('page')
 @php [$from, $to] = $brand->gradient(); @endphp
-<section class="bg-[linear-gradient(160deg,#0A1428,#0E2350_55%,#00513C)] pb-24 pt-10 text-white sm:pt-14">
+<section class="bg-[linear-gradient(160deg,#052B4C,#073B66_55%,#1769AA)] pb-24 pt-10 text-white sm:pt-14">
     <div class="mx-auto max-w-2xl px-4 text-center sm:px-6">
         <x-plat.logo :initials="$brand->initials()" :from="$from" :to="$to" :size="88" ring :src="$brand->logoUrl()" :alt="$brand->name.' logo'" class="mx-auto shadow-xl" />
         <h1 class="mt-4 flex items-center justify-center gap-2 text-[28px] font-extrabold leading-tight tracking-tight sm:text-[36px]">

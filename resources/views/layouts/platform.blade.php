@@ -9,6 +9,7 @@
 @push('head')
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @hasSection('robots')<meta name="robots" content="@yield('robots')">@endif
     @hasSection('og_title')
         <meta property="og:site_name" content="MetaSoft BD">
         <meta property="og:title" content="@yield('og_title')">
@@ -23,13 +24,13 @@
 
 @section('content')
 @php $wrap = 'mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8'; @endphp
-<div class="flex min-h-screen flex-col bg-cloud font-plat text-night">
+<div class="plat-theme flex min-h-screen flex-col bg-cloud font-plat text-night">
     <header class="sticky top-0 z-40 border-b border-hair bg-white/90 backdrop-blur-md">
         <div class="{{ $wrap }} flex h-16 items-center justify-between gap-3">
             <a href="{{ url('/') }}" class="flex items-center gap-2.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf">
                 <x-ui.brand-mark />
                 <span class="leading-none">
-                    <span class="block text-[17px] font-extrabold tracking-tight">MetaSoft BD</span>
+                    <span class="block whitespace-nowrap text-[15px] font-extrabold tracking-tight min-[360px]:text-[17px]">MetaSoft BD</span>
                     <span class="mt-1 hidden text-[9.5px] font-bold uppercase tracking-[0.16em] text-leaf sm:block">Brand & Entrepreneur Network</span>
                 </span>
             </a>
@@ -39,12 +40,13 @@
                 <a href="{{ url('/') }}#voting" class="rounded-lg px-3 py-2 text-[14.5px] font-semibold text-slate2 hover:bg-cloud hover:text-night">Voting</a>
             </nav>
             <div class="flex items-center gap-2">
-                @auth('brand_owner')
+                {{-- Sample brand pages can render before the platform tables exist, so only look up an owner once they do. --}}
+                @if(\App\Support\Platform\PlatformSchema::ready() && auth('brand_owner')->check())
                     <a href="{{ route('owner.dashboard') }}" class="whitespace-nowrap rounded-xl bg-night px-4 py-2.5 text-sm font-bold text-white hover:bg-navy">My dashboard</a>
                 @else
                     <a href="{{ route('owner.login') }}" class="hidden rounded-lg px-3 py-2 text-sm font-semibold hover:bg-cloud sm:inline-flex">Brand login</a>
                     <a href="{{ route('owner.register') }}" class="whitespace-nowrap rounded-xl bg-leaf px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-leafdk">List your brand</a>
-                @endauth
+                @endif
             </div>
         </div>
     </header>

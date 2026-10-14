@@ -6,5 +6,5 @@
     featured, sponsored or any award status.
 --}}
 @props(['size' => 'w-4 h-4'])
-<img src="{{ asset('images/badges/metasoft-verified.png') }}" alt="MetaSoft BD verified" title="MetaSoft BD verified" width="16" height="16" loading="lazy"
+<img src="{{ asset('images/badges/metasoft-verified.png') }}" alt="Verified brand" title="MetaSoft BD verified" width="16" height="16" loading="lazy" decoding="async"
      {{ $attributes->merge(['class' => "$size inline-block shrink-0 select-none"]) }}>

@@ -2,7 +2,7 @@
     Our Brands — directly below the hero. HomepageContent::ourBrands():
     editorial picks and labelled sponsored placements first, then every
     other approved brand newest first. Exactly four rows at each .brand-grid
-    column count (3 below 360px, 4 on phones/tablets, 6 on desktop): the
+    column count (3 on phones, 4 from 480px, 6 on desktop): the
     extra cards are only revealed once the grid is wide enough for them.
 --}}
 @php
@@ -21,7 +21,7 @@
         @if($ourBrands)
             <div class="brand-grid mt-4 sm:mt-6">
                 @foreach($ourBrands as $i => $brand)
-                    <div @class(['hidden min-[360px]:block' => $i >= 12 && $i < 16, 'hidden lg:block' => $i >= 16])>
+                    <div @class(['hidden min-[480px]:block' => $i >= 12 && $i < 16, 'hidden lg:block' => $i >= 16])>
                         <x-plat.brand-card :brand="$brand" />
                     </div>
                 @endforeach

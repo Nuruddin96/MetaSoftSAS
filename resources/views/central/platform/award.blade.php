@@ -17,11 +17,11 @@
         'Public voting' => [$award->voting_starts_at, $award->voting_ends_at],
     ], fn ($d) => $d[0] || $d[1]);
 @endphp
-<section class="bg-[linear-gradient(160deg,#0A1428,#0E2350_55%,#00513C)] py-10 text-white sm:py-14">
+<section class="bg-[linear-gradient(160deg,#052B4C,#073B66_55%,#1769AA)] py-10 text-white sm:py-14">
     <div class="mx-auto max-w-5xl px-4 sm:px-6">
         <p class="text-[12px] font-extrabold uppercase tracking-[0.16em] text-gold">{{ $award->year }} · {{ $award->statusLabel() }}</p>
         <h1 class="mt-2 text-[28px] font-extrabold leading-tight tracking-tight sm:text-[40px]">{{ $award->title }}</h1>
-        @if($award->bn_title)<p class="mt-1 font-body text-lg text-emerald-200" lang="bn">{{ $award->bn_title }}</p>@endif
+        @if($award->bn_title)<p class="mt-1 font-body text-lg text-sky-200" lang="bn">{{ $award->bn_title }}</p>@endif
         @if($award->description)<p class="mt-4 max-w-2xl whitespace-pre-line text-[15px] leading-relaxed text-white/75">{{ $award->description }}</p>@endif
         <div class="mt-6 flex flex-wrap gap-2">
             @if($award->acceptsNominations())

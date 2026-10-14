@@ -11,13 +11,13 @@
     $navLinks = array_values(array_filter($navLinks, fn ($l) => ! in_array($l[1], $hiddenAnchors, true)));
 @endphp
 
-{{-- Utility strip: live award + sample-preview notice --}}
+{{-- Utility strip: award name + sample-preview notice. The pulsing dot, "Vote now" and LIVE badges need a server-confirmed open campaign ($votingOpen). --}}
 <div class="bg-night text-white">
     <div class="{{ $wrap }} flex items-center justify-between gap-4 py-2 text-xs">
         <a href="#awards" class="flex min-w-0 items-center gap-2 rounded hover:text-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold">
-            <span class="relative flex h-2 w-2 shrink-0"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-flag opacity-75"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-flag"></span></span>
+            @if($votingOpen)<span class="relative flex h-2 w-2 shrink-0"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-flag opacity-75"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-flag"></span></span>@else<span class="h-2 w-2 shrink-0 rounded-full bg-gold"></span>@endif
             <span class="truncate text-white/85">{{ $home['announcement'] }}</span>
-            <span class="hidden shrink-0 font-bold text-gold sm:inline">Vote now →</span>
+            <span class="hidden shrink-0 font-bold text-gold sm:inline">{{ $votingOpen ? 'Vote now' : 'About the awards' }} →</span>
         </a>
         <div class="flex shrink-0 items-center gap-4">
             @if($preview)
@@ -37,26 +37,25 @@
             <x-ui.brand-mark />
             <span class="leading-none">
                 <span class="block text-[17px] font-extrabold tracking-tight text-night">MetaSoft BD</span>
-                <span class="mt-1 hidden whitespace-nowrap text-[9.5px] font-bold uppercase tracking-[0.16em] text-leaf sm:block">Brand & Entrepreneur Network</span>
+                <span class="mt-1 hidden whitespace-nowrap text-[9.5px] font-bold uppercase tracking-[0.16em] text-leaf sm:block lg:hidden xl:block">Brand & Entrepreneur Network</span>
             </span>
         </a>
 
-        <nav class="hidden items-center gap-1 lg:flex" aria-label="Primary">
+        <nav class="hidden items-center gap-0.5 lg:flex xl:gap-1" aria-label="Primary">
             @foreach($navLinks as [$label, $href])
                 <a href="{{ $href }}" data-nav="{{ ltrim($href, '#') }}"
-                   class="relative flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-[14.5px] xl:px-3 font-semibold text-slate2 transition hover:bg-cloud hover:text-night focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf aria-[current=true]:text-night">
+                   class="relative flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 text-[14px] xl:px-2.5 xl:text-[14.5px] font-semibold text-slate2 transition hover:bg-cloud hover:text-night focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf aria-[current=true]:text-night">
                     {{ $label }}
-                    @if($label === 'Voting')<span class="rounded bg-flag px-1.5 py-px text-[9px] font-extrabold tracking-wide text-white">LIVE</span>@endif
+                    @if($label === 'Voting' && $votingOpen)<span class="rounded bg-flag px-1.5 py-px text-[9px] font-extrabold tracking-wide text-white">LIVE</span>@endif
                 </a>
             @endforeach
         </nav>
 
         <div class="flex items-center gap-2">
             <a href="{{ route('automation') }}"
-               class="group hidden items-center gap-2 rounded-xl bg-navy py-2 pl-2 pr-3 text-white transition hover:bg-night focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 md:flex">
-                <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-sky-500"><x-plat.icon name="zap" class="w-4 h-4" /></span>
-                <span class="whitespace-nowrap text-[13px] font-bold">Business Automation</span>
-                <x-plat.icon name="arrow-up-right" class="w-3.5 h-3.5 opacity-60 transition group-hover:opacity-100" />
+               title="Business Automation" class="group hidden items-center gap-2 rounded-xl bg-navy p-1.5 text-white transition hover:bg-night focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 lg:flex">
+                <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-sky-400 to-leaf"><x-plat.icon name="zap" class="w-4 h-4" /></span>
+                <span class="sr-only">Business Automation</span>
             </a>
             <a href="{{ route('central.login') }}" class="hidden rounded-lg px-3 py-2 text-sm font-semibold text-night hover:bg-cloud focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf sm:inline-flex">Login</a>
             <a href="{{ $joinUrl }}"
@@ -91,12 +90,12 @@
                 @foreach($navLinks as [$label, $href, $icon])
                     <a href="{{ $href }}" data-close-menu class="flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] font-semibold text-night hover:bg-cloud">
                         <x-plat.icon :name="$icon" class="w-5 h-5 text-leaf" /> {{ $label }}
-                        @if($label === 'Voting')<span class="ml-auto rounded bg-flag px-1.5 py-px text-[10px] font-extrabold text-white">LIVE</span>@endif
+                        @if($label === 'Voting' && $votingOpen)<span class="ml-auto rounded bg-flag px-1.5 py-px text-[10px] font-extrabold text-white">LIVE</span>@endif
                     </a>
                 @endforeach
             </nav>
             <a href="{{ route('automation') }}" class="mt-4 flex items-center gap-3 rounded-2xl bg-navy p-4 text-white">
-                <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-sky-500"><x-plat.icon name="zap" class="w-5 h-5" /></span>
+                <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-leaf"><x-plat.icon name="zap" class="w-5 h-5" /></span>
                 <span><span class="block text-sm font-bold">Business Automation</span><span class="text-xs text-white/60">Store, POS, courier & marketing tools</span></span>
             </a>
         </div>

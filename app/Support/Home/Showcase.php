@@ -16,16 +16,6 @@ namespace App\Support\Home;
  */
 class Showcase
 {
-    public static function stats(): array
-    {
-        return [
-            ['value' => '12,400+', 'label' => 'Brand profiles', 'bn' => 'ব্র্যান্ড প্রোফাইল'],
-            ['value' => '8,900+', 'label' => 'Entrepreneurs', 'bn' => 'উদ্যোক্তা'],
-            ['value' => '64', 'label' => 'Districts', 'bn' => 'জেলা'],
-            ['value' => '1.2M+', 'label' => 'Verified votes', 'bn' => 'যাচাইকৃত ভোট'],
-        ];
-    }
-
     /**
      * The homepage's demo/showcase brands, keyed by slug. Logos and covers
      * are the supplied files in public/images/showcase/{logos,covers}
@@ -90,12 +80,12 @@ class Showcase
     public static function categories(): array
     {
         return [
-            ['name' => 'Fashion & Apparel', 'bn' => 'ফ্যাশন', 'count' => '1,240', 'icon' => 'sparkles', 'color' => '#7C3AED'],
-            ['name' => 'Food & Beverage', 'bn' => 'খাদ্য ও পানীয়', 'count' => '2,180', 'icon' => 'heart', 'color' => '#EA580C'],
-            ['name' => 'Tech & Startups', 'bn' => 'টেক ও স্টার্টআপ', 'count' => '860', 'icon' => 'rocket', 'color' => '#2563EB'],
-            ['name' => 'Handicrafts', 'bn' => 'হস্তশিল্প', 'count' => '640', 'icon' => 'award', 'color' => '#B45309'],
-            ['name' => 'Health & Beauty', 'bn' => 'স্বাস্থ্য ও সৌন্দর্য', 'count' => '720', 'icon' => 'star', 'color' => '#DB2777'],
-            ['name' => 'Agro & Organic', 'bn' => 'কৃষি ও অর্গানিক', 'count' => '510', 'icon' => 'layers', 'color' => '#16A34A'],
+            ['name' => 'Fashion & Apparel', 'bn' => 'ফ্যাশন', 'icon' => 'sparkles'],
+            ['name' => 'Food & Beverage', 'bn' => 'খাদ্য ও পানীয়', 'icon' => 'heart'],
+            ['name' => 'Tech & Startups', 'bn' => 'টেক ও স্টার্টআপ', 'icon' => 'rocket'],
+            ['name' => 'Handicrafts', 'bn' => 'হস্তশিল্প', 'icon' => 'award'],
+            ['name' => 'Health & Beauty', 'bn' => 'স্বাস্থ্য ও সৌন্দর্য', 'icon' => 'star'],
+            ['name' => 'Agro & Organic', 'bn' => 'কৃষি ও অর্গানিক', 'icon' => 'layers'],
         ];
     }
 
@@ -146,31 +136,32 @@ class Showcase
             'title' => 'Bangladesh Brand & Entrepreneur Awards 2026',
             'bn' => 'বাংলাদেশ ব্র্যান্ড ও উদ্যোক্তা অ্যাওয়ার্ড ২০২৬',
             'edition' => 'National · 1st edition',
-            'status' => 'Voting open',
-            'closes_at' => '2026-11-30T23:59:00+06:00',
-            'closes_label' => '30 Nov 2026, 11:59 PM',
+            // Sample card: no voting state, dates or countdown are claimed until a real campaign exists.
+            'voting_open' => false,
+            'status' => 'Voting not open yet',
+            'closes_at' => '',
+            'closes_label' => null,
             'stats' => [
-                ['value' => '25', 'label' => 'Categories'],
-                ['value' => '50', 'label' => 'Awards'],
-                ['value' => '2,380', 'label' => 'Nominees'],
-                ['value' => '1.2M', 'label' => 'Verified votes'],
+                // Only the configured category count; no sample nominee or vote totals.
+                ['value' => (string) count(config('platform.award_categories')), 'label' => 'Categories'],
             ],
             'steps' => [
-                ['label' => 'Nomination', 'meta' => 'Free · closed', 'state' => 'done'],
-                ['label' => 'Public voting', 'meta' => '40% weight', 'state' => 'current'],
-                ['label' => 'Jury review', 'meta' => '60% weight', 'state' => 'next'],
-                ['label' => 'Winners', 'meta' => '12 Dec', 'state' => 'next'],
+                ['label' => 'Nomination', 'meta' => 'Free', 'state' => 'next'],
+                ['label' => 'Public voting', 'meta' => 'People’s Choice', 'state' => 'next'],
+                ['label' => 'Jury review', 'meta' => 'Jury Choice', 'state' => 'next'],
+                ['label' => 'Winners', 'meta' => 'Announced', 'state' => 'next'],
             ],
             'url' => '/award/bangladesh-brand-entrepreneur-awards-2026',
         ];
     }
 
+    /** Placeholder award cards; only resources/branding/showcase-art.php uses them. The homepage shows real awards only (HomepageContent::otherAwards). */
     public static function otherAwards(): array
     {
         return [
-            ['title' => 'Women Entrepreneur Awards 2026', 'category' => 'Leadership & Impact', 'nominees' => 186, 'status' => 'Nominations open', 'state' => 'nominate', 'when' => 'Closes 15 Nov', 'initials' => 'WE', 'from' => '#DB2777', 'to' => '#831843'],
-            ['title' => 'Bangladesh Startup Awards', 'category' => 'Tech & Innovation', 'nominees' => 412, 'status' => 'Jury review', 'state' => 'jury', 'when' => 'Results 20 Dec', 'initials' => 'SA', 'from' => '#2563EB', 'to' => '#1E3A8A'],
-            ['title' => 'Best Local Food Brand — Dhaka', 'category' => 'Food & Beverage · District round', 'nominees' => 96, 'status' => 'Voting open', 'state' => 'voting', 'when' => 'Closes 25 Nov', 'initials' => 'FB', 'from' => '#F97316', 'to' => '#9A3412'],
+            ['title' => 'Women Entrepreneur Awards 2026', 'category' => 'Leadership & Impact', 'status' => 'Nominations open', 'state' => 'nominate', 'when' => 'Closes 15 Nov', 'initials' => 'WE', 'from' => '#1769AA', 'to' => '#073B66'],
+            ['title' => 'Bangladesh Startup Awards', 'category' => 'Tech & Innovation', 'status' => 'Jury review', 'state' => 'jury', 'when' => 'Results 20 Dec', 'initials' => 'SA', 'from' => '#2F80C9', 'to' => '#0B4A80'],
+            ['title' => 'Best Local Food Brand 2026', 'category' => 'Food & Beverage', 'status' => 'Voting open', 'state' => 'voting', 'when' => 'Closes 25 Nov', 'initials' => 'FB', 'from' => '#0E528C', 'to' => '#052B4C'],
         ];
     }
 
@@ -178,21 +169,6 @@ class Showcase
     public static function art(string $kind, string $file): string
     {
         return asset('images/showcase/'.$kind.'/'.$file);
-    }
-
-    /** District → Division → National ladder, with brand counts per division (sum = headline brand count). */
-    public static function divisions(): array
-    {
-        return [
-            ['name' => 'Dhaka', 'bn' => 'ঢাকা', 'brands' => 5180, 'districts' => 13],
-            ['name' => 'Chattogram', 'bn' => 'চট্টগ্রাম', 'brands' => 2140, 'districts' => 11],
-            ['name' => 'Rajshahi', 'bn' => 'রাজশাহী', 'brands' => 1320, 'districts' => 8],
-            ['name' => 'Khulna', 'bn' => 'খুলনা', 'brands' => 1160, 'districts' => 10],
-            ['name' => 'Rangpur', 'bn' => 'রংপুর', 'brands' => 840, 'districts' => 8],
-            ['name' => 'Sylhet', 'bn' => 'সিলেট', 'brands' => 720, 'districts' => 4],
-            ['name' => 'Barishal', 'bn' => 'বরিশাল', 'brands' => 580, 'districts' => 6],
-            ['name' => 'Mymensingh', 'bn' => 'ময়মনসিংহ', 'brands' => 460, 'districts' => 4],
-        ];
     }
 
     /**
@@ -216,6 +192,8 @@ class Showcase
                 'key' => $key,
                 'label' => $label,
                 'total' => $total,
+                // Sample numbers only order the preview nominees; they are never shown as vote counts.
+                'show_counts' => false,
                 'nominees' => array_map(function ($n, $i) use ($total, $max) {
                     return [
                         'brand' => self::brand($n[0]),
@@ -231,42 +209,47 @@ class Showcase
         return $out;
     }
 
+    /**
+     * "Trending" list. There is no real view or vote ranking to draw on, so
+     * this is a single list of the showcase brands with no metrics: no
+     * invented growth percentages, view counts, vote totals or sparklines.
+     * The tab shape is kept so a real ranking can slot in later.
+     */
     public static function trending(): array
     {
-        $tabs = [
-            'trending' => ['Trending', 'flame', [['ayat-fashion', '▲ 86%', [2, 3, 3, 5, 4, 7, 9, 12]], ['sariha-art', '▲ 74%', [4, 4, 5, 5, 6, 7, 7, 9]], ['girls-secret', '▲ 61%', [1, 2, 2, 3, 5, 5, 6, 8]], ['ragdhanu-mart', '▲ 58%', [3, 3, 4, 4, 5, 6, 6, 8]], ['li-ummati', '▲ 44%', [2, 2, 3, 4, 4, 5, 6, 7]], ['respite-care', '▲ 39%', [3, 4, 4, 5, 5, 5, 6, 7]]]],
-            'viewed' => ['Most Viewed', 'eye', [['ayat-fashion', '12.4K views', [5, 6, 5, 7, 8, 8, 10, 11]], ['ragdhanu-mart', '9.8K views', [6, 6, 7, 7, 8, 9, 9, 10]], ['girls-secret', '8.6K views', [4, 5, 6, 5, 7, 7, 8, 9]], ['respite-care', '7.1K views', [6, 5, 6, 7, 7, 8, 8, 9]], ['li-ummati', '6.3K views', [6, 5, 7, 6, 8, 7, 9, 10]], ['sariha-art', '5.9K views', [3, 4, 4, 5, 6, 6, 7, 8]]]],
-            'voted' => ['Most Voted', 'vote', [['ayat-fashion', '5,140 votes', [3, 4, 5, 6, 8, 9, 10, 12]], ['girls-secret', '4,410 votes', [3, 4, 4, 6, 7, 8, 9, 11]], ['li-ummati', '4,030 votes', [2, 3, 5, 5, 6, 8, 9, 10]], ['sariha-art', '3,920 votes', [3, 4, 6, 6, 8, 9, 9, 12]], ['respite-care', '3,890 votes', [2, 4, 4, 6, 7, 7, 9, 10]], ['ragdhanu-mart', '3,610 votes', [1, 2, 4, 5, 6, 7, 9, 11]]]],
-            'rising' => ['Rising', 'rocket', [['sariha-art', 'New listing', [1, 1, 2, 3, 3, 5, 6, 8]], ['respite-care', 'New listing', [1, 2, 2, 2, 4, 4, 6, 7]], ['ragdhanu-mart', '▲ 58%', [3, 4, 4, 5, 5, 5, 6, 7]], ['li-ummati', '▲ 44%', [2, 3, 3, 4, 4, 5, 5, 6]], ['ayat-fashion', '▲ 86%', [1, 2, 2, 3, 5, 5, 6, 8]], ['girls-secret', '▲ 61%', [2, 3, 3, 5, 4, 7, 9, 12]]]],
+        return [
+            'trending' => [
+                'key' => 'trending',
+                'label' => 'Brands to watch',
+                'icon' => 'flame',
+                'rows' => array_map(fn ($slug) => ['brand' => self::brand($slug), 'metric' => null, 'up' => false, 'spark' => null],
+                    ['ayat-fashion', 'sariha-art', 'girls-secret', 'ragdhanu-mart', 'li-ummati', 'respite-care']),
+            ],
         ];
-
-        $out = [];
-        foreach ($tabs as $key => [$label, $icon, $rows]) {
-            $out[$key] = [
-                'key' => $key,
-                'label' => $label,
-                'icon' => $icon,
-                'rows' => array_map(fn ($r) => [
-                    'brand' => self::brand($r[0]),
-                    'metric' => $r[1],
-                    'up' => str_starts_with($r[1], '▲') || str_starts_with($r[1], 'New'),
-                    'spark' => self::sparkPath($r[2], 72, 24),
-                ], $rows),
-            ];
-        }
-
-        return $out;
     }
 
+    /**
+     * The six recognitions. People's Choice and Jury Choice are the two
+     * awards Super Admin's programme setup creates in every category; jury
+     * size, vote/jury weighting and brand-age limits are not enforced
+     * anywhere, so they appear only when set in config('platform.award_rules').
+     */
     public static function recognitionTypes(): array
     {
+        $rules = config('platform.award_rules', []);
+        $jury = ! empty($rules['jury_size']) ? 'Selected by a jury of '.$rules['jury_size'].'.' : 'Selected by the award jury.';
+        $weight = $rules['public_vote_weight'] ?? null;
+        $rising = ! empty($rules['rising_brand_max_years'])
+            ? 'For brands under '.$rules['rising_brand_max_years'].' years old.'
+            : 'For newer brands showing real growth. Criteria are set for each award.';
+
         return [
-            ['name' => 'People’s Choice', 'bn' => 'জনগণের পছন্দ', 'desc' => 'Decided only by verified public votes.', 'how' => '100% public vote', 'color' => '#E5383B', 'icon' => 'users'],
-            ['name' => 'Jury Choice', 'bn' => 'জুরি নির্বাচন', 'desc' => 'Selected by an independent jury of 21 industry leaders.', 'how' => '100% jury', 'color' => '#6366F1', 'icon' => 'scale'],
-            ['name' => 'Rising Brand', 'bn' => 'উদীয়মান ব্র্যান্ড', 'desc' => 'For brands under 3 years with real growth and impact.', 'how' => '40% vote · 60% jury', 'color' => '#12A06E', 'icon' => 'rocket'],
-            ['name' => 'Brand of the Year', 'bn' => 'বর্ষসেরা ব্র্যান্ড', 'desc' => 'The highest honour: jury review backed by business data.', 'how' => 'Jury + data review', 'color' => '#E9C46A', 'icon' => 'trophy'],
-            ['name' => 'Featured Brand', 'bn' => 'ফিচার্ড ব্র্যান্ড', 'desc' => 'An editorial pick by the MetaSoft BD team. Never paid.', 'how' => 'Editorial', 'color' => '#0EA5E9', 'icon' => 'star'],
-            ['name' => 'Entrepreneur of the Year', 'bn' => 'বর্ষসেরা উদ্যোক্তা', 'desc' => 'Honouring a founder’s journey, leadership and impact.', 'how' => 'Nomination + jury', 'color' => '#F59E0B', 'icon' => 'award'],
+            ['name' => 'People’s Choice', 'bn' => 'জনগণের পছন্দ', 'desc' => 'Decided by public votes in each category.', 'how' => 'Public vote', 'color' => '#4C9BE0', 'icon' => 'users'],
+            ['name' => 'Jury Choice', 'bn' => 'জুরি নির্বাচন', 'desc' => $jury, 'how' => 'Jury review', 'color' => '#2F80C9', 'icon' => 'scale'],
+            ['name' => 'Rising Brand', 'bn' => 'উদীয়মান ব্র্যান্ড', 'desc' => $rising, 'how' => $weight ? $weight.'% vote · '.(100 - $weight).'% jury' : 'Public vote + jury', 'color' => '#5FA8E8', 'icon' => 'rocket'],
+            ['name' => 'Brand of the Year', 'bn' => 'বর্ষসেরা ব্র্যান্ড', 'desc' => 'Recognises business performance and impact.', 'how' => 'Jury review', 'color' => '#9DCBF2', 'icon' => 'trophy'],
+            ['name' => 'Featured Brand', 'bn' => 'ফিচার্ড ব্র্যান্ড', 'desc' => 'Selected by MetaSoft BD editors, never paid.', 'how' => 'Editorial selection', 'color' => '#3B82C4', 'icon' => 'star'],
+            ['name' => 'Entrepreneur of the Year', 'bn' => 'বর্ষসেরা উদ্যোক্তা', 'desc' => 'Honours founder leadership and impact.', 'how' => 'Jury review', 'color' => '#7FB8EC', 'icon' => 'award'],
         ];
     }
 
@@ -275,9 +258,9 @@ class Showcase
     {
         return [
             ['kind' => 'Earned', 'name' => 'Nomination', 'desc' => 'Open to every brand, free to apply', 'tone' => 'navy'],
-            ['kind' => 'Earned', 'name' => 'Public Voting', 'desc' => 'Phone-verified, audited votes', 'tone' => 'rose'],
-            ['kind' => 'Earned', 'name' => 'Jury Recognition', 'desc' => 'Independent, named jury', 'tone' => 'indigo'],
-            ['kind' => 'Trust', 'name' => 'Verified Business', 'desc' => 'Trade licence & identity checked', 'tone' => 'sky'],
+            ['kind' => 'Earned', 'name' => 'Public Voting', 'desc' => 'One vote per number, audited', 'tone' => 'rose'],
+            ['kind' => 'Earned', 'name' => 'Jury Recognition', 'desc' => 'Decided by the award jury', 'tone' => 'indigo'],
+            ['kind' => 'Trust', 'name' => 'Verified Business', 'desc' => 'Identity & contact checked by admin', 'tone' => 'sky'],
             ['kind' => 'Editorial', 'name' => 'Featured Brand', 'desc' => 'Chosen by our editors', 'tone' => 'cyan'],
             ['kind' => 'Paid', 'name' => 'Sponsored', 'desc' => 'Always labelled, never affects results', 'tone' => 'paid'],
         ];
@@ -309,10 +292,10 @@ class Showcase
     public static function events(): array
     {
         return [
-            ['day' => '24', 'month' => 'OCT', 'type' => 'Seminar', 'title' => 'Scaling your F-commerce brand in 2027', 'place' => 'Gulshan, Dhaka', 'time' => 'Sat · 3:00 PM', 'price' => 'Free', 'going' => '186 going', 'cta' => 'Register', 'from' => '#2563EB', 'to' => '#1E3A8A'],
-            ['day' => '08', 'month' => 'NOV', 'type' => 'Networking', 'title' => 'Chattogram Founders Meetup', 'place' => 'GEC Circle, Chattogram', 'time' => 'Sat · 5:30 PM', 'price' => 'Free', 'going' => '92 going', 'cta' => 'RSVP', 'from' => '#0D9488', 'to' => '#134E4A'],
-            ['day' => '19', 'month' => 'NOV', 'type' => 'Brand Expo', 'title' => 'Made in Bangladesh Brand Expo 2026', 'place' => 'Purbachal, Dhaka', 'time' => '19–21 Nov · 10 AM', 'price' => '৳200', 'going' => '2.4K going', 'cta' => 'Get tickets', 'from' => '#EA580C', 'to' => '#7C2D12'],
-            ['day' => '12', 'month' => 'DEC', 'type' => 'Awards Night', 'title' => 'Brand & Entrepreneur Awards 2026 — Grand Finale', 'place' => 'Dhaka', 'time' => 'Sat · 6:00 PM', 'price' => '৳2,500', 'going' => 'Limited passes', 'cta' => 'Get passes', 'from' => '#A87B12', 'to' => '#3F2D06', 'gold' => true],
+            ['day' => '24', 'month' => 'OCT', 'type' => 'Seminar', 'title' => 'Scaling your F-commerce brand in 2027', 'place' => 'Gulshan, Dhaka', 'time' => 'Sat · 3:00 PM', 'price' => 'Free', 'cta' => 'Register', 'from' => '#2F80C9', 'to' => '#0B4A80'],
+            ['day' => '08', 'month' => 'NOV', 'type' => 'Networking', 'title' => 'Chattogram Founders Meetup', 'place' => 'GEC Circle, Chattogram', 'time' => 'Sat · 5:30 PM', 'price' => 'Free', 'cta' => 'RSVP', 'from' => '#1769AA', 'to' => '#073B66'],
+            ['day' => '19', 'month' => 'NOV', 'type' => 'Brand Expo', 'title' => 'Made in Bangladesh Brand Expo 2026', 'place' => 'Purbachal, Dhaka', 'time' => '19–21 Nov · 10 AM', 'price' => '৳200', 'cta' => 'Get tickets', 'from' => '#3B82C4', 'to' => '#0E528C'],
+            ['day' => '12', 'month' => 'DEC', 'type' => 'Awards Night', 'title' => 'Brand & Entrepreneur Awards 2026 — Grand Finale', 'place' => 'Dhaka', 'time' => 'Sat · 6:00 PM', 'price' => '৳2,500', 'cta' => 'Get passes', 'from' => '#0B4A80', 'to' => '#052B4C', 'gold' => true],
         ];
     }
 
@@ -355,44 +338,10 @@ class Showcase
         return ['brands' => array_slice($brands, 0, 8), 'entrepreneurs' => array_slice($people, 0, 8)];
     }
 
-    /** SVG polyline path for a small sparkline. */
-    public static function sparkPath(array $pts, int $w, int $h): string
-    {
-        $max = max($pts);
-        $min = min($pts);
-        $range = ($max - $min) ?: 1;
-        $n = count($pts) - 1;
-
-        return collect($pts)->map(function ($p, $i) use ($w, $h, $min, $range, $n) {
-            $x = round($i * $w / $n, 1);
-            $y = round($h - 2 - ($p - $min) / $range * ($h - 4), 1);
-
-            return ($i ? 'L' : 'M').$x.' '.$y;
-        })->implode(' ');
-    }
-
-    /** Lightweight JSON for the client-side quick-view drawer (keyed by slug). */
+    /** Lightweight JSON for the client-side entrepreneur profile dialog (brands have their own /brand/{slug} page). */
     public static function profilesForClient(): array
     {
         $out = [];
-        foreach (self::brands() as $slug => $b) {
-            $out['brand:'.$slug] = [
-                'type' => 'brand',
-                'name' => $b['name'],
-                'initials' => $b['initials'],
-                'from' => $b['from'],
-                'to' => $b['to'],
-                'subtitle' => $b['category'].' · '.implode(', ', array_unique([$b['district'], $b['division']])),
-                'description' => $b['description'],
-                'facts' => [['Category', $b['category']], ['Location', $b['district']]],
-                'badges' => $b['badges'],
-                'sponsored' => $b['tag'] === 'sponsored',
-                'url' => $b['url'],
-                'verified' => $b['verified'],
-                'logo' => $b['logo'],
-                'cover' => $b['cover'],
-            ];
-        }
         foreach (self::entrepreneurs() as $e) {
             $out['person:'.$e['slug']] = [
                 'type' => 'person',
