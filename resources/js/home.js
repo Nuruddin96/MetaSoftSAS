@@ -264,6 +264,13 @@ if ('IntersectionObserver' in window && sections.length) {
     sections.forEach((s) => io.observe(s));
 }
 
+// ---- hero glass map: pause its animations while it is off-screen ----
+// Everything pauses together, so the pulses and the red pointer flashes stay in sync when it resumes.
+const network = $('[data-bd-network]');
+if (network && 'IntersectionObserver' in window) {
+    new IntersectionObserver(([en]) => network.classList.toggle('bd-paused', !en.isIntersecting)).observe(network);
+}
+
 // ---- land on the requested section (e.g. /?q=Dhaka#results) ----
 // Smooth scrolling + late web-font layout shifts can leave the browser's
 // own hash jump short of the target, so re-apply it once layout settles.

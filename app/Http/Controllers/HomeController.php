@@ -47,8 +47,6 @@ class HomeController extends Controller
             'preview' => (bool) config('platform.showcase_preview'),
             'home' => $content->settings(),
             'stats' => $content->stats(),
-            'heroBrand' => Showcase::brand('ayat-fashion'),
-            'heroRising' => Showcase::votingCategories()['rising'],
             'award' => $award,
             // Server-confirmed: a visible campaign in its open window with real nominees. Gates every "Voting open" / "Vote" cue.
             'votingOpen' => $content->votingOpen(),

@@ -1,13 +1,14 @@
-@php $rising = $heroRising; /* decorative hero mock-up (sample) */ @endphp
 <section class="relative isolate overflow-hidden bg-night text-white">
     {{-- Decorative: navy-to-blue field (MetaSoft BD palette), kept quiet on purpose --}}
     <div aria-hidden="true" class="absolute inset-0 -z-10">
         <div class="absolute inset-0 bg-[linear-gradient(135deg,#052B4C_0%,#073B66_55%,#1769AA_100%)]"></div>
         <div class="absolute -right-32 -top-32 h-[28rem] w-[28rem] rounded-full border-[56px] border-white/[0.04]"></div>
+        {{-- Faint dot field behind the glass map, so the glass visibly shows what is behind it --}}
+        <div class="bd-dots absolute inset-0 hidden sm:block"></div>
     </div>
 
     <div class="{{ $wrap }} grid items-center gap-12 pb-8 pt-5 sm:py-16 lg:grid-cols-[1.1fr_0.9fr] lg:gap-10 lg:py-20">
-        <div class="min-w-0">
+        <div class="relative z-10 min-w-0">
             <a href="#voting" class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3.5 py-1.5 text-[13px] font-medium text-white/90 transition hover:bg-white/10">
                 <span @class(['h-2 w-2 rounded-full', 'bg-flag' => $votingOpen, 'bg-gold' => ! $votingOpen])></span> {{ $home['hero_pill'] }}
                 <x-plat.icon name="chevron-right" class="w-3.5 h-3.5 text-white/60" />
@@ -60,55 +61,8 @@
             @endif
         </div>
 
-        {{-- Platform composition: a live profile, a live vote and recognition chips --}}
-        <div class="relative mx-auto hidden h-[560px] w-full max-w-[520px] lg:block" aria-hidden="true">
-            <div class="absolute left-12 top-10 w-[380px] overflow-hidden rounded-3xl bg-white text-night shadow-2xl shadow-black/40">
-                <div class="relative h-36 overflow-hidden" style="background:linear-gradient(135deg,#073B66,#1769AA)">
-                    @if(! empty($heroBrand['cover']))
-                        <img src="{{ $heroBrand['cover'] }}" alt="" class="absolute inset-0 h-full w-full object-cover">
-                    @else
-                        <span class="absolute -right-8 -top-10 h-44 w-44 rounded-full bg-white/10"></span>
-                    @endif
-                    <span class="absolute left-3 top-3"><x-plat.badge type="editor" label="Editor’s pick" size="xs" /></span>
-                </div>
-                <div class="relative -mt-8 px-6 pb-6">
-                    <div class="flex items-start gap-3">
-                        <x-plat.logo :initials="$heroBrand['initials']" :from="$heroBrand['from']" :to="$heroBrand['to']" :size="64" ring :src="$heroBrand['logo'] ?? null" :alt="$heroBrand['name'].' logo'" />
-                        <div class="pt-9">
-                            <p class="flex items-center gap-1.5 text-lg font-extrabold">{{ $heroBrand['name'] }} @if($heroBrand['verified'] ?? false)<x-plat.verified />@endif</p>
-                            <p class="text-[13px] text-slate2">{{ $heroBrand['category'] }} · {{ $heroBrand['district'] }}</p>
-                        </div>
-                    </div>
-                    <p class="mt-3 text-sm leading-relaxed text-slate2">{{ $heroBrand['description'] }}</p>
-                    @if($heroBrand['badges'])
-                        <div class="mt-3 flex gap-1.5">@foreach($heroBrand['badges'] as $b)<x-plat.badge :type="$b['type']" :label="$b['label']" size="xs" />@endforeach</div>
-                    @endif
-                    <div class="mt-4 flex gap-5 text-[13px]">@if($heroBrand['rating'])<b>★ {{ $heroBrand['rating'] }}</b>@endif @if($heroBrand['followers'])<span class="text-slate2">{{ $heroBrand['followers'] }} followers</span>@endif<span class="text-slate2">metasoftbd.com/{{ $heroBrand['slug'] }}</span></div>
-                </div>
-            </div>
-
-            <div class="absolute bottom-6 left-0 w-[270px] rounded-2xl bg-white p-4 text-night shadow-2xl shadow-black/40">
-                <p class="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-leaf"><span class="h-2 w-2 rounded-full bg-leaf"></span> Showcase brands</p>
-                {{-- Decorative and sample: brand names only — no vote counts, shares or voting call-to-action. --}}
-                <ul class="mt-3 space-y-2">
-                    @foreach(array_slice($rising['nominees'], 0, 3) as $n)
-                        <li class="flex items-center gap-2 text-[13px] font-semibold"><x-plat.logo :initials="$n['brand']['initials']" :from="$n['brand']['from']" :to="$n['brand']['to']" :size="24" :src="$n['brand']['logo'] ?? null" alt="" />{{ $n['brand']['name'] }}</li>
-                    @endforeach
-                </ul>
-                <div class="mt-4 rounded-[10px] bg-leaf py-2 text-center text-[13px] font-bold text-white">View profiles</div>
-            </div>
-
-            <div class="absolute right-0 top-0 flex items-center gap-3 rounded-full bg-white py-2.5 pl-2.5 pr-4 text-night shadow-2xl shadow-black/40">
-                @php $chip = \App\Support\Home\Showcase::brand('respite-care'); @endphp
-                <x-plat.logo :initials="$chip['initials']" :from="$chip['from']" :to="$chip['to']" :size="40" round :src="$chip['logo']" :alt="$chip['name'].' logo'" />
-                <div><p class="text-sm font-bold">{{ $chip['name'] }}</p><p class="text-xs text-slate2">{{ $chip['category'] }}</p></div>
-                <span class="rounded-full bg-navy px-2 py-0.5 text-[10px] font-bold text-white">Showcase</span>
-            </div>
-
-            <div class="absolute bottom-20 right-0 flex items-center gap-3 rounded-2xl bg-night/95 px-4 py-3 shadow-2xl ring-1 ring-white/10">
-                <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-gold to-golddk"><x-plat.icon name="trophy" class="w-4 h-4" /></span>
-                <div><p class="text-[13px] font-bold">One Nation. One Stage.</p><p class="text-[11px] text-white/60">National awards · same rules</p></div>
-            </div>
-        </div>
+        {{-- Glass map of Bangladesh: routes carry a pulse from Dhaka; each pointer flashes red twice on arrival.
+             Desktop: right column. Tablet: centred below the copy. Phone: faded backdrop behind the copy. --}}
+        <x-plat.bd-network />
     </div>
 </section>
