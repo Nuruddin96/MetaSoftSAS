@@ -26,9 +26,14 @@ use App\Http\Controllers\Platform\BrandDirectoryController;
 use App\Http\Controllers\Platform\VoteController;
 use Illuminate\Support\Facades\Route;
 
+// Brand profile pages. Outside platform.ready on purpose: the homepage's
+// sample brands (Showcase) get their profile page even before the platform
+// tables exist — BrandDirectoryController::show answers the friendly 503
+// itself for any other slug until then.
+Route::get('brand/{slug}', [BrandDirectoryController::class, 'show'])->where('slug', '[a-z0-9-]+')->name('brands.show');
+
 Route::middleware('platform.ready')->group(function () {
     Route::get('brands', [BrandDirectoryController::class, 'index'])->name('brands.index');
-    Route::get('brand/{slug}', [BrandDirectoryController::class, 'show'])->where('slug', '[a-z0-9-]+')->name('brands.show');
 
     Route::get('vote/{slug}', [VoteController::class, 'show'])->where('slug', '[a-z0-9-]+')->name('vote.show');
     Route::post('vote/{slug}', [VoteController::class, 'cast'])->where('slug', '[a-z0-9-]+')

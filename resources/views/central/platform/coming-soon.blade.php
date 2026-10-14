@@ -8,7 +8,7 @@
 @endpush
 
 @section('content')
-<main id="main-content" class="flex min-h-screen items-center justify-center bg-cloud px-4 font-plat text-night">
+<main id="main-content" class="plat-theme flex min-h-screen items-center justify-center bg-cloud px-4 font-plat text-night">
     <div class="w-full max-w-md rounded-[24px] border border-hair bg-white p-8 text-center shadow-sm">
         <x-ui.brand-mark />
         <h1 class="mt-5 text-2xl font-extrabold tracking-tight">This part of MetaSoft BD is almost ready</h1>

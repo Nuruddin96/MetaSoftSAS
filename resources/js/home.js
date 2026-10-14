@@ -99,7 +99,7 @@ $$('[data-countdown]').forEach((el) => {
 $$('[data-copy]').forEach((b) => b.addEventListener('click', () => copyText(b.dataset.copy)));
 $$('[data-share]').forEach((b) => b.addEventListener('click', () => share(b.dataset.shareTitle || document.title, b.dataset.shareUrl || location.href)));
 
-// ---- profile dialog ----
+// ---- entrepreneur profile dialog (brands have their own /brand/{slug} page) ----
 const profiles = JSON.parse($('#profilesData')?.textContent || '{}');
 const drawer = $('#profileDrawer');
 const badgeClass = {
@@ -149,13 +149,6 @@ function openProfile(key) {
     const verified = p.verified === true;
     $('#pdName').innerHTML = esc(p.name) + (verified ? ` ${seal}` : '');
     $('#pdSubtitle').textContent = p.subtitle || '';
-    const status = $('#pdStatus');
-    status.classList.toggle('hidden', p.type !== 'brand');
-    status.classList.toggle('flex', p.type === 'brand');
-    status.className = status.className.replace(/\btext-(sky-700|slate2)\b/g, '');
-    status.classList.add(verified ? 'text-sky-700' : 'text-slate2');
-    status.innerHTML = verified ? `${seal} Verified by MetaSoft BD` : 'Not yet verified by MetaSoft BD';
-    $('#pdSponsored').classList.toggle('hidden', !p.sponsored);
 
     const badges = p.badges?.length ? p.badges : (verified ? [{ label: 'Verified business', type: 'verified' }] : []);
     $('#pdBadges').innerHTML = badges
@@ -176,7 +169,6 @@ function openProfile(key) {
     full.classList.toggle('hidden', !p.profile_url);
     full.classList.toggle('inline-flex', !!p.profile_url);
     full.href = p.profile_url || '#';
-    $('#pdNote').classList.toggle('hidden', !!p.profile_url || p.type !== 'brand');
 
     const link = profileLink(p);
     $('#pdShare').onclick = () => share(`${p.name} on MetaSoft BD`, link);

@@ -1,12 +1,12 @@
 @php $lead = $entrepreneurs[0]; $rest = array_slice($entrepreneurs, 1); @endphp
-<section id="entrepreneurs" class="scroll-mt-20 bg-cream py-16 sm:py-20 lg:py-24">
+<section id="entrepreneurs" class="scroll-mt-20 bg-cream py-12 sm:py-16 lg:py-20">
     <div class="{{ $wrap }}">
         <x-plat.section-head eyebrow="Entrepreneur spotlight" bn="উদ্যোক্তা"
-            title="Meet the entrepreneurs."
-            sub="The founders, makers and builders behind Bangladesh’s most loved brands."
+            title="Meet the Founders."
+            sub="Discover the people behind Bangladesh’s brands."
             link="All entrepreneurs" href="{{ url('/') }}?browse=entrepreneurs#results" />
 
-        <div class="mt-10 grid gap-5 lg:grid-cols-2">
+        <div class="mt-8 grid gap-5 lg:grid-cols-2">
             {{-- Editorial feature --}}
             <article class="grid overflow-hidden rounded-3xl bg-night text-white sm:grid-cols-[0.85fr_1fr]">
                 <div class="relative min-h-[240px] overflow-hidden" style="background:linear-gradient(160deg,{{ $lead['from'] }},{{ $lead['to'] }})" aria-hidden="true">
@@ -28,7 +28,7 @@
                     <p class="mt-4 text-5xl font-extrabold leading-none text-gold" aria-hidden="true">“</p>
                     <blockquote class="text-lg font-medium italic leading-relaxed sm:text-[19px]">{{ $lead['story'] }}</blockquote>
                     <div class="mt-auto pt-6">
-                        <p class="flex items-center gap-1.5 text-lg font-extrabold">{{ $lead['name'] }} @if($lead['verified'] ?? true)<x-plat.verified />@endif</p>
+                        <p class="flex items-center gap-1.5 text-lg font-extrabold">{{ $lead['name'] }} @if($lead['verified'] ?? false)<x-plat.verified />@endif</p>
                         <p class="text-[13px] text-white/60">{{ $lead['role'] }}, {{ $lead['brand'] }} · {{ $lead['category'] }} · {{ $lead['district'] }}</p>
                         <div class="mt-3 flex gap-4">
                             <button type="button" data-profile="person:{{ $lead['slug'] }}" class="text-sm font-bold text-gold hover:underline underline-offset-4">View profile →</button>

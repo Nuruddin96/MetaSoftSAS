@@ -57,6 +57,28 @@
 }
 
 /*
+ * MetaSoft BD platform theme (homepage + layouts/platform.blade.php):
+ * navy #073B66 / blue #1769AA / light blue #F4F8FC. Re-points the shared
+ * tokens inside .plat-theme only, so every platform component (cards,
+ * buttons, bottom tab bar, badges) picks up the palette while the tenant
+ * panel, storefront and super admin keep their own green/amber tokens.
+ * "gold" becomes a light-blue accent for use on navy backgrounds.
+ */
+.plat-theme {
+    --color-night: #0B2545;
+    --color-navy: #073B66;
+    --color-leaf: #1769AA;
+    --color-leafdk: #073B66;
+    --color-mint: #E7F0FA;
+    --color-cloud: #F4F8FC;
+    --color-cream: #F4F8FC;
+    --color-hair: #DDE6F0;
+    --color-slate2: #4E5D72;
+    --color-gold: #9DCBF2;
+    --color-golddk: #1769AA;
+}
+
+/*
  * Slow, subtle drifting glow — used behind hero-style sections for a soft
  * animated background. Respects the reduced-motion rule below (which
  * already disables all animations globally via `animation: none !important`
@@ -74,18 +96,22 @@
 }
 
 /*
- * Brand card grid (x-plat.brand-card): 6 per row on desktop, 4 on phones.
- * Below 360px four cards would be ~66px wide — too narrow for a readable
- * name and a tappable button — so the very smallest screens get 3.
- * home/our-brands.blade.php relies on these column counts to show 4 rows.
+ * Brand card grid (x-plat.brand-card, square cards): 3 per row on phones,
+ * 4 from 480px, 6 on desktop. Four square cards on a 360–430px phone are
+ * only ~75–95px wide — too small for a logo, name, category and button —
+ * so phones get 3. home/our-brands.blade.php relies on these column
+ * counts to show 4 rows.
  */
 .brand-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    gap: 8px;
 }
 
-@media (min-width: 360px) {
+/* Square cards with one-line (truncated) names: stop the text from widening the track. */
+.brand-grid > *, .brand-grid > * > article { min-width: 0; }
+
+@media (min-width: 480px) {
     .brand-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 

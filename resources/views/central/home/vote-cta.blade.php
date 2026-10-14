@@ -14,7 +14,7 @@
 @endphp
 <section id="vote-now" class="scroll-mt-20 bg-white py-8 sm:py-12" aria-labelledby="voteNowTitle">
     <div class="{{ $wrap }}">
-        <div class="overflow-hidden rounded-3xl bg-[linear-gradient(135deg,#0A1428_0%,#0E2350_60%,#00513C_100%)] p-5 text-white sm:p-8 lg:flex lg:items-center lg:justify-between lg:gap-10 lg:p-10">
+        <div class="overflow-hidden rounded-3xl bg-[linear-gradient(135deg,#052B4C_0%,#073B66_60%,#1769AA_100%)] p-5 text-white sm:p-8 lg:flex lg:items-center lg:justify-between lg:gap-10 lg:p-10">
             <div class="max-w-xl">
                 <p class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[12px] font-bold">
                     @if($open)
@@ -36,7 +36,7 @@
                     @elseif($e)
                         Public voting for {{ $e['title'] }} has ended. Thank you to everyone who voted.
                     @else
-                        Public voting for the {{ config('platform.award_name') }} hasn’t opened yet. Voting will be free — explore the award categories in the meantime.
+                        Voting hasn’t opened yet. Explore the award categories.
                     @endif
                 </p>
             </div>

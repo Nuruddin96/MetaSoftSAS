@@ -9,8 +9,8 @@
             <ul class="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 @foreach([
                     ['user-plus', 'Free to nominate', 'Every brand can apply'],
-                    ['phone', 'Phone-verified votes', 'One person, one vote a day'],
-                    ['scale', 'Independent jury', 'Named members, published scores'],
+                    ['phone', 'Audited votes', 'One vote per mobile number'],
+                    ['scale', 'Jury review', 'Separate from public votes'],
                     ['info', 'Sponsored = labelled', 'Paid never touches results'],
                 ] as [$icon, $title, $desc])
                     <li class="flex items-start gap-3 rounded-2xl bg-cloud p-3.5 sm:p-4">

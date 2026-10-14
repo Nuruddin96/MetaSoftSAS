@@ -1,25 +1,23 @@
 @php $rising = $heroRising; /* decorative hero mock-up (sample) */ @endphp
 <section class="relative isolate overflow-hidden bg-night text-white">
-    {{-- Decorative: deep green field + soft red sun, a quiet nod to the flag --}}
+    {{-- Decorative: navy-to-blue field (MetaSoft BD palette), kept quiet on purpose --}}
     <div aria-hidden="true" class="absolute inset-0 -z-10">
-        <div class="absolute inset-0 bg-[linear-gradient(135deg,#0A1428_0%,#0E2350_55%,#00513C_100%)]"></div>
-        <div class="bg-glow absolute -right-24 top-10 h-[30rem] w-[30rem] bg-flag/25"></div>
-        <div class="bg-glow absolute -bottom-40 -left-24 h-[28rem] w-[28rem] bg-emerald-500/20" style="animation-delay:-8s"></div>
-        <div class="absolute inset-0 opacity-[0.07]" style="background-image:radial-gradient(#fff 1px,transparent 1px);background-size:22px 22px"></div>
+        <div class="absolute inset-0 bg-[linear-gradient(135deg,#052B4C_0%,#073B66_55%,#1769AA_100%)]"></div>
+        <div class="absolute -right-32 -top-32 h-[28rem] w-[28rem] rounded-full border-[56px] border-white/[0.04]"></div>
     </div>
 
     <div class="{{ $wrap }} grid items-center gap-12 pb-8 pt-5 sm:py-16 lg:grid-cols-[1.1fr_0.9fr] lg:gap-10 lg:py-20">
         <div class="min-w-0">
             <a href="#voting" class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3.5 py-1.5 text-[13px] font-medium text-white/90 transition hover:bg-white/10">
-                <span class="h-2 w-2 rounded-full bg-flag"></span> {{ $home['hero_pill'] }}
+                <span @class(['h-2 w-2 rounded-full', 'bg-flag' => $votingOpen, 'bg-gold' => ! $votingOpen])></span> {{ $home['hero_pill'] }}
                 <x-plat.icon name="chevron-right" class="w-3.5 h-3.5 text-white/60" />
             </a>
 
             {{-- Phones: two lines (title / highlight), sized to the viewport so the first line fits in one row. --}}
-            <h1 class="mt-3 text-[length:clamp(16px,calc((100vw_-_32px)/18.5),30px)] font-extrabold leading-[1.2] tracking-[-0.03em] sm:mt-6 sm:text-5xl sm:leading-[1.06] lg:text-[58px]">
+            <h1 class="mt-3 text-[length:clamp(16px,calc((100vw_-_32px)/18.5),30px)] font-extrabold leading-[1.2] tracking-[-0.03em] sm:mt-6 sm:text-[42px] sm:leading-[1.08] lg:text-[48px]">
                 {{ $home['hero_title'] }} <span class="block text-gold sm:inline">{{ $home['hero_highlight'] }}</span>
             </h1>
-            <p class="mt-2 font-body text-base font-medium text-emerald-200 sm:mt-4 sm:text-xl" lang="bn">বাংলাদেশের উদ্যোক্তা ও ব্র্যান্ডদের জাতীয় প্ল্যাটফর্ম</p>
+            <p class="mt-2 font-body text-base font-medium text-sky-200 sm:mt-4 sm:text-xl" lang="bn">বাংলাদেশের উদ্যোক্তা ও ব্র্যান্ডদের জাতীয় প্ল্যাটফর্ম</p>
             <p class="mt-2 max-w-xl text-[14.5px] leading-relaxed text-white/75 sm:mt-4 sm:text-[17px]">
                 {{ $home['hero_sub'] }}
             </p>
@@ -32,10 +30,10 @@
                        class="h-9 min-w-0 flex-1 bg-transparent text-base text-night outline-none placeholder:text-slate2 sm:h-11 sm:text-[15px]">
                 <button type="submit" class="shrink-0 rounded-xl bg-leaf px-4 py-2 text-sm font-bold text-white transition hover:bg-leafdk focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 sm:px-6 sm:py-3">Search</button>
             </form>
-            <div class="mt-2.5 flex flex-wrap items-center gap-2 text-[13px] sm:mt-3">
-                <span class="text-white/55">Popular:</span>
+            <div class="-mx-4 mt-2.5 flex items-center gap-2 overflow-x-auto px-4 text-[13px] [scrollbar-width:none] sm:mx-0 sm:mt-3 sm:flex-wrap sm:px-0">
+                <span class="shrink-0 text-white/55">Popular:</span>
                 @foreach(['Fashion', 'Food', 'Handicrafts', 'Tech', 'Dhaka', 'Sylhet'] as $chip)
-                    <a href="{{ url('/') }}?q={{ urlencode($chip) }}#results" class="rounded-full bg-white/[0.08] px-3 py-1 font-medium text-white/85 transition hover:bg-white/15">{{ $chip }}</a>
+                    <a href="{{ url('/') }}?q={{ urlencode($chip) }}#results" class="shrink-0 rounded-full bg-white/[0.08] px-3 py-1 font-medium text-white/85 transition hover:bg-white/15">{{ $chip }}</a>
                 @endforeach
             </div>
 
@@ -44,10 +42,12 @@
                     Explore brands <x-plat.icon name="arrow-right" class="w-4 h-4" />
                 </a>
                 <a href="#join" class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/30 px-6 py-3 text-[15px] sm:py-3.5 font-bold text-white transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
-                    Join / list your brand — free
+                    List your brand free
                 </a>
             </div>
 
+            {{-- Real counts only (HomepageContent::stats); hidden until there are some. --}}
+            @if($stats)
             <dl class="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-white/10 pt-5 sm:mt-9 sm:grid-cols-4 sm:gap-y-5 sm:pt-7">
                 @foreach($stats as $s)
                     <div>
@@ -57,12 +57,13 @@
                     </div>
                 @endforeach
             </dl>
+            @endif
         </div>
 
         {{-- Platform composition: a live profile, a live vote and recognition chips --}}
         <div class="relative mx-auto hidden h-[560px] w-full max-w-[520px] lg:block" aria-hidden="true">
             <div class="absolute left-12 top-10 w-[380px] overflow-hidden rounded-3xl bg-white text-night shadow-2xl shadow-black/40">
-                <div class="relative h-36 overflow-hidden" style="background:linear-gradient(135deg,#C2410C,#7C2D12)">
+                <div class="relative h-36 overflow-hidden" style="background:linear-gradient(135deg,#073B66,#1769AA)">
                     @if(! empty($heroBrand['cover']))
                         <img src="{{ $heroBrand['cover'] }}" alt="" class="absolute inset-0 h-full w-full object-cover">
                     @else
@@ -87,16 +88,14 @@
             </div>
 
             <div class="absolute bottom-6 left-0 w-[270px] rounded-2xl bg-white p-4 text-night shadow-2xl shadow-black/40">
-                <p class="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-flag"><span class="h-2 w-2 rounded-full bg-flag"></span> Live · Rising Brand 2026</p>
-                <div class="mt-3 space-y-3">
-                    @foreach(array_slice($rising['nominees'], 0, 3) as $i => $n)
-                        <div>
-                            <div class="flex justify-between text-[13px]"><span class="font-semibold">{{ $n['brand']['name'] }}</span><b>{{ $n['pct'] }}%</b></div>
-                            <div class="mt-1.5 h-1.5 rounded-full bg-cloud"><div class="h-full rounded-full {{ ['bg-leaf', 'bg-sky-500', 'bg-gold'][$i] }}" style="width:{{ $n['bar'] }}%"></div></div>
-                        </div>
+                <p class="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-leaf"><span class="h-2 w-2 rounded-full bg-leaf"></span> Showcase brands</p>
+                {{-- Decorative and sample: brand names only — no vote counts, shares or voting call-to-action. --}}
+                <ul class="mt-3 space-y-2">
+                    @foreach(array_slice($rising['nominees'], 0, 3) as $n)
+                        <li class="flex items-center gap-2 text-[13px] font-semibold"><x-plat.logo :initials="$n['brand']['initials']" :from="$n['brand']['from']" :to="$n['brand']['to']" :size="24" :src="$n['brand']['logo'] ?? null" alt="" />{{ $n['brand']['name'] }}</li>
                     @endforeach
-                </div>
-                <div class="mt-4 rounded-[10px] bg-leaf py-2 text-center text-[13px] font-bold text-white">Vote now</div>
+                </ul>
+                <div class="mt-4 rounded-[10px] bg-leaf py-2 text-center text-[13px] font-bold text-white">View profiles</div>
             </div>
 
             <div class="absolute right-0 top-0 flex items-center gap-3 rounded-full bg-white py-2.5 pl-2.5 pr-4 text-night shadow-2xl shadow-black/40">
@@ -108,7 +107,7 @@
 
             <div class="absolute bottom-20 right-0 flex items-center gap-3 rounded-2xl bg-night/95 px-4 py-3 shadow-2xl ring-1 ring-white/10">
                 <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-gold to-golddk"><x-plat.icon name="trophy" class="w-4 h-4" /></span>
-                <div><p class="text-[13px] font-bold">District → Division → National</p><p class="text-[11px] text-white/60">64 districts · 8 divisions</p></div>
+                <div><p class="text-[13px] font-bold">One Nation. One Stage.</p><p class="text-[11px] text-white/60">National awards · same rules</p></div>
             </div>
         </div>
     </div>

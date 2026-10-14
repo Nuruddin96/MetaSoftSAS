@@ -1,26 +1,22 @@
-{{-- Client-side profile data for the quick-view drawer (sample showcase content) --}}
+{{-- Client-side data for the entrepreneur profile dialog (sample showcase content) --}}
 <script type="application/json" id="profilesData">@json($profiles)</script>
 
 {{--
-    Profile dialog: a full single-brand (or entrepreneur) profile for the
-    homepage's sample showcase cards — bottom sheet on phones, centred
-    panel on larger screens. home.js fills it from #profilesData by the
-    clicked card's key, clearing every field first, and hides each optional
-    section (products, gallery, links, contact, full-profile link) when the
-    profile has no data for it. Real brands open their own /brand/{slug} page.
+    Entrepreneur profile dialog — bottom sheet on phones, centred panel on
+    larger screens. home.js fills it from #profilesData by the clicked
+    card's key, clearing every field first, and hides each optional section
+    that has no data. Brands don't use it: "View Profile" opens the brand's
+    own /brand/{slug} page.
 --}}
 <div id="profileDrawer" class="fixed inset-0 z-[70] hidden" role="dialog" aria-modal="true" aria-labelledby="pdName">
     <div class="absolute inset-0 bg-night/60 backdrop-blur-sm" data-close-drawer></div>
     <div class="absolute inset-x-0 bottom-0 flex max-h-[94vh] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90vh] sm:w-[min(720px,calc(100vw-48px))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl">
         <div class="overflow-y-auto overscroll-contain" data-drawer-scroll>
-            <div id="pdCover" class="relative h-32 shrink-0 sm:h-44">
-                <span id="pdSponsored" class="absolute left-3 top-3 hidden"><x-plat.badge type="sponsored" label="Sponsored placement" size="xs" /></span>
-            </div>
+            <div id="pdCover" class="relative h-32 shrink-0 sm:h-44"></div>
             <div class="relative -mt-10 px-5 pb-6 sm:px-8 sm:pb-8">
                 <span id="pdLogo" class="inline-flex h-20 w-20 items-center justify-center rounded-[20px] text-2xl font-extrabold text-white ring-4 ring-white sm:h-24 sm:w-24"></span>
                 <h3 id="pdName" class="mt-3 flex flex-wrap items-center gap-1.5 text-xl font-extrabold leading-tight sm:text-2xl"></h3>
                 <p id="pdSubtitle" class="mt-0.5 text-sm text-slate2"></p>
-                <p id="pdStatus" class="mt-2 hidden items-center gap-1.5 text-[13px] font-semibold"></p>
                 <div id="pdBadges" class="mt-3 flex flex-wrap gap-1.5"></div>
 
                 <dl id="pdFacts" class="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3"></dl>
@@ -51,7 +47,6 @@
                     <button type="button" id="pdShare" class="inline-flex items-center justify-center gap-2 rounded-xl bg-leaf py-3 text-sm font-bold text-white hover:bg-leafdk"><x-plat.icon name="share" class="w-4 h-4" /> Share profile</button>
                     <a id="pdWhatsapp" href="#" target="_blank" rel="noopener" class="inline-flex items-center justify-center gap-2 rounded-xl border border-hair py-3 text-sm font-bold hover:border-leaf">@include('partials.icon', ['platform' => 'whatsapp', 'class' => 'w-4 h-4 text-[#25D366]']) Send on WhatsApp</a>
                 </div>
-                <p id="pdNote" class="mt-4 text-xs text-slate2">This is a sample showcase profile. Listed brands get a permanent public profile page with products, gallery and award history.</p>
             </div>
         </div>
         <button type="button" data-close-drawer class="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-night shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf">

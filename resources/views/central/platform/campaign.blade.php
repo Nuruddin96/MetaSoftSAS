@@ -7,7 +7,7 @@
 
 @section('page')
 @php $phase = $campaign->phase(); @endphp
-<section class="bg-[linear-gradient(160deg,#0A1428,#0E2350_55%,#00513C)] py-10 text-white sm:py-14">
+<section class="bg-[linear-gradient(160deg,#052B4C,#073B66_55%,#1769AA)] py-10 text-white sm:py-14">
     <div class="mx-auto max-w-5xl px-4 sm:px-6">
         @if($campaign->award)
             <a href="{{ route('awards.show', $campaign->award->slug) }}" class="text-[12px] font-extrabold uppercase tracking-[0.16em] text-gold hover:underline">{{ $campaign->award->title }}</a>

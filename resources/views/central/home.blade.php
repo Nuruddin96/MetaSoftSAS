@@ -22,7 +22,7 @@
 @endphp
 
 @section('content')
-<div id="top" class="font-plat bg-white text-night pb-[76px] lg:pb-0">
+<div id="top" class="plat-theme font-plat bg-white text-night pb-[76px] lg:pb-0">
 
     @include('central.home.header')
 

@@ -62,6 +62,20 @@ return [
         'Social Impact & Innovation',
     ],
 
+    /*
+    | Award criteria shown in the homepage "recognition" section. Nothing
+    | in the award or voting code enforces a jury size, a vote/jury weighting
+    | or a brand-age limit, so these stay unset (null) and the homepage uses
+    | neutral wording. Set them only once the approved award rules say so,
+    | and the copy will state the exact figure.
+    */
+    'award_rules' => [
+        'jury_size' => env('PLATFORM_JURY_SIZE') ? (int) env('PLATFORM_JURY_SIZE') : null,
+        // Public-vote share (percent) for awards that combine votes and jury, e.g. Rising Brand.
+        'public_vote_weight' => env('PLATFORM_PUBLIC_VOTE_WEIGHT') ? (int) env('PLATFORM_PUBLIC_VOTE_WEIGHT') : null,
+        'rising_brand_max_years' => env('PLATFORM_RISING_BRAND_MAX_YEARS') ? (int) env('PLATFORM_RISING_BRAND_MAX_YEARS') : null,
+    ],
+
     // Email copies of owner notifications through the app's existing
     // mailer. In-app notifications are always created.
     'notify_email' => env('PLATFORM_NOTIFY_EMAIL', false),

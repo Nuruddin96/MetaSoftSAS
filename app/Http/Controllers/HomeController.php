@@ -37,6 +37,7 @@ class HomeController extends Controller
         }
 
         [$voting, $votingNote] = $content->voting();
+        $award = $content->award();
 
         return view('central.home', [
             'q' => $q,
@@ -45,12 +46,13 @@ class HomeController extends Controller
             'browsing' => in_array($browse, ['brands', 'entrepreneurs'], true),
             'preview' => (bool) config('platform.showcase_preview'),
             'home' => $content->settings(),
-            'stats' => Showcase::stats(),
+            'stats' => $content->stats(),
             'heroBrand' => Showcase::brand('ayat-fashion'),
             'heroRising' => Showcase::votingCategories()['rising'],
-            'award' => $content->award(),
-            'otherAwards' => Showcase::otherAwards(),
-            'divisions' => Showcase::divisions(),
+            'award' => $award,
+            // Server-confirmed: a visible campaign in its open window with real nominees. Gates every "Voting open" / "Vote" cue.
+            'votingOpen' => $content->votingOpen(),
+            'otherAwards' => $content->otherAwards($award['title']),
             'voting' => $voting,
             'votingNote' => $votingNote,
             'trending' => Showcase::trending(),

@@ -4,6 +4,7 @@ namespace Tests\Feature\Central;
 
 use App\Models\PlatformSetting;
 use App\Support\Home\Showcase;
+use App\Support\Platform\HomepageContent;
 use App\Support\Platform\PlatformSchema;
 use Tests\TestCase;
 
@@ -76,14 +77,69 @@ class HomepageTest extends TestCase
 
         $home = $this->get('/')->assertOk();
         foreach ($expected as $name => [$logo, $cover]) {
-            // Logos on the cards; covers in the profile dialog's JSON (compact cards carry no cover photo).
-            $home->assertSee($name)->assertSee('images/showcase/logos/'.$logo, false)->assertSee(str_replace('/', '\/', 'images/showcase/covers/'.$cover), false);
+            // Logos on the cards, which link to the brand's own page; the cover is shown there.
+            $slug = $brands[$name]['slug'];
+            $home->assertSee($name)->assertSee('images/showcase/logos/'.$logo, false)->assertSee('href="/brand/'.$slug.'"', false);
+            $this->get('/brand/'.$slug)->assertOk()->assertSee($name)->assertSee('images/showcase/covers/'.$cover, false);
         }
         // Previous demo brands and their generated artwork are gone.
         foreach (['Nakshi Ghor', 'Krishi Bondhu', 'Jamdani House', 'PayDesh', 'Tanvir Ahmed'] as $old) {
             $home->assertDontSee($old);
         }
         $this->assertDoesNotMatchRegularExpression('#images/showcase/[a-z]+/[^"\']+\.svg#', $home->getContent());
+    }
+
+    public function test_view_profile_opens_a_page_not_a_popup(): void
+    {
+        $home = $this->get('/')->assertOk();
+
+        $home->assertDontSee('data-profile="brand:', false);
+        $this->assertStringNotContainsString('"brand:', $home->getContent(), 'Brand profiles are no longer shipped to the popup.');
+    }
+
+    public function test_sample_brand_page_is_labelled_unverified_and_not_indexed(): void
+    {
+        $this->get('/brand/ayat-fashion')
+            ->assertOk()
+            ->assertSee('Sample profile')
+            ->assertSee('noindex', false)
+            ->assertSee('All brands')
+            ->assertDontSee('images/badges/metasoft-verified.png', false);
+
+        $this->get('/brand/no-such-brand')->assertStatus(503);
+
+        // A leftover brand-owner session must not break the page while the platform tables are missing.
+        $this->withSession(['login_brand_owner_'.sha1(\Illuminate\Auth\SessionGuard::class) => 1])
+            ->get('/brand/ayat-fashion')->assertOk()->assertSee('List your brand');
+    }
+
+    public function test_no_invented_statistics_are_shown(): void
+    {
+        $home = $this->get('/')->assertOk();
+
+        foreach (['1.2M', '12,400+', '8,900+', 'Verified votes', '38 categories', '2,380', '▲', 'K views', ' going<', '186 nominees', '412 nominees'] as $made_up) {
+            $home->assertDontSee($made_up, false);
+        }
+        // Without platform tables there are no real counts, so the hero figures are hidden.
+        $this->assertSame([], app(HomepageContent::class)->stats());
+        $home->assertSee('Not a ranking.');
+    }
+
+    public function test_no_voting_cues_or_unlabelled_demo_content_without_a_real_campaign(): void
+    {
+        $home = $this->get('/')->assertOk();
+
+        foreach (['>Voting open<', 'Vote now', '>LIVE<', 'data-countdown', 'data-vote ', '30 Nov', '৳', 'Get tickets', 'Get passes', 'going<', 'Watch ·', 'Our Partners.'] as $cue) {
+            $home->assertDontSee($cue, false);
+        }
+        $home->assertSee('Voting not open yet')
+            ->assertSee('Example content')
+            ->assertSee('Example event formats')
+            ->assertSee('Example story formats')
+            ->assertSee('No partners have been announced yet.')
+            ->assertSee('Sample nominees');
+        $this->assertFalse(app(HomepageContent::class)->votingOpen());
+        $this->assertSame([], app(HomepageContent::class)->otherAwards('x'));
     }
 
     public function test_preview_notice_follows_config(): void

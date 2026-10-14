@@ -30,7 +30,7 @@
                                     <li class="text-sm text-white/40">{{ $label }} <span class="text-[10px] uppercase tracking-wider">soon</span></li>
                                 @else
                                     <li><a href="{{ $href }}" @if(str_starts_with($href, 'https://wa.me')) target="_blank" rel="noopener" @endif
-                                           class="text-sm {{ $label === 'Business Automation' ? 'font-semibold text-emerald-300' : 'text-white/65' }} hover:text-white">{{ $label }}@if($label === 'Business Automation')&nbsp;↗@endif</a></li>
+                                           class="text-sm {{ $label === 'Business Automation' ? 'font-semibold text-sky-300' : 'text-white/65' }} hover:text-white">{{ $label }}@if($label === 'Business Automation')&nbsp;↗@endif</a></li>
                                 @endif
                             @endforeach
                         </ul>

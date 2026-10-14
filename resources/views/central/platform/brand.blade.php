@@ -20,6 +20,9 @@
     <span class="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-white/10" aria-hidden="true"></span>
     <span class="absolute left-1/3 top-10 h-48 w-48 rounded-full bg-white/[0.06]" aria-hidden="true"></span>
     <div class="{{ $wrap }} relative h-32 sm:h-40">
+        <a href="{{ route('brands.index') }}" class="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-[13px] font-bold text-night shadow-sm hover:bg-white sm:left-6">
+            <x-plat.icon name="chevron-right" class="w-3.5 h-3.5 rotate-180" /> All brands
+        </a>
         @if($brand->isSponsoredNow())
             <span class="absolute right-4 top-4 sm:right-6"><x-plat.badge type="sponsored" label="Sponsored" /></span>
         @endif
@@ -32,9 +35,9 @@
             <div class="flex items-end gap-4">
                 <x-plat.logo :initials="$brand->initials()" :from="$from" :to="$to" :size="96" ring :src="$brand->logoUrl()" :alt="$brand->name.' logo'" class="-mt-16 shadow-lg sm:-mt-20" />
                 <div class="min-w-0 pb-1">
-                    <h1 class="flex items-center gap-2 text-[26px] font-extrabold leading-tight tracking-tight sm:text-[32px]">
+                    <h1 class="flex items-center gap-2 text-[24px] font-extrabold leading-tight tracking-tight sm:text-[30px]">
                         <span class="break-words">{{ $brand->name }}</span>
-                        @if($brand->is_verified)<x-plat.verified size="w-6 h-6 sm:w-7 sm:h-7" />@endif
+                        @if($brand->is_verified)<x-plat.verified size="w-5 h-5 sm:w-6 sm:h-6" />@endif
                     </h1>
                     <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-slate2">
                         <span class="font-semibold text-night">{{ $brand->category?->name ?? 'Brand' }}</span>
@@ -122,7 +125,7 @@
 
     <aside class="space-y-6">
         @if($entries->isNotEmpty())
-            <div class="rounded-[20px] bg-[linear-gradient(135deg,#0A1428,#0E2350)] p-5 text-white">
+            <div class="rounded-[20px] bg-[linear-gradient(135deg,#052B4C,#073B66)] p-5 text-white">
                 <p class="text-[11px] font-extrabold uppercase tracking-[0.16em] text-gold">Voting open</p>
                 @foreach($entries as $e)
                     <p class="mt-2 font-bold">{{ $e->campaign->title }}</p>
