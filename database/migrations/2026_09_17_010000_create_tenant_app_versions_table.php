@@ -16,16 +16,13 @@ use Illuminate\Support\Facades\Schema;
  * Deliberately a NEW table rather than piggybacking on device_push_tokens
  * (FCM-token-keyed — a tenant who denies notifications may never have a
  * row there, and its schema is about push delivery, not app/device
- * telemetry) or mobile_devices (Remote Support's own device identity,
- * only populated for tenants that enabled that module — this must work
- * for every tenant regardless of Remote Support). Unique on user_id, not
+ * telemetry). Unique on user_id, not
  * a composite/device-scoped key: this reports "what this login is running
  * right now", upserted on every app open, exactly like device_push_tokens'
  * own upsert-by-token pattern — never an unbounded row-per-open history.
  *
  * Real migration, not database/sql/chunkN.sql — follows the same
- * established exception every mobile-app table since Remote Support/
- * Device Intelligence uses (see 2026_09_16_000500_create_app_update_
+ * established exception the other mobile-app tables use (see 2026_09_16_000500_create_app_update_
  * configs_table.php's own docblock).
  */
 return new class extends Migration

@@ -24,12 +24,9 @@ use App\Http\Controllers\SuperAdmin\AppUpdateController;
 use App\Http\Controllers\SuperAdmin\AuthController;
 use App\Http\Controllers\SuperAdmin\ClientController;
 use App\Http\Controllers\SuperAdmin\ClientPaymentController;
-use App\Http\Controllers\SuperAdmin\DeviceIntelligenceController as SuperDeviceIntelligenceController;
-use App\Http\Controllers\SuperAdmin\DevicePermissionController as SuperDevicePermissionController;
 use App\Http\Controllers\SuperAdmin\DomainRequestController;
 use App\Http\Controllers\SuperAdmin\PaymentController;
 use App\Http\Controllers\SuperAdmin\PlanController;
-use App\Http\Controllers\SuperAdmin\RemoteSupportController as SuperRemoteSupportController;
 use App\Http\Controllers\SuperAdmin\SourceOrderController;
 use App\Http\Controllers\SuperAdmin\SourceProductController;
 use App\Http\Controllers\SuperAdmin\TenantAppVersionController as SuperTenantAppVersionController;
@@ -227,60 +224,10 @@ Route::domain(config('app.central_domain'))->group(function () {
                 Route::post('{tenant}/resume-ai', [SuperAiCreditController::class, 'resumeAi'])->name('resume-ai');
             });
 
-            // Remote Support — Super Admin only, never exposed to normal
-            // tenant nav/UI. See RemoteSupportController's docblock for why
-            // {device}/{session} are plain ints resolved manually rather
-            // than implicit route-model binding.
-            Route::prefix('remote-support')->name('remote-support.')->group(function () {
-                Route::get('/', [SuperRemoteSupportController::class, 'index'])->name('index');
-                Route::get('{tenant}', [SuperRemoteSupportController::class, 'show'])->name('show');
-                Route::post('{tenant}/toggle', [SuperRemoteSupportController::class, 'toggleTenant'])->name('toggle');
-                Route::post('{tenant}/devices/{device}/revoke', [SuperRemoteSupportController::class, 'revokeDevice'])
-                    ->whereNumber('device')->name('devices.revoke');
-                Route::post('{tenant}/devices/{device}/toggle', [SuperRemoteSupportController::class, 'toggleDevice'])
-                    ->whereNumber('device')->name('devices.toggle');
-                Route::post('{tenant}/devices/{device}/session', [SuperRemoteSupportController::class, 'startSession'])
-                    ->whereNumber('device')->name('session.start');
-                Route::post('{tenant}/devices/{device}/wake', [SuperRemoteSupportController::class, 'wakeAndStart'])
-                    ->whereNumber('device')->name('devices.wake');
-                // Minimal polling target for the unified "Start Live
-                // Screen" button's JS — see
-                // RemoteSupportController::status()'s doc comment.
-                Route::get('{tenant}/devices/{device}/status', [SuperRemoteSupportController::class, 'status'])
-                    ->whereNumber('device')->name('devices.status');
-                Route::get('{tenant}/devices/{device}/session/{session}/view', [SuperRemoteSupportController::class, 'viewer'])
-                    ->whereNumber('device')->whereNumber('session')->name('session.viewer');
-                Route::delete('{tenant}/devices/{device}/session/{session}', [SuperRemoteSupportController::class, 'stopSession'])
-                    ->whereNumber('device')->whereNumber('session')->name('session.stop');
-                Route::post('{tenant}/devices/{device}/session/{session}/signal', [SuperRemoteSupportController::class, 'sendSignal'])
-                    ->whereNumber('device')->whereNumber('session')->name('session.signal.send');
-                Route::get('{tenant}/devices/{device}/session/{session}/signal', [SuperRemoteSupportController::class, 'pollSignal'])
-                    ->whereNumber('device')->whereNumber('session')->name('session.signal.poll');
-
-                // Unified permission-request panel (same page, same
-                // {tenant}/{device} resolution convention) — see
-                // DevicePermissionController's doc comment for why this
-                // is a separate small controller rather than growing
-                // RemoteSupportController with an unrelated concern.
-                Route::post('{tenant}/devices/{device}/permissions/{permission}/request', [SuperDevicePermissionController::class, 'request'])
-                    ->whereNumber('device')->name('devices.permissions.request');
-            });
-
-            // Device Intelligence — Super Admin only, a SEPARATE module
-            // from Remote Support above (see
-            // SuperDeviceIntelligenceController's docblock). Same
-            // manual-resolution convention for {device} as Remote
-            // Support's own group, for the same reason (no
-            // resolve.tenant middleware runs in this route space).
-            Route::prefix('device-intelligence')->name('device-intelligence.')->group(function () {
-                Route::get('/', [SuperDeviceIntelligenceController::class, 'index'])->name('index');
-                Route::get('{tenant}', [SuperDeviceIntelligenceController::class, 'show'])->name('show');
-                Route::post('{tenant}/toggle', [SuperDeviceIntelligenceController::class, 'toggleTenant'])->name('toggle');
-                Route::get('{tenant}/devices/{device}', [SuperDeviceIntelligenceController::class, 'deviceShow'])
-                    ->whereNumber('device')->name('devices.show');
-                Route::post('{tenant}/devices/{device}/location/request', [SuperDeviceIntelligenceController::class, 'requestLocation'])
-                    ->whereNumber('device')->name('devices.location.request');
-            });
+            // NOTE: The Super-Admin Remote Support and Device Intelligence
+            // route groups were moved to the private, local-only overlay
+            // (local-features/routes/web.php) and are not part of the
+            // deployed/published app. See local-features/README.md.
 
             Route::get('source/products', [SourceProductController::class, 'index'])->name('source.products');
             Route::get('source/products/create', [SourceProductController::class, 'create'])->name('source.products.create');

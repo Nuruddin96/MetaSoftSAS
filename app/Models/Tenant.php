@@ -95,32 +95,12 @@ class Tenant extends Model
         return $this->hasOne(AiCreditAccount::class);
     }
 
-    public function remoteSupportSetting()
-    {
-        return $this->hasOne(RemoteSupportSetting::class);
-    }
-
-    public function mobileDevices()
-    {
-        return $this->hasMany(MobileDevice::class);
-    }
-
-    /** True once this tenant has an explicitly-enabled Remote Support setting row — see RemoteSupportSetting's docblock. */
-    public function hasRemoteSupportEnabled(): bool
-    {
-        return (bool) $this->remoteSupportSetting?->enabled;
-    }
-
-    public function deviceIntelligenceSetting()
-    {
-        return $this->hasOne(\App\Models\DeviceIntelligenceSetting::class);
-    }
-
-    /** True once this tenant has an explicitly-enabled Device Intelligence setting row — a SEPARATE toggle from Remote Support's own, see DeviceIntelligenceSetting's docblock. */
-    public function hasDeviceIntelligenceEnabled(): bool
-    {
-        return (bool) $this->deviceIntelligenceSetting?->enabled;
-    }
+    // NOTE: The Remote Support / Device Intelligence relations
+    // (remoteSupportSetting, mobileDevices, deviceIntelligenceSetting) and
+    // their hasRemoteSupportEnabled()/hasDeviceIntelligenceEnabled()
+    // helpers live in the private, local-only overlay — registered at
+    // runtime by LocalFeaturesServiceProvider via Tenant::resolveRelationUsing().
+    // They are absent from the deployed/published app. See local-features/README.md.
 
     /**
      * True once database/sql/chunk39.sql's ai_paused_at/

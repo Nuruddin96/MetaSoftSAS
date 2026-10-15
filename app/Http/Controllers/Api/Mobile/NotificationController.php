@@ -107,10 +107,10 @@ class NotificationController extends Controller
 
     /**
      * FCM push notifications task. Deliberately separate from
-     * DeviceController::updateFcmToken() (Remote Support's own device-
+     * the legacy per-device FCM token path (device-
      * credential-scoped proof-of-concept, see that method's docblock) —
      * this registers under the ordinary login-token auth group so push
-     * works for every tenant, not only ones with Remote Support enabled.
+     * works for every tenant.
      *
      * Upsert-by-token, not by (tenant_id, user_id): an FCM token identifies
      * one specific app install, which belongs to exactly one logged-in

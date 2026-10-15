@@ -47,26 +47,10 @@ Schedule::command('courier:refresh-statuses')
     ->onOneServer()
     ->withoutOverlapping();
 
-// Remote Support: independent stale-session cleanup — see
-// SweepStaleRemoteSupportSessions's own docblock for why this is needed in
-// addition to RemoteSupportService::startSession()'s per-device self-heal.
-// Every five minutes is comfortably inside abandoned_session_grace_seconds
-// (default 90s) and max_session_minutes (default 30) without adding
-// meaningful load; reuses this file's existing single cron entry.
-Schedule::command('remote-support:sweep-stale-sessions')
-    ->everyFiveMinutes()
-    ->onOneServer()
-    ->withoutOverlapping();
-
-// Unified permission-request lifecycle: same "someone has to notice a
-// stale one, independent of any admin revisiting that device" rationale as
-// the sweep above — see SweepExpiredPermissionRequests's own docblock.
-// Every five minutes is comfortably inside the default 15-minute TTL
-// (config('permission_requests.ttl_minutes')).
-Schedule::command('permission-requests:sweep-expired')
-    ->everyFiveMinutes()
-    ->onOneServer()
-    ->withoutOverlapping();
+// NOTE: The Remote Support stale-session sweep and the permission-request
+// expiry sweep were moved to the private, local-only overlay
+// (local-features/, scheduled from LocalFeaturesServiceProvider) and are
+// not scheduled in the deployed/published app.
 
 // Recognition platform: date-driven voting starts/ends and their one-time
 // "voting started/ended" owner notifications — see PlatformCampaignTick.

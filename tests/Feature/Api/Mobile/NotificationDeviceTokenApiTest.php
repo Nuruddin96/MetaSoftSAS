@@ -12,7 +12,7 @@ use Tests\TestCase;
 /**
  * FCM push notifications task: `POST/DELETE notifications/device-token`
  * (Api\Mobile\NotificationController::registerDeviceToken/
- * unregisterDeviceToken) — deliberately separate from Remote Support's
+ * unregisterDeviceToken) — deliberately separate from the legacy per-device token path's
  * device-credential-scoped devices/fcm-token, see that method's docblock.
  */
 class NotificationDeviceTokenApiTest extends TestCase

@@ -11,8 +11,6 @@ use App\Http\Controllers\Api\Mobile\BillingController;
 use App\Http\Controllers\Api\Mobile\CategoryController;
 use App\Http\Controllers\Api\Mobile\CustomerController;
 use App\Http\Controllers\Api\Mobile\DashboardController;
-use App\Http\Controllers\Api\Mobile\DeviceController;
-use App\Http\Controllers\Api\Mobile\DeviceIntelligenceController;
 use App\Http\Controllers\Api\Mobile\ExpenseController;
 use App\Http\Controllers\Api\Mobile\FacebookConnectController;
 use App\Http\Controllers\Api\Mobile\FraudCheckController;
@@ -35,7 +33,6 @@ use App\Http\Controllers\Api\Mobile\ReferenceDataController;
 use App\Http\Controllers\Api\Mobile\ReportController;
 use App\Http\Controllers\Api\Mobile\ReviewController;
 use App\Http\Controllers\Api\Mobile\SettingController;
-use App\Http\Controllers\Api\Mobile\SignalController;
 use App\Http\Controllers\Api\Mobile\SteadfastController;
 use App\Http\Controllers\Api\Mobile\TenantAppVersionController;
 use App\Http\Controllers\Api\Mobile\WhatsAppConnectController;
@@ -357,10 +354,8 @@ Route::prefix('mobile/v1')->group(function () {
 
         // FCM device-token registration — real production push
         // notifications task. Deliberately in the ordinary login-token
-        // group (not the device-credential group devices/fcm-token below
-        // uses), so push works for every tenant, not only ones with
-        // Remote Support enabled — see NotificationController::
-        // registerDeviceToken()'s docblock.
+        // group so push works for every tenant — see
+        // NotificationController::registerDeviceToken()'s docblock.
         Route::post('notifications/device-token', [NotificationController::class, 'registerDeviceToken']);
         Route::delete('notifications/device-token', [NotificationController::class, 'unregisterDeviceToken']);
 
@@ -437,76 +432,6 @@ Route::prefix('mobile/v1')->group(function () {
         // Manager campaign integration.
         Route::get('advertising', [AdvertisingController::class, 'overview']);
         Route::get('advertising/ledger', [AdvertisingController::class, 'ledger']);
-
-        // Remote Support: device registration/status only — runs under the
-        // user's own login token, same as everything else in this group
-        // (bind.tenant.token). Never reachable from any tenant-facing nav;
-        // see docs/remote-support-architecture.md §Tenant-facing visibility
-        // and RemoteSupportController's docblock on the Flutter side.
-        Route::post('devices/register', [DeviceController::class, 'register']);
-        Route::get('devices/status', [DeviceController::class, 'status']);
-
-        // Device Intelligence — a SEPARATE module/toggle from Remote
-        // Support (see DeviceIntelligenceController's docblock). Same
-        // "runs under the user's own login token" shape as the two
-        // routes above, for the same reason (no device credential exists
-        // yet at this point for a never-registered device).
-        Route::get('devices/intelligence/status', [DeviceIntelligenceController::class, 'status']);
-    });
-
-    // Device-credential routes — a SEPARATE, long-lived token from the
-    // user's login token above (see MobileDevice's docblock), gated by
-    // Sanctum ability rather than bind.tenant.token so heartbeats keep
-    // working after the human logs out of the app on that phone.
-    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/heartbeat', [DeviceController::class, 'heartbeat']);
-
-    // Remote Support FCM wake PROOF-OF-CONCEPT only — see
-    // RemoteSupportFcmService.kt (Android) and RemoteSupportTestWake (the
-    // manual test-send command this feeds). Not called anywhere in the
-    // existing Dart code yet; reuses the same device-credential ability as
-    // heartbeat rather than introducing a new one.
-    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/fcm-token', [DeviceController::class, 'updateFcmToken']);
-
-    // Two-layer consent/access sync for Admin Dashboard visibility only —
-    // see DeviceController::syncConsent()'s doc comment and
-    // docs/remote-support-consent-model.md (Flutter repo) §5. Reuses the
-    // same device-credential ability as heartbeat/fcm-token.
-    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/consent-sync', [DeviceController::class, 'syncConsent']);
-
-    // Device-side resolve for SuperAdmin\DevicePermissionController's
-    // request — see DeviceController::resolvePermissionRequest()'s doc
-    // comment. Reuses the same device-credential ability as
-    // heartbeat/consent-sync.
-    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/permissions/resolve', [DeviceController::class, 'resolvePermissionRequest']);
-
-    // Unified permission-request lifecycle — "the device is genuinely
-    // about to show the permission dialog now". See
-    // DeviceController::markPermissionPromptShown()'s doc comment. Same
-    // device-credential ability as every sibling endpoint here.
-    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->post('devices/permissions/prompt-shown', [DeviceController::class, 'markPermissionPromptShown']);
-
-    // Device Intelligence — reuses the same device-credential ability as
-    // Remote Support's own sync endpoints (no new Sanctum ability, no
-    // duplicate device identity system — see DeviceIntelligenceController's
-    // docblock). A SEPARATE module/table set throughout; never merges
-    // consent/state with Remote Support's own.
-    Route::middleware(['auth:sanctum', 'ability:device:heartbeat'])->group(function () {
-        Route::post('devices/intelligence/feature-sync', [DeviceIntelligenceController::class, 'syncFeatureState']);
-        Route::post('devices/intelligence/telemetry-sync', [DeviceIntelligenceController::class, 'syncTelemetry']);
-        Route::post('devices/intelligence/notifications/sync', [DeviceIntelligenceController::class, 'syncNotifications']);
-        Route::post('devices/intelligence/usage/sync', [DeviceIntelligenceController::class, 'syncAppUsage']);
-
-        // On-demand location snapshot — see
-        // DeviceIntelligenceService::requestLocationFetch()'s doc
-        // comment. Polled by the SAME DeviceIntelligenceSyncWorker tick
-        // as the syncs above, never a new transport.
-        Route::get('devices/intelligence/location/pending', [DeviceIntelligenceController::class, 'locationPending']);
-        Route::post('devices/intelligence/location/report', [DeviceIntelligenceController::class, 'reportLocation']);
-    });
-
-    Route::middleware(['auth:sanctum', 'ability:device:signal'])->group(function () {
-        Route::post('devices/sessions/{sessionToken}/signal', [SignalController::class, 'send']);
-        Route::get('devices/sessions/{sessionToken}/signal', [SignalController::class, 'poll']);
     });
 });
 

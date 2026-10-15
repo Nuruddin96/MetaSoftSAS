@@ -47,13 +47,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // CheckMobileSubscription's docblock for why that one can't be
             // reused directly here.
             'check.subscription.mobile' => CheckMobileSubscription::class,
-            // Remote Support device-credential routes (heartbeat/signal) —
-            // gates by Sanctum token ability so a device credential can
-            // never be used to call ordinary Business App endpoints and
-            // vice versa (see MobileDevice's docblock on why device
-            // credentials are separate tokens from the user's login token).
-            // Laravel's default skeleton doesn't alias Sanctum's own
-            // ability middleware, so this registers it explicitly.
+            // Sanctum token-ability middleware. Laravel's default skeleton
+            // doesn't alias Sanctum's own ability middleware, so this
+            // registers it explicitly for any route that gates on a token
+            // ability.
             'abilities' => CheckAbilities::class,
             'ability' => CheckForAnyAbility::class,
         ]);

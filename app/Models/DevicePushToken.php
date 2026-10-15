@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * One row per registered FCM device token — the native-app counterpart to
  * [PushSubscription] (browser Web Push). See database/sql/chunk63.sql for
- * why this is a separate table from `mobile_devices` (Remote Support only).
+ * why this is a separate table from the legacy per-device token table.
  */
 class DevicePushToken extends Model
 {

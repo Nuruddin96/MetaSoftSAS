@@ -2,14 +2,9 @@
 -- counterpart to chunk31.sql's push_subscriptions (browser Web Push). New,
 -- additive table; nothing existing is touched.
 --
--- Deliberately NOT the same table as mobile_devices (Remote Support): a
--- mobile_devices row only exists once a tenant has opted into Remote
--- Support (DeviceController::register() 404s otherwise, see that
--- controller's docblock) and mobile_devices.fcm_token is scoped to that
--- feature's own wake-proof-of-concept. General app push (new order/
--- message notifications) must work for every tenant regardless of Remote
--- Support, so it gets its own table registered under the ordinary
--- login-token auth group, not the device-credential one.
+-- A dedicated table for general app push (new order/message
+-- notifications), registered under the ordinary login-token auth group so
+-- it works for every tenant.
 --
 -- Uniqueness is on token alone, NOT (tenant_id, token) like
 -- push_subscriptions' endpoint: an FCM token identifies one specific app
