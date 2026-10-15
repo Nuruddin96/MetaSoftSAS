@@ -27,3 +27,7 @@ Thumbs.db
 .env.testing
 
 .claude/settings.local.json
+
+# PRIVATE, LOCAL-ONLY features (Remote Support, Live Screen Sharing,
+# Device Intelligence). Never committed to this repo, never deployed.
+/local-features

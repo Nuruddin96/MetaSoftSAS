@@ -13,9 +13,8 @@ use Illuminate\Support\Facades\Schema;
  * A real Laravel migration rather than a database/sql/chunkN.sql file —
  * this codebase's older core schema is SQL-file-driven (AGENTS.md
  * "Database: NOT migration-driven"), but every mobile-app-related table
- * added since Remote Support/Device Intelligence
- * (2026_08_20_220000_create_remote_support_settings_table.php onward)
- * uses a real migration instead; this follows that established, scoped
+ * added in the mobile-app work uses a real migration instead; this
+ * follows that established, scoped
  * exception rather than the older convention.
  */
 return new class extends Migration
