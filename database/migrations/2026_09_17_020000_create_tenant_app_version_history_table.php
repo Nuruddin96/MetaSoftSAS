@@ -17,11 +17,10 @@ use Illuminate\Support\Facades\Schema;
  * existing TenantAppVersion::updateOrCreate() call.
  *
  * `source` distinguishes rows actually written by THIS feature
- * ('app_version_report') from rows backfilled from Remote Support's own,
- * differently-versioned mobile_devices.app_version snapshots
- * ('remote_support_registration', see the one-off backfill run
- * alongside this migration's deploy) — never silently blended as if
- * both were the same kind of evidence.
+ * ('app_version_report') from rows backfilled from legacy,
+ * differently-versioned device-registration app_version snapshots
+ * ('device_registration') — never silently blended as if both were
+ * the same kind of evidence.
  */
 return new class extends Migration
 {

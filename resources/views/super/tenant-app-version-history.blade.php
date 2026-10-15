@@ -62,7 +62,7 @@
                 <td class="px-4 py-3 text-mute">{{ $row->last_seen_at?->format('Y-m-d H:i') ?? '—' }}</td>
                 <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs {{ $status['class'] }}">{{ $status['label'] }}</span></td>
                 <td class="px-4 py-3 text-mute text-xs">
-                    {{ $row->source === 'app_version_report' ? 'সরাসরি রিপোর্ট' : 'পুরনো তথ্য (Remote Support নিবন্ধন থেকে)' }}
+                    {{ $row->source === 'app_version_report' ? 'সরাসরি রিপোর্ট' : 'পুরনো তথ্য (ডিভাইস নিবন্ধন থেকে)' }}
                 </td>
             </tr>
         @empty

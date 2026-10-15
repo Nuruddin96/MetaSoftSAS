@@ -25,6 +25,15 @@ cd "$GIT_PROJECT"
 echo "Pulling latest code..."
 git pull origin main
 
+# Safety gate: the private local-only features (Remote Support, Live Screen
+# Sharing, Device Intelligence) live in local-features/, which is gitignored
+# and must NEVER reach production. If it ever appears in the git checkout
+# (e.g. someone force-added it), refuse to deploy rather than publish it.
+if [ -e "$GIT_PROJECT/local-features" ]; then
+    echo "ERROR: local-features/ is present in the deploy checkout — this is the PRIVATE local-only overlay and must never be deployed. Aborting." >&2
+    exit 1
+fi
+
 echo "Verifying frontend assets were built and committed..."
 if [ -f "public/build/manifest.json" ]; then
     php -r '
@@ -63,6 +72,7 @@ rsync -av --delete \
   --exclude="node_modules/" \
   --exclude="public/storage" \
   --exclude="/public/puzzle" \
+  --exclude="/local-features" \
   "$GIT_PROJECT/" \
   "$LIVE_PROJECT/"
 

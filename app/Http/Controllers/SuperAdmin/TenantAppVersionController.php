@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Schema;
  * order:
  *   1. tenant_app_versions   — current-state upsert, evidence='current'
  *   2. tenant_app_version_history — evidence='historical'
- *   3. mobile_devices (Remote Support registration snapshot) — evidence='historical'
+ *   3. mobile_devices (legacy device registration snapshot, if present) — evidence='historical'
  *   4. nothing at all — evidence='unknown'
  * A historical-only row is deliberately never described as the tenant's
  * present state (see statusFor) — it's a last-known data point, not proof

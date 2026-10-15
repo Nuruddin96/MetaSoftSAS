@@ -27,8 +27,10 @@
                 ['super.clients.payments', 'রেগুলার ক্লায়েন্ট পেমেন্ট', '💵'],
                 ['super.advertising.index', 'অ্যাডভার্টাইজিং বিলিং', '📢'],
                 ['super.ai-credit.index', 'AI ক্রেডিট', '🤖'],
-                ['super.remote-support.index', 'রিমোট সাপোর্ট', '🖥️'],
-                ['super.device-intelligence.index', 'ডিভাইস ইন্টেলিজেন্স', '📊'],
+                // Private, local-only nav items (Remote Support / Device
+                // Intelligence) are injected here by LocalFeaturesServiceProvider
+                // and are absent in the deployed app. See local-features/README.md.
+                ...config('local_features.super_nav', []),
                 ['super.plans', 'প্ল্যান', '📋'],
                 ['super.announcement', 'টেনেন্ট ঘোষণা', '📢'],
                 ['super.app-update', 'অ্যাপ আপডেট', '📲'],
