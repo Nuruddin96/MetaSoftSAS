@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Notifications\BrandOwnerResetPassword;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Support\Facades\Notification as NotificationFacade;
 
 /**
  * A brand owner's login (guard `brand_owner`, database/sql/chunk64.sql).
@@ -34,5 +36,11 @@ class BrandOwner extends Authenticatable
     public function isSuspended(): bool
     {
         return $this->status === 'suspended';
+    }
+
+    /** Self-service reset email (auth.passwords.brand_owners) — links to the owner reset page. */
+    public function sendPasswordResetNotification($token): void
+    {
+        NotificationFacade::route('mail', $this->email)->notify(new BrandOwnerResetPassword($token, $this->email));
     }
 }

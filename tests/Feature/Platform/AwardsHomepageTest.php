@@ -459,7 +459,25 @@ class AwardsHomepageTest extends TestCase
         $home->assertSee('Nominations now open')->assertSee('Celebrate the makers')->assertSee('of Bangladesh.')
             ->assertSee(route('awards.show', $award->slug), false)
             ->assertDontSee('id="events"', false)->assertDontSee('href="#events"', false)
-            ->assertSee('id="stories"', false);
+            // Stories need real published content, which doesn't exist yet — the switch alone doesn't show examples.
+            ->assertDontSee('id="stories"', false)
+            ->assertSee('id="sponsors"', false);
+    }
+
+    public function test_sample_switch_off_leaves_only_real_content_on_the_homepage(): void
+    {
+        PlatformSetting::put('homepage', array_merge(HomepageContent::defaults(), ['sample_fallback' => false]));
+        $real = $this->brand('Shop Basket');
+
+        $home = $this->get('/')->assertOk();
+        $home->assertSee('Shop Basket')
+            ->assertDontSee('id="trending"', false)->assertDontSee('href="#trending"', false)
+            ->assertDontSee('id="entrepreneurs"', false)->assertDontSee('href="#entrepreneurs"', false)
+            ->assertDontSee('Sample nominees')->assertDontSee('>Sample</span>', false)
+            ->assertDontSee('images/showcase/logos/', false)
+            ->assertSee('No voting campaign is open yet.')
+            // Real categories link to the filtered directory.
+            ->assertSee(route('brands.index', ['category' => $real->category->slug]), false);
     }
 
     public function test_brand_owner_cannot_reach_homepage_or_award_admin(): void

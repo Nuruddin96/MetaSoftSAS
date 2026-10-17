@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Brand;
 use App\Support\Home\Showcase;
 use App\Support\Platform\HomepageContent;
 use Illuminate\Http\Request;
@@ -29,7 +30,7 @@ class HomeController extends Controller
             $results = ['brands' => $content->allBrands(), 'entrepreneurs' => []];
             $resultsTitle = 'All brands';
         } elseif ($browse === 'entrepreneurs') {
-            $results = ['brands' => [], 'entrepreneurs' => Showcase::entrepreneurs()];
+            $results = ['brands' => [], 'entrepreneurs' => $content->showsSamples() ? Showcase::entrepreneurs() : []];
             $resultsTitle = 'All entrepreneurs';
         } else {
             $results = $q !== '' ? $content->search($q) : null;
@@ -57,7 +58,10 @@ class HomeController extends Controller
             'ourBrands' => $content->ourBrands(),
             'voteEntry' => $content->voteEntry(),
             'realBrands' => $content->realBrandCount(),
-            'categories' => Showcase::categories(),
+            'categories' => $content->categories(),
+            // Sample sections (trending, entrepreneurs) render only in sample mode, always labelled.
+            'samples' => $content->showsSamples(),
+            'verificationEvidence' => Brand::VERIFICATION_EVIDENCE,
             'entrepreneurs' => Showcase::entrepreneurs(),
             'recognition' => Showcase::recognitionTypes(),
             'labels' => Showcase::labels(),

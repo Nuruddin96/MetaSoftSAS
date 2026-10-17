@@ -20,7 +20,7 @@ use Illuminate\Support\Str;
  */
 trait InteractsWithPlatformSchema
 {
-    protected function setUpPlatformSchema(): void
+    protected function setUpPlatformSchema(bool $withReviewSchema = true): void
     {
         if (! Schema::hasTable('super_admins')) {
             Schema::create('super_admins', function (Blueprint $t) {
@@ -264,9 +264,33 @@ trait InteractsWithPlatformSchema
             $t->timestamps();
         });
 
+        if ($withReviewSchema) {
+            $this->setUpPlatformReviewSchema();
+        }
+
         PlatformSchema::flush();
         BdLocations::flush();
         PlatformSetting::flush();
+    }
+
+    /** database/sql/chunk66.sql — owner password reset tokens + admin review fields. */
+    protected function setUpPlatformReviewSchema(): void
+    {
+        Schema::create('brand_owner_password_reset_tokens', function (Blueprint $t) {
+            $t->string('email', 150)->primary();
+            $t->string('token');
+            $t->timestamp('created_at')->nullable();
+        });
+
+        Schema::table('brands', function (Blueprint $t) {
+            $t->timestamp('contact_checked_at')->nullable();
+            $t->unsignedBigInteger('contact_checked_by')->nullable();
+            $t->string('contact_check_method', 20)->nullable();
+            $t->string('contact_check_note', 255)->nullable();
+            $t->json('verification_basis')->nullable();
+        });
+
+        PlatformSchema::flush();
     }
 
     protected function makePlatformCategory(string $name = 'Fashion & Apparel', array $attrs = []): BrandCategory

@@ -2,9 +2,9 @@
     Square brand card: logo, name, category and "View Profile" only.
     The MetaSoft BD verified seal sits in the top-right corner only when
     `verified` is true (brands.is_verified — set by Super Admin, approved
-    brands only). Paid placements keep a tiny "Ad" label — sponsored slots
-    are always disclosed — and sample fill-ins keep their "Sample" label
-    once the global preview notice is off. "View Profile" always opens the
+    brands only). Paid placements keep a small "Sponsored" label — sponsored
+    slots are always disclosed — and sample fill-ins always keep their
+    "Sample" label (the global preview notice is hidden on phones). "View Profile" always opens the
     brand's own /brand/{slug} page (sample brands included).
     Lay cards out with .brand-grid (resources/css/app.css); sizes are tuned
     so the card stays square from 320px phones to desktop.
@@ -15,8 +15,8 @@
         <x-plat.verified size="w-4 h-4 sm:w-[18px] sm:h-[18px]" class="absolute right-1 top-1 sm:right-2 sm:top-2" />
     @endif
     @if(($brand['tag'] ?? null) === 'sponsored')
-        <span class="absolute left-1 top-1 rounded bg-slate-100 px-1 text-[9px] font-bold leading-4 text-slate2 sm:left-2 sm:top-2" title="Sponsored placement">Ad</span>
-    @elseif(($brand['sample'] ?? false) && ! config('platform.showcase_preview'))
+        <span class="absolute left-1 top-1 rounded bg-slate-100 px-1 text-[9px] font-bold leading-4 text-slate2 sm:left-2 sm:top-2" title="Paid placement">Sponsored</span>
+    @elseif($brand['sample'] ?? false)
         <span class="absolute left-1 top-1 rounded bg-slate-100 px-1 text-[9px] font-semibold leading-4 text-slate2 sm:left-2 sm:top-2">Sample</span>
     @endif
 

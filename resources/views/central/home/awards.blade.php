@@ -2,7 +2,7 @@
     <div class="{{ $wrap }}">
         <x-plat.section-head eyebrow="National awards" bn="অ্যাওয়ার্ড"
             title="Fair recognition, clear rules."
-            sub="Free nominations, audited public voting and jury review."
+            sub="Free nominations, rule-based public voting and jury review."
             link="Award rules" href="#recognition" />
 
         {{-- "Voting open", the countdown and "Vote now" appear only when the server confirms an open campaign ($award['voting_open'], HomepageContent::openCampaigns). --}}

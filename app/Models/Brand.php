@@ -30,6 +30,27 @@ class Brand extends Model
 
     public const STATUSES = ['pending', 'approved', 'rejected', 'suspended'];
 
+    /**
+     * What a Super Admin can record as reviewed when granting the Verified
+     * badge (brands.verification_basis, chunk66.sql). The public profile
+     * names exactly these items — nothing that was not recorded.
+     */
+    public const VERIFICATION_EVIDENCE = [
+        'contact' => 'Owner’s phone/WhatsApp contact checked by our team',
+        'trade_licence' => 'Trade licence',
+        'tin_bin' => 'TIN / BIN certificate',
+        'owner_id' => 'Owner’s national ID (NID)',
+        'address' => 'Business address',
+        'online_presence' => 'Official website or social media pages',
+    ];
+
+    /** How the owner's contact was checked (brands.contact_check_method) — a manual review note, not OTP. */
+    public const CONTACT_CHECK_METHODS = [
+        'phone_call' => 'Phone call',
+        'whatsapp' => 'WhatsApp message or call',
+        'in_person' => 'In person',
+    ];
+
     protected $guarded = [];
 
     protected $casts = [
@@ -40,6 +61,8 @@ class Brand extends Model
         'approved_at' => 'datetime',
         'verified_at' => 'datetime',
         'sponsored_until' => 'date',
+        'contact_checked_at' => 'datetime',
+        'verification_basis' => 'array',
     ];
 
     protected static function booted(): void
@@ -224,6 +247,21 @@ class Brand extends Model
             'percent' => min(100, $percent),
             'missing' => array_values(array_map(fn ($o) => $o[0], array_filter($optional, fn ($o) => ! $o[1]))),
         ];
+    }
+
+    /** Labels of the evidence recorded for the Verified badge — empty when none was recorded (pre-chunk66 verifications). */
+    public function verificationEvidence(): array
+    {
+        if (! $this->is_verified) {
+            return [];
+        }
+
+        return array_values(array_intersect_key(self::VERIFICATION_EVIDENCE, array_flip((array) ($this->verification_basis ?? []))));
+    }
+
+    public function contactChecked(): bool
+    {
+        return $this->contact_checked_at !== null;
     }
 
     /** Earned badges (recognitions + finalist nominations) in x-plat.badge shape. */

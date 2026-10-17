@@ -1,6 +1,6 @@
 <section id="trending" class="scroll-mt-20 border-t border-hair bg-white py-12 sm:py-16">
     <div class="{{ $wrap }}">
-        <x-plat.section-head eyebrow="Showcase brands" bn="ব্র্যান্ড" title="Brands to Watch." sub="A selection of brands on MetaSoft BD. Not a ranking." link="All brands" href="{{ url('/') }}?browse=brands#results" />
+        <x-plat.section-head eyebrow="Showcase brands" bn="ব্র্যান্ড" sample title="Brands to Watch." sub="Sample brands shown for preview. Not a ranking." link="All brands" href="{{ url('/') }}?browse=brands#results" />
 
         @if(count($trending) > 1)
         <div class="mt-6 inline-flex max-w-full gap-1 overflow-x-auto rounded-2xl bg-cloud p-1 [scrollbar-width:none]" role="tablist" aria-label="Ranking type" data-tabs="trending">

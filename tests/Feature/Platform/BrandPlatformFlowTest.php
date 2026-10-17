@@ -178,7 +178,7 @@ class BrandPlatformFlowTest extends TestCase
 
         $this->get(route('brands.show', $brand->slug))->assertSee('Sponsored')->assertDontSee('MetaSoft BD verified');
 
-        $this->post(route('super.brands.verification', $brand), ['verified' => 1])->assertRedirect();
+        $this->post(route('super.brands.verification', $brand), ['verified' => 1, 'evidence' => ['trade_licence']])->assertRedirect();
         $this->assertTrue($brand->fresh()->is_verified);
         $this->get(route('brands.show', $brand->slug))->assertSee('MetaSoft BD verified');
         $this->assertTrue(PlatformNotification::forOwner($brand->brand_owner_id)->where('type', 'verification_changed')->exists());

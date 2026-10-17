@@ -258,9 +258,9 @@ class Showcase
     {
         return [
             ['kind' => 'Earned', 'name' => 'Nomination', 'desc' => 'Open to every brand, free to apply', 'tone' => 'navy'],
-            ['kind' => 'Earned', 'name' => 'Public Voting', 'desc' => 'One vote per number, audited', 'tone' => 'rose'],
+            ['kind' => 'Earned', 'name' => 'Public Voting', 'desc' => 'One vote per number per category; abuse-screened', 'tone' => 'rose'],
             ['kind' => 'Earned', 'name' => 'Jury Recognition', 'desc' => 'Decided by the award jury', 'tone' => 'indigo'],
-            ['kind' => 'Trust', 'name' => 'Verified Business', 'desc' => 'Identity & contact checked by admin', 'tone' => 'sky'],
+            ['kind' => 'Trust', 'name' => 'Verified Business', 'desc' => 'Granted by admin review; evidence listed on the profile', 'tone' => 'sky'],
             ['kind' => 'Editorial', 'name' => 'Featured Brand', 'desc' => 'Chosen by our editors', 'tone' => 'cyan'],
             ['kind' => 'Paid', 'name' => 'Sponsored', 'desc' => 'Always labelled, never affects results', 'tone' => 'paid'],
         ];

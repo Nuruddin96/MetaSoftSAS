@@ -5,6 +5,7 @@
         ['Entrepreneurs', '#entrepreneurs', 'users'],
         ['Awards', '#awards', 'trophy'],
         ['Voting', '#voting', 'vote'],
+        ['Verified', '#verified', 'shield'],
         ['Events', '#events', 'calendar'],
         ['Media', '#stories', 'newspaper'],
     ];

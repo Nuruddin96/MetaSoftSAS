@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Central;
 
+use App\Models\Brand;
 use App\Models\PlatformSetting;
 use App\Support\Home\Showcase;
 use App\Support\Platform\HomepageContent;
 use App\Support\Platform\PlatformSchema;
+use Illuminate\Auth\SessionGuard;
 use Tests\TestCase;
 
 /**
@@ -28,10 +30,40 @@ class HomepageTest extends TestCase
         $response = $this->get('/');
 
         $response->assertOk();
-        foreach (['id="awards"', 'id="voting"', 'id="trending"', 'id="brands"', 'id="entrepreneurs"', 'id="recognition"', 'id="join"', 'id="stories"', 'id="events"', 'id="automation"', 'id="sponsors"'] as $anchor) {
+        foreach (['id="how"', 'id="awards"', 'id="voting"', 'id="standards"', 'id="verified"', 'id="trending"', 'id="brands"', 'id="entrepreneurs"', 'id="recognition"', 'id="join"', 'id="automation"', 'id="sponsors"'] as $anchor) {
             $response->assertSee($anchor, false);
         }
         $response->assertSee('building Bangladesh.');
+    }
+
+    public function test_stories_and_events_never_render_without_real_content(): void
+    {
+        // No stories/events data source exists, so even with their switches on nothing is shown or linked.
+        $this->get('/')->assertOk()
+            ->assertDontSee('id="stories"', false)->assertDontSee('id="events"', false)
+            ->assertDontSee('href="#stories"', false)->assertDontSee('href="#events"', false)
+            ->assertDontSee('Example story formats')->assertDontSee('Example event formats');
+    }
+
+    public function test_verified_badge_explainer_names_the_evidence_and_voting_is_not_called_verified(): void
+    {
+        $home = $this->get('/')->assertOk();
+
+        $home->assertSee('The Verified badge')->assertSee('Each verified profile lists exactly what was reviewed', false);
+        foreach (Brand::VERIFICATION_EVIDENCE as $label) {
+            $home->assertSee($label);
+        }
+        // Voting copy must not overstate phone checks.
+        $home->assertSee('not verified by SMS or OTP', false)->assertSee('Numbers are not OTP-verified')
+            ->assertDontSee('audited for fraud')->assertDontSee('audited public voting')->assertDontSee('Audited votes');
+        $home->assertSee('What Verified means')->assertSee(route('automation'), false)->assertSee(route('owner.register'), false);
+    }
+
+    public function test_sample_cards_are_labelled_and_sample_nominees_show_no_vote_counts(): void
+    {
+        $home = $this->get('/')->assertOk();
+
+        $home->assertSee('>Sample</span>', false)->assertSee('Sample nominees')->assertDontSee('votes so far');
     }
 
     public function test_homepage_links_to_business_automation_and_existing_auth(): void
@@ -109,7 +141,7 @@ class HomepageTest extends TestCase
         $this->get('/brand/no-such-brand')->assertStatus(503);
 
         // A leftover brand-owner session must not break the page while the platform tables are missing.
-        $this->withSession(['login_brand_owner_'.sha1(\Illuminate\Auth\SessionGuard::class) => 1])
+        $this->withSession(['login_brand_owner_'.sha1(SessionGuard::class) => 1])
             ->get('/brand/ayat-fashion')->assertOk()->assertSee('List your brand');
     }
 
@@ -134,8 +166,6 @@ class HomepageTest extends TestCase
         }
         $home->assertSee('Voting not open yet')
             ->assertSee('Example content')
-            ->assertSee('Example event formats')
-            ->assertSee('Example story formats')
             ->assertSee('No partners have been announced yet.')
             ->assertSee('Sample nominees');
         $this->assertFalse(app(HomepageContent::class)->votingOpen());

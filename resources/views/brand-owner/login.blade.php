@@ -31,7 +31,9 @@
 
         <p class="mt-5 text-center text-sm text-slate2">
             Forgot your password?
-            @if($whatsapp)
+            @if($resetAvailable)
+                <a href="{{ route('owner.password.request') }}" class="font-bold text-leaf hover:underline">Reset it by email</a>
+            @elseif($whatsapp)
                 <a href="https://wa.me/{{ $whatsapp }}?text={{ rawurlencode('I need help resetting my MetaSoft BD brand owner password.') }}" target="_blank" rel="noopener" class="font-bold text-leaf hover:underline">Contact support on WhatsApp</a>
             @else
                 Contact MetaSoft BD support.

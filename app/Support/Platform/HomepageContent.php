@@ -4,6 +4,7 @@ namespace App\Support\Platform;
 
 use App\Models\Award;
 use App\Models\Brand;
+use App\Models\BrandCategory;
 use App\Models\PlatformSetting;
 use App\Models\Vote;
 use App\Models\VoteCampaign;
@@ -368,7 +369,42 @@ class HomepageContent
             return [$tabs, $campaign->voteRuleText().'. Votes are checked for duplicate numbers, devices and unusual patterns.'];
         }
 
+        if (! $this->samples()) {
+            return [[], 'Voting opens when an award campaign starts. Nominees will appear here.'];
+        }
+
         return [Showcase::votingCategories(), 'Sample brands shown for preview. Voting opens when an award campaign starts.'];
+    }
+
+    /**
+     * "Browse by category": the real active brand categories (linking to the
+     * filtered directory) once the platform tables exist; the sample list
+     * only in sample mode; otherwise nothing.
+     *
+     * @return array<int, array{name: string, bn: ?string, icon: string, url: string}>
+     */
+    public function categories(): array
+    {
+        if (PlatformSchema::ready()) {
+            $real = BrandCategory::active()->ordered()->get()
+                ->map(fn (BrandCategory $c) => ['name' => $c->name, 'bn' => $c->bn_name, 'icon' => $c->icon ?: 'store', 'url' => route('brands.index', ['category' => $c->slug])])
+                ->all();
+            if ($real) {
+                return $real;
+            }
+        }
+
+        if (! $this->samples()) {
+            return [];
+        }
+
+        return array_map(fn ($c) => $c + ['url' => url('/').'?q='.urlencode(explode(' ', $c['name'])[0]).'#results'], Showcase::categories());
+    }
+
+    /** Whether sample content may fill empty slots (Super Admin → Homepage "sample_fallback"). */
+    public function showsSamples(): bool
+    {
+        return $this->samples();
     }
 
     /** Real cards first, then sample cards (if allowed) until the slots are full. */

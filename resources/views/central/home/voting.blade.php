@@ -21,7 +21,8 @@
         @foreach($voting as $key => $cat)
             <div id="vpanel-{{ $key }}" role="tabpanel" aria-labelledby="vtab-{{ $key }}" data-panel="voting:{{ $key }}" @class(['mt-6', 'hidden' => ! $loop->first])>
                 <div class="mb-3 flex items-center justify-between text-[13px] text-slate2">
-                    @php $heading = $cat['heading'] ?? 'Sample nominees · '.$cat['label']; $counts = $cat['show_counts'] ?? true; $open = ($cat['open'] ?? false) && $votingOpen; @endphp
+                    {{-- Sample tabs carry no show_counts, so they never show vote numbers. --}}
+                    @php $heading = $cat['heading'] ?? 'Sample nominees · '.$cat['label']; $counts = $cat['show_counts'] ?? false; $open = ($cat['open'] ?? false) && $votingOpen; @endphp
                     <span><b class="text-night">{{ $heading }}</b>@if($counts) · {{ number_format($cat['total']) }} votes so far @endif</span>
                     @if($open)<span class="hidden items-center gap-1.5 sm:flex"><span class="h-2 w-2 animate-pulse rounded-full bg-flag"></span> Live</span>@endif
                 </div>
@@ -34,6 +35,14 @@
                 </div>
             </div>
         @endforeach
+
+        @if(! $voting)
+            <div class="mt-6 rounded-2xl border border-dashed border-hair bg-cloud px-6 py-8 text-center">
+                <p class="font-bold text-night">No voting campaign is open yet.</p>
+                <p class="mt-1 text-sm text-slate2">Approved brands can be nominated once an award campaign starts.</p>
+                <a href="{{ $joinUrl }}" class="mt-3 inline-flex text-sm font-bold text-leaf hover:underline">List your brand — free</a>
+            </div>
+        @endif
 
         {{-- Growth loop: nominees share their voting link (only while voting is open) --}}
         @if($votingOpen)
@@ -55,6 +64,6 @@
             </div>
         </div>
         @endif
-        <p class="mt-4 flex items-start gap-2 text-[13px] text-slate2"><x-plat.icon name="lock" class="mt-0.5 w-4 h-4 shrink-0" /> One vote per mobile number, audited for fraud. Paid promotions never affect results.</p>
+        <p class="mt-4 flex items-start gap-2 text-[13px] text-slate2"><x-plat.icon name="lock" class="mt-0.5 w-4 h-4 shrink-0" /> <span>One vote per mobile number per category in each voting period. Numbers are not OTP-verified; votes are screened for abuse. Paid promotions never affect results. <a href="#standards" class="font-bold text-leaf hover:underline">How voting works</a></span></p>
     </div>
 </section>

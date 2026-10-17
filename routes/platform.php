@@ -19,6 +19,7 @@ use App\Http\Controllers\BrandOwner\AwardController as OwnerAwardController;
 use App\Http\Controllers\BrandOwner\BrandProfileController as OwnerBrandController;
 use App\Http\Controllers\BrandOwner\DashboardController as OwnerDashboardController;
 use App\Http\Controllers\BrandOwner\NotificationController as OwnerNotificationController;
+use App\Http\Controllers\BrandOwner\PasswordResetController as OwnerPasswordController;
 use App\Http\Controllers\BrandOwner\RegisterController as OwnerRegisterController;
 use App\Http\Controllers\BrandOwner\VotingController as OwnerVotingController;
 use App\Http\Controllers\Platform\AwardPageController;
@@ -43,14 +44,22 @@ Route::middleware('platform.ready')->group(function () {
     Route::get('awards/{slug}', [AwardPageController::class, 'show'])->where('slug', '[a-z0-9-]+')->name('awards.show');
 
     Route::get('list-your-brand', [OwnerRegisterController::class, 'show'])->name('owner.register');
-    Route::post('list-your-brand', [OwnerRegisterController::class, 'store'])->middleware('throttle:6,10')->name('owner.register.store');
+    Route::post('list-your-brand', [OwnerRegisterController::class, 'store'])->middleware('throttle:owner-register')->name('owner.register.store');
 
     Route::prefix('brand-owner')->name('owner.')->group(function () {
         Route::get('login', [OwnerAuthController::class, 'show'])->name('login');
-        Route::post('login', [OwnerAuthController::class, 'login'])->middleware('throttle:10,1')->name('login.attempt');
+        Route::post('login', [OwnerAuthController::class, 'login'])->middleware('throttle:owner-login')->name('login.attempt');
         Route::post('logout', [OwnerAuthController::class, 'logout'])->name('logout');
 
-        Route::middleware(['auth:brand_owner', 'owner.active'])->group(function () {
+        Route::get('forgot-password', [OwnerPasswordController::class, 'request'])->name('password.request');
+        Route::post('forgot-password', [OwnerPasswordController::class, 'email'])->middleware('throttle:owner-password-email')->name('password.email');
+        Route::get('reset-password/{token}', [OwnerPasswordController::class, 'resetForm'])->name('password.reset');
+        Route::post('reset-password', [OwnerPasswordController::class, 'reset'])->middleware('throttle:owner-password-reset')->name('password.update');
+
+        // auth.session (AuthenticateSession) must follow auth:brand_owner, which makes brand_owner the
+        // default guard: when the password changes (self-service reset or Account → password), every
+        // other session and "keep me logged in" device is signed out on its next request.
+        Route::middleware(['auth:brand_owner', 'auth.session', 'owner.active'])->group(function () {
             Route::get('/', [OwnerDashboardController::class, 'index'])->name('dashboard');
 
             Route::get('brand', [OwnerBrandController::class, 'edit'])->name('brand.edit');

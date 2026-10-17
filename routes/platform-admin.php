@@ -29,6 +29,7 @@ Route::middleware('platform.ready')->group(function () {
     Route::delete('brands/{brand}', [PlatformBrandController::class, 'destroy'])->whereNumber('brand')->name('brands.destroy');
     Route::post('brands/{brand}/status', [PlatformBrandController::class, 'status'])->whereNumber('brand')->name('brands.status');
     Route::post('brands/{brand}/verification', [PlatformBrandController::class, 'verification'])->whereNumber('brand')->name('brands.verification');
+    Route::post('brands/{brand}/contact-check', [PlatformBrandController::class, 'contactCheck'])->whereNumber('brand')->name('brands.contact-check');
     Route::post('brands/{brand}/featured', [PlatformBrandController::class, 'featured'])->whereNumber('brand')->name('brands.featured');
     Route::post('brands/{brand}/sponsorship', [PlatformBrandController::class, 'sponsorship'])->whereNumber('brand')->name('brands.sponsorship');
     Route::post('brands/{brand}/owner-password', [PlatformBrandController::class, 'resetOwnerPassword'])->whereNumber('brand')->name('brands.owner-password');

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\BrandOwner;
 
 use App\Http\Controllers\Controller;
 use App\Models\BrandOwner;
+use App\Support\Platform\PlatformSchema;
 use App\Support\Platform\VoteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,6 +21,7 @@ class AuthController extends Controller
 
         return view('brand-owner.login', [
             'whatsapp' => preg_replace('/\D/', '', (string) config('payment.support_whatsapp')),
+            'resetAvailable' => PlatformSchema::reviewReady(),
         ]);
     }
 
