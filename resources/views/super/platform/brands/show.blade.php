@@ -119,10 +119,37 @@
     </div>
 
     <aside class="space-y-5">
+        <section class="{{ $box }}" id="contact-check">
+            <h2 class="font-bold">📞 Owner contact check</h2>
+            <p class="mb-3 text-xs text-mute">Record that you called or messaged the owner on {{ $brand->owner?->phone ?? $brand->phone }} before approving. This is a manual review note — <strong>not</strong> automated (OTP) phone verification, and it does not grant the Verified badge.</p>
+            @if(! $reviewReady)
+                <p class="rounded-lg bg-amber/10 px-3 py-2 text-xs text-amber-700">Import <code>database/sql/chunk66.sql</code> to record contact checks.</p>
+            @elseif($brand->contactChecked())
+                <p class="rounded-lg bg-leaf/10 px-3 py-2 text-sm text-leafdk">✔ Contact checked — {{ \App\Models\Brand::CONTACT_CHECK_METHODS[$brand->contact_check_method] ?? $brand->contact_check_method }}, {{ $brand->contact_checked_at->format('j M Y, g:i a') }}@if($contactCheckedBy) by {{ $contactCheckedBy }}@endif</p>
+                @if($brand->contact_check_note)<p class="mt-1 text-xs text-mute">Note: {{ $brand->contact_check_note }}</p>@endif
+                <form method="POST" action="{{ route('super.brands.contact-check', $brand) }}" class="mt-2">@csrf<input type="hidden" name="checked" value="0">
+                    <button class="{{ $btn }} w-full border border-ink/10">Clear contact check</button></form>
+            @else
+                <p class="mb-2 rounded-lg bg-amber/10 px-3 py-2 text-xs font-semibold text-amber-700">Not checked yet.</p>
+                <form method="POST" action="{{ route('super.brands.contact-check', $brand) }}" class="space-y-2">@csrf<input type="hidden" name="checked" value="1">
+                    <select name="method" required class="{{ $field }}">
+                        <option value="">How did you check?</option>
+                        @foreach(\App\Models\Brand::CONTACT_CHECK_METHODS as $key => $label)<option value="{{ $key }}" @selected(old('method') === $key)>{{ $label }}</option>@endforeach
+                    </select>
+                    @error('method')<p class="text-xs text-red-600">{{ $message }}</p>@enderror
+                    <input name="note" maxlength="255" placeholder="Note (optional, admins only)" class="{{ $field }}">
+                    <button class="{{ $btn }} w-full bg-ink text-white">Record contact check</button>
+                </form>
+            @endif
+        </section>
+
         <section class="{{ $box }}">
             <h2 class="mb-3 font-bold">Listing status</h2>
             <div class="space-y-2">
                 @if(in_array($brand->status, ['pending', 'rejected'], true))
+                    @if($reviewReady && ! $brand->contactChecked())
+                        <p class="text-xs font-semibold text-amber-700">⚠ The owner’s contact has not been checked yet. The approval log records this.</p>
+                    @endif
                     <form method="POST" action="{{ route('super.brands.status', $brand) }}">@csrf<input type="hidden" name="action" value="approve">
                         <button class="{{ $btn }} w-full bg-leaf text-white hover:bg-leafdk">✅ Approve & publish</button></form>
                 @endif
@@ -142,9 +169,25 @@
 
         <section class="{{ $box }}">
             <h2 class="font-bold">Verification <x-plat.verified class="inline -mt-0.5" /></h2>
-            <p class="mb-3 text-xs text-mute">Identity/contact checked by MetaSoft BD. Independent of featured, sponsored and awards.</p>
+            <p class="mb-3 text-xs text-mute">Granted only by Super Admin after review. Independent of featured, sponsored, votes and awards. The public profile lists exactly the evidence ticked here.</p>
+            @if($brand->is_verified)
+                @if($evidence = $brand->verificationEvidence())
+                    <ul class="mb-3 list-inside list-disc text-xs text-ink">@foreach($evidence as $item)<li>{{ $item }}</li>@endforeach</ul>
+                @else
+                    <p class="mb-3 text-xs text-mute">No evidence was recorded for this verification (verified before evidence recording existed).</p>
+                @endif
+            @endif
             <form method="POST" action="{{ route('super.brands.verification', $brand) }}" class="space-y-2">@csrf
                 <input type="hidden" name="verified" value="{{ $brand->is_verified ? 0 : 1 }}">
+                @if(! $brand->is_verified && $reviewReady)
+                    <fieldset class="space-y-1 text-sm">
+                        <legend class="mb-1 text-xs font-semibold text-mute">What did you review?</legend>
+                        @foreach(\App\Models\Brand::VERIFICATION_EVIDENCE as $key => $label)
+                            <label class="flex items-start gap-2"><input type="checkbox" name="evidence[]" value="{{ $key }}" class="mt-0.5" @checked(in_array($key, (array) old('evidence', []), true))> <span>{{ $label }}</span></label>
+                        @endforeach
+                        @error('evidence')<p class="text-xs text-red-600">{{ $message }}</p>@enderror
+                    </fieldset>
+                @endif
                 @if($brand->is_verified)<input name="reason" maxlength="500" placeholder="Reason for removal (optional)" class="{{ $field }}">@endif
                 <button class="{{ $btn }} w-full {{ $brand->is_verified ? 'border border-ink/10' : 'bg-sky-600 text-white' }}" @disabled(! $brand->is_verified && $brand->status !== 'approved')>{{ $brand->is_verified ? 'Remove verification' : 'Mark as verified' }}</button>
             </form>

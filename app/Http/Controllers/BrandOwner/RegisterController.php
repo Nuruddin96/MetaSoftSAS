@@ -10,9 +10,11 @@ use App\Models\PlatformAuditLog;
 use App\Support\Platform\BdLocations;
 use App\Support\Platform\PlatformNotifier;
 use App\Support\Platform\VoteService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -24,6 +26,8 @@ use Illuminate\Validation\ValidationException;
  */
 class RegisterController extends Controller
 {
+    public const ACCOUNT_UNAVAILABLE = 'We couldn’t create an account with these details. If you have registered before, please log in or reset your password.';
+
     public function show()
     {
         if (Auth::guard('brand_owner')->check()) {
@@ -50,8 +54,8 @@ class RegisterController extends Controller
             'logo' => 'required|image|mimes:jpg,jpeg,png,webp|max:2048',
             'brand_category_id' => ['required', Rule::exists('brand_categories', 'id')->where('is_active', 1)],
             'founder_name' => 'required|string|max:150',
-            'phone' => ['required', 'regex:/^01[3-9]\d{8}$/', 'unique:brand_owners,phone'],
-            'email' => 'required|email:rfc|max:150|unique:brand_owners,email',
+            'phone' => ['required', 'regex:/^01[3-9]\d{8}$/'],
+            'email' => 'required|email:rfc|max:150',
             'division' => 'required|string|max:50',
             'district' => 'required|string|max:50',
             'password' => 'required|string|min:8|confirmed',
@@ -62,8 +66,6 @@ class RegisterController extends Controller
             'facebook' => 'nullable|url|max:255',
         ], [
             'phone.regex' => 'Enter a valid Bangladeshi mobile number (01XXXXXXXXX).',
-            'phone.unique' => 'An account with this phone number already exists. Please log in instead.',
-            'email.unique' => 'An account with this email already exists. Please log in instead.',
             'terms.accepted' => 'Please accept the platform rules to continue.',
             'logo.required' => 'Please upload your brand logo.',
         ]);
@@ -76,36 +78,24 @@ class RegisterController extends Controller
             throw ValidationException::withMessages(['brand_name' => 'A brand with this name is already listed or under review. If it is yours, please contact MetaSoft BD support.']);
         }
 
+        // Duplicate owner accounts get one neutral, field-less answer — it
+        // never says whether the email or the phone matched, so the form
+        // can't be used to look up who has an account. The unique keys on
+        // brand_owners still back this up inside the transaction below.
+        $data['email'] = strtolower($data['email']);
+        if (BrandOwner::where('email', $data['email'])->orWhere('phone', $data['phone'])->exists()) {
+            throw ValidationException::withMessages(['account' => self::ACCOUNT_UNAVAILABLE]);
+        }
+
         $logoPath = $request->file('logo')->store('brands/logos', 'public');
 
-        [$owner, $brand] = DB::transaction(function () use ($data, $logoPath) {
-            $owner = BrandOwner::create([
-                'name' => $data['founder_name'],
-                'email' => strtolower($data['email']),
-                'phone' => $data['phone'],
-                'password' => $data['password'],
-                'last_login_at' => now(),
-            ]);
-
-            $brand = Brand::create([
-                'brand_owner_id' => $owner->id,
-                'name' => trim($data['brand_name']),
-                'brand_category_id' => $data['brand_category_id'],
-                'sub_category' => $data['sub_category'] ?? null,
-                'founder_name' => $data['founder_name'],
-                'phone' => $data['phone'],
-                'email' => strtolower($data['email']),
-                'division' => $data['division'],
-                'district' => $data['district'],
-                'logo_path' => $logoPath,
-                'description' => $data['description'] ?? null,
-                'website' => $data['website'] ?? null,
-                'facebook' => $data['facebook'] ?? null,
-                'status' => 'pending',
-            ]);
-
-            return [$owner, $brand];
-        });
+        try {
+            [$owner, $brand] = DB::transaction(fn () => $this->createOwnerAndBrand($data, $logoPath));
+        } catch (UniqueConstraintViolationException) {
+            // A parallel request registered the same email/phone first.
+            Storage::disk('public')->delete($logoPath);
+            throw ValidationException::withMessages(['account' => self::ACCOUNT_UNAVAILABLE]);
+        }
 
         Auth::guard('brand_owner')->login($owner, true);
         $request->session()->regenerate();
@@ -118,5 +108,36 @@ class RegisterController extends Controller
             $brand->founder_name.' · '.$brand->district.', '.$brand->division, route('super.brands.show', $brand));
 
         return redirect()->route('owner.dashboard')->with('success', 'Welcome! Your brand has been submitted for review.');
+    }
+
+    /** @return array{0: BrandOwner, 1: Brand} */
+    private function createOwnerAndBrand(array $data, string $logoPath): array
+    {
+        $owner = BrandOwner::create([
+            'name' => $data['founder_name'],
+            'email' => strtolower($data['email']),
+            'phone' => $data['phone'],
+            'password' => $data['password'],
+            'last_login_at' => now(),
+        ]);
+
+        $brand = Brand::create([
+            'brand_owner_id' => $owner->id,
+            'name' => trim($data['brand_name']),
+            'brand_category_id' => $data['brand_category_id'],
+            'sub_category' => $data['sub_category'] ?? null,
+            'founder_name' => $data['founder_name'],
+            'phone' => $data['phone'],
+            'email' => strtolower($data['email']),
+            'division' => $data['division'],
+            'district' => $data['district'],
+            'logo_path' => $logoPath,
+            'description' => $data['description'] ?? null,
+            'website' => $data['website'] ?? null,
+            'facebook' => $data['facebook'] ?? null,
+            'status' => 'pending',
+        ]);
+
+        return [$owner, $brand];
     }
 }

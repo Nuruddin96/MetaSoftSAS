@@ -155,14 +155,22 @@
             <x-plat.share-kit class="mt-3" compact :url="$brand->profileUrl()" :title="$brand->name" :text="'Discover '.$brand->name.' on MetaSoft BD:'" />
         </div>
 
-        <p class="px-1 text-xs leading-relaxed text-slate2">
+        <div class="px-1 text-xs leading-relaxed text-slate2" data-verification-note>
             @if($brand->is_verified)
-                <x-plat.verified class="inline -mt-0.5" /> MetaSoft BD has verified this brand’s identity and contact details.
+                <p><x-plat.verified class="inline -mt-0.5" /> <strong class="text-night">MetaSoft BD Verified</strong>@if($brand->verified_at) since {{ $brand->verified_at->format('F Y') }}@endif.
+                    @if($evidence = $brand->verificationEvidence())
+                        Our team reviewed:</p>
+                        <ul class="mt-1 list-inside list-disc">@foreach($evidence as $item)<li>{{ $item }}</li>@endforeach</ul>
+                    @else
+                        Granted after a MetaSoft BD admin review; the specific evidence reviewed was not recorded.</p>
+                    @endif
+                <p class="mt-1">Verification is not an award, a vote result or a paid placement.</p>
             @else
-                This brand was reviewed before listing. Verification is a separate check carried out by MetaSoft BD.
+                <p>This brand was reviewed before listing. It does not carry the Verified badge — verification is a separate check by MetaSoft BD.</p>
             @endif
-            @if($brand->isSponsoredNow()) “Sponsored” means paid placement — it is never an award or a verification.@endif
-        </p>
+            @if($brand->isSponsoredNow())<p class="mt-1">“Sponsored” means paid placement — it is never an award or a verification.</p>@endif
+            <p class="mt-1"><a href="{{ route('landing') }}#verified" class="font-bold text-leaf hover:underline">What the Verified badge means</a></p>
+        </div>
     </aside>
 </section>
 

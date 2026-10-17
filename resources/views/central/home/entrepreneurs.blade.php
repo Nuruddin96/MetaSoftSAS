@@ -1,9 +1,9 @@
 @php $lead = $entrepreneurs[0]; $rest = array_slice($entrepreneurs, 1); @endphp
 <section id="entrepreneurs" class="scroll-mt-20 bg-cream py-12 sm:py-16 lg:py-20">
     <div class="{{ $wrap }}">
-        <x-plat.section-head eyebrow="Entrepreneur spotlight" bn="উদ্যোক্তা"
+        <x-plat.section-head eyebrow="Entrepreneur spotlight" bn="উদ্যোক্তা" sample
             title="Meet the Founders."
-            sub="Discover the people behind Bangladesh’s brands."
+            sub="Sample spotlight shown for preview. Real founder profiles will appear here."
             link="All entrepreneurs" href="{{ url('/') }}?browse=entrepreneurs#results" />
 
         <div class="mt-8 grid gap-5 lg:grid-cols-2">
@@ -32,7 +32,6 @@
                         <p class="text-[13px] text-white/60">{{ $lead['role'] }}, {{ $lead['brand'] }} · {{ $lead['category'] }} · {{ $lead['district'] }}</p>
                         <div class="mt-3 flex gap-4">
                             <button type="button" data-profile="person:{{ $lead['slug'] }}" class="text-sm font-bold text-gold hover:underline underline-offset-4">View profile →</button>
-                            <a href="#stories" class="text-sm font-bold text-white/80 hover:text-white">Read the story</a>
                         </div>
                     </div>
                 </div>

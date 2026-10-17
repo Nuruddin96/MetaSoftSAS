@@ -13,6 +13,7 @@ composer dev          # runs server + queue:listen + pail (logs) + vite concurre
 php artisan serve      # app server only
 npm run dev            # vite only
 npm run build           # production asset build
+npm run build:clean     # release build: view:clear + view:cache, then vite build (use this before committing public/build — Tailwind also scans storage/framework/views, so stale compiled views would leak classes into the CSS)
 
 composer test          # config:clear + php artisan test
 php artisan test --filter=TestName

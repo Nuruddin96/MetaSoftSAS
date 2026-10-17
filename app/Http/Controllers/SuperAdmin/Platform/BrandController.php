@@ -7,10 +7,13 @@ use App\Models\Brand;
 use App\Models\BrandCategory;
 use App\Models\BrandChangeRequest;
 use App\Models\PlatformAuditLog;
+use App\Models\SuperAdmin;
 use App\Support\Platform\BdLocations;
 use App\Support\Platform\PlatformNotifier;
+use App\Support\Platform\PlatformSchema;
 use App\Support\Platform\VoteService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -87,6 +90,8 @@ class BrandController extends Controller
             'brand' => $brand,
             'categories' => BrandCategory::ordered()->pluck('name', 'id'),
             'audit' => PlatformAuditLog::where('subject_type', 'Brand')->where('subject_id', $brand->id)->latest('id')->take(30)->get(),
+            'reviewReady' => $reviewReady = PlatformSchema::reviewReady(),
+            'contactCheckedBy' => $reviewReady && $brand->contact_checked_by ? SuperAdmin::whereKey($brand->contact_checked_by)->value('name') : null,
         ]);
     }
 
@@ -171,7 +176,12 @@ class BrandController extends Controller
             $brand->voteEntries()->update(['is_active' => false]);
         }
 
-        PlatformAuditLog::record('brand.'.$action, $brand, ['status' => [$from, $brand->status]], $reason);
+        $changes = ['status' => [$from, $brand->status]];
+        if ($action === 'approve' && PlatformSchema::reviewReady()) {
+            // Records whether a person had checked the owner's contact at approval time (not OTP).
+            $changes['contact_checked'] = $brand->contactChecked();
+        }
+        PlatformAuditLog::record('brand.'.$action, $brand, $changes, $reason);
 
         [$type, $title, $body] = match ($action) {
             'approve' => ['brand_approved', 'Your brand is live on MetaSoft BD 🎉', $brand->name.' has been approved. Your public profile: '.$brand->profileUrl()],
@@ -187,7 +197,14 @@ class BrandController extends Controller
     public function verification(Request $request, Brand $brand)
     {
         $verified = $request->boolean('verified');
-        $reason = $request->validate(['reason' => 'nullable|string|max:500'])['reason'] ?? null;
+        $reviewReady = PlatformSchema::reviewReady();
+        $data = $request->validate([
+            'reason' => 'nullable|string|max:500',
+            // The public profile lists exactly what was reviewed, so granting the badge needs at least one item.
+            'evidence' => [$verified && $reviewReady ? 'required' : 'nullable', 'array'],
+            'evidence.*' => ['string', Rule::in(array_keys(Brand::VERIFICATION_EVIDENCE))],
+        ], ['evidence.required' => 'Tick what you actually reviewed — it is shown on the public profile.']);
+        $reason = $data['reason'] ?? null;
 
         if ($verified && $brand->status !== 'approved') {
             return back()->with('error', 'Only approved brands can be verified.');
@@ -196,14 +213,48 @@ class BrandController extends Controller
             return back();
         }
 
-        $brand->update(['is_verified' => $verified, 'verified_at' => $verified ? now() : null]);
-        PlatformAuditLog::record($verified ? 'brand.verified' : 'brand.unverified', $brand, ['is_verified' => [! $verified, $verified]], $reason);
+        $update = ['is_verified' => $verified, 'verified_at' => $verified ? now() : null];
+        $changes = ['is_verified' => [! $verified, $verified]];
+        if ($reviewReady) {
+            $update['verification_basis'] = $verified ? array_values(array_unique($data['evidence'])) : null;
+            $changes['evidence'] = $update['verification_basis'];
+        }
+
+        $brand->update($update);
+        PlatformAuditLog::record($verified ? 'brand.verified' : 'brand.unverified', $brand, $changes, $reason);
         PlatformNotifier::owner($brand, 'verification_changed',
             $verified ? 'Your brand is now MetaSoft BD Verified' : 'Your brand’s verified badge was removed',
             $verified ? 'The verified badge now appears next to '.$brand->name.' across the platform.' : ($reason ? 'Reason: '.$reason : null),
             route('owner.dashboard'));
 
         return back()->with('success', $verified ? 'Brand verified.' : 'Verification removed.');
+    }
+
+    /**
+     * Record (or clear) that a person checked the owner's phone/WhatsApp
+     * contact — a manual review note shown to admins. It is NOT automated
+     * phone-ownership verification and never sets is_verified.
+     */
+    public function contactCheck(Request $request, Brand $brand)
+    {
+        if (! PlatformSchema::reviewReady()) {
+            return back()->with('error', 'Import database/sql/chunk66.sql to record contact checks.');
+        }
+
+        $checked = $request->boolean('checked');
+        $data = $request->validate([
+            'method' => [$checked ? 'required' : 'nullable', Rule::in(array_keys(Brand::CONTACT_CHECK_METHODS))],
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        $brand->update($checked
+            ? ['contact_checked_at' => now(), 'contact_checked_by' => Auth::guard('super_admin')->id(), 'contact_check_method' => $data['method'], 'contact_check_note' => $data['note'] ?? null]
+            : ['contact_checked_at' => null, 'contact_checked_by' => null, 'contact_check_method' => null, 'contact_check_note' => null]);
+
+        PlatformAuditLog::record($checked ? 'brand.contact_checked' : 'brand.contact_check_cleared', $brand,
+            $checked ? ['method' => $data['method'], 'phone' => VoteService::mask((string) $brand->phone)] : null, $data['note'] ?? null);
+
+        return back()->with('success', $checked ? 'Contact check recorded.' : 'Contact check cleared.');
     }
 
     /** Editorial pick — never sold. */

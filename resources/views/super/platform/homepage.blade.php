@@ -52,10 +52,13 @@
             <h2 class="font-bold">Sample content</h2>
             <label class="flex items-start gap-2 text-sm"><input type="checkbox" name="sample_fallback" value="1" @checked($val('sample_fallback')) class="mt-0.5">
                 <span><b>Fill empty brand slots with sample brands.</b> Real approved brands always come first and replace samples automatically; samples disappear once there are enough real brands. Turn off to show real brands only.</span></label>
-            <p class="pt-1 text-sm font-semibold">Optional sample sections</p>
-            @foreach(['show_stories' => 'Stories / media', 'show_events' => 'Events', 'show_sponsors' => 'Sponsors'] as $k => $l)
-                <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{ $k }}" value="1" @checked($val($k))> Show “{{ $l }}” section</label>
-            @endforeach
+            <p class="text-xs text-mute">Also controls the labelled sample sections (“Brands to Watch”, “Meet the Founders”) and sample nominees in the voting section. <b>Turn off before launch</b> so the homepage shows real content only.</p>
+            <p class="pt-1 text-sm font-semibold">Optional sections</p>
+            <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="show_sponsors" value="1" @checked($val('show_sponsors'))> Show the “Partner with us” sponsorship note</label>
+            {{-- Kept so saved settings round-trip; stories/events never render until real published content exists. --}}
+            <input type="hidden" name="show_stories" value="{{ $val('show_stories') ? 1 : 0 }}">
+            <input type="hidden" name="show_events" value="{{ $val('show_events') ? 1 : 0 }}">
+            <p class="text-xs text-mute">Stories / media and Events are hidden until real stories and events can be published.</p>
             <p class="text-xs text-mute">These sections have no live data yet; hiding one also removes its menu links.</p>
         </section>
 

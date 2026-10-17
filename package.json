@@ -4,6 +4,7 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
+        "build:clean": "php artisan view:clear && php artisan view:cache && vite build",
         "dev": "vite"
     },
     "devDependencies": {

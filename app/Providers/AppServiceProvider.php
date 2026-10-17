@@ -15,6 +15,7 @@ use App\Services\AI\Providers\OpenAiProvider;
 use App\Services\AI\Tools\AiToolRegistry;
 use App\Services\Domain\DomainDriver;
 use App\Services\Domain\ManualProvisionDriver;
+use App\Support\Platform\VoteService;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -68,5 +69,32 @@ class AppServiceProvider extends ServiceProvider
         // Recognition platform — public vote submissions per IP
         // (App\Http\Controllers\Platform\VoteController::cast()).
         RateLimiter::for('platform-vote', fn (Request $request) => Limit::perMinute((int) config('platform.voting.attempts_per_minute', 12))->by('vote:'.$request->ip()));
+
+        // Brand owner auth routes (routes/platform.php). Named limiters, each
+        // with its own counter: plain `throttle:N,M` keys every route by the
+        // same domain|IP signature, so login attempts used to eat into the
+        // forgot-password allowance (and vice versa). Per-IP limits match the
+        // previous numbers; login and forgot-password also get a per-account
+        // key (hashed, never the raw email/phone) so one target can't be
+        // hammered from many IPs.
+        RateLimiter::for('owner-login', fn (Request $request) => [
+            Limit::perMinute(10)->by('ip:'.$request->ip()),
+            Limit::perMinute(10)->by('id:'.self::ownerIdentifierKey((string) $request->input('login'))),
+        ]);
+        RateLimiter::for('owner-register', fn (Request $request) => Limit::perMinutes(10, 6)->by('ip:'.$request->ip()));
+        RateLimiter::for('owner-password-email', fn (Request $request) => [
+            Limit::perMinutes(10, 5)->by('ip:'.$request->ip()),
+            Limit::perHour(3)->by('email:'.self::ownerIdentifierKey((string) $request->input('email'))),
+        ]);
+        RateLimiter::for('owner-password-reset', fn (Request $request) => Limit::perMinutes(10, 10)->by('ip:'.$request->ip()));
+    }
+
+    /** Hashed, normalised login identifier (email lower-cased; any BD phone format → 01XXXXXXXXX) for rate-limit keys. */
+    private static function ownerIdentifierKey(string $value): string
+    {
+        $value = trim($value);
+        $normalised = str_contains($value, '@') ? mb_strtolower($value) : (VoteService::normalizePhone($value) ?? mb_strtolower($value));
+
+        return hash('sha256', $normalised);
     }
 }

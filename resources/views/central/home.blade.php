@@ -16,8 +16,17 @@
     $wa = fn (string $text) => 'https://wa.me/'.$whatsapp.'?text='.rawurlencode($text);
     // Self-service registration (BrandOwner\RegisterController) — replaces sending details over WhatsApp.
     $joinUrl = route('owner.register');
-    // Anchors of sections hidden in Super Admin → Homepage, so no menu links to them.
-    $hiddenAnchors = array_keys(array_filter(['#stories' => ! $home['show_stories'], '#events' => ! $home['show_events'], '#sponsors' => ! $home['show_sponsors']]));
+    // Anchors of sections that are not on the page, so no menu links to them.
+    // Stories and events have no real content source yet, so they never render
+    // (their partials stay for when published content exists); sample-only
+    // sections render only while sample content is switched on.
+    $hiddenAnchors = array_keys(array_filter([
+        '#stories' => true,
+        '#events' => true,
+        '#trending' => ! $samples,
+        '#entrepreneurs' => ! $samples,
+        '#sponsors' => ! $home['show_sponsors'],
+    ]));
     $wrap = 'mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8';
 @endphp
 
@@ -35,20 +44,21 @@
             @include('central.home.results')
         @endif
 
+        @include('central.home.how-it-works')
         @include('central.home.vote-cta')
-        @include('central.home.trust')
         @include('central.home.awards')
         @include('central.home.voting')
-        @include('central.home.trending')
+        {{-- What Verified / Editor’s Pick / Sponsored / votes mean (#verified, #sponsors). --}}
+        @include('central.home.trust')
         @include('central.home.brands')
-        @include('central.home.entrepreneurs')
+        {{-- Sample-only sections: shown only while sample content is on, always labelled. --}}
+        @if($samples)
+            @include('central.home.trending')
+            @include('central.home.entrepreneurs')
+        @endif
         @include('central.home.recognition')
         @include('central.home.join')
-        {{-- Sample-content sections; each can be hidden in Super Admin → Homepage. --}}
-        @if($home['show_stories'])@include('central.home.stories')@endif
-        @if($home['show_events'])@include('central.home.events')@endif
         @include('central.home.automation')
-        @if($home['show_sponsors'])@include('central.home.sponsors')@endif
     </main>
 
     @include('central.home.footer')

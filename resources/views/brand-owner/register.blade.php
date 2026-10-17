@@ -39,7 +39,12 @@
 
         @if($errors->any())
             <div role="alert" class="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                <p class="font-bold">Please check the highlighted fields.</p>
+                @error('account')
+                    <p class="font-bold">{{ $message }}</p>
+                    <p class="mt-1"><a href="{{ route('owner.login') }}" class="font-bold underline">Log in</a> · <a href="{{ route('owner.password.request') }}" class="font-bold underline">Reset your password</a></p>
+                @else
+                    <p class="font-bold">Please check the highlighted fields.</p>
+                @enderror
             </div>
         @endif
 

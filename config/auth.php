@@ -62,6 +62,16 @@ return [
             'expire' => 60,
             'throttle' => 60,
         ],
+
+        // Brand owners (recognition platform). Own table — never the tenant
+        // panel's password_reset_tokens — so a reset for one account type can
+        // never be used against the other (database/sql/chunk66.sql).
+        'brand_owners' => [
+            'provider' => 'brand_owners',
+            'table' => 'brand_owner_password_reset_tokens',
+            'expire' => 60,
+            'throttle' => 60,
+        ],
     ],
 
     'password_timeout' => 10800,
