@@ -52,6 +52,7 @@ class BrandPlatformFlowTest extends TestCase
             'email' => 'Rina@Example.com',
             'division' => 'Dhaka',
             'district' => 'Gazipur',
+            'facebook' => 'https://www.facebook.com/nakshighor',
             'password' => 'secret123',
             'password_confirmation' => 'secret123',
             'terms' => '1',
@@ -457,6 +458,7 @@ class BrandPlatformFlowTest extends TestCase
         $this->post(route('super.brands.store'), [
             'name' => 'Krishi Bari', 'brand_category_id' => $cat->id, 'founder_name' => 'Karim', 'phone' => '01912345678',
             'email' => 'k@example.com', 'division' => 'Chattogram', 'district' => "Cox's Bazar", 'status' => 'approved',
+            'facebook' => 'https://www.facebook.com/krishibari',
         ])->assertRedirect();
         $brand = Brand::where('name', 'Krishi Bari')->firstOrFail();
         $this->assertSame('krishi-bari', $brand->slug);

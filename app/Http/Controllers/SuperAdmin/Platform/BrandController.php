@@ -8,6 +8,7 @@ use App\Models\BrandCategory;
 use App\Models\BrandChangeRequest;
 use App\Models\PlatformAuditLog;
 use App\Models\SuperAdmin;
+use App\Rules\FacebookPageUrl;
 use App\Support\Platform\BdLocations;
 use App\Support\Platform\PlatformNotifier;
 use App\Support\Platform\PlatformSchema;
@@ -322,6 +323,9 @@ class BrandController extends Controller
         if (isset($changes['name']) && Brand::nameTaken($changes['name'], $brand->id)) {
             return back()->with('error', 'Another brand already uses the requested name.');
         }
+        if (isset($changes['phone']) && Brand::withTrashed()->where('phone', $changes['phone'])->whereKeyNot($brand->id)->exists()) {
+            return back()->with('error', 'Another business profile already uses the requested mobile number.');
+        }
         if (isset($changes['logo_path']) && $brand->logo_path && $brand->logo_path !== $changes['logo_path']) {
             Storage::disk('public')->delete($brand->logo_path);
         }
@@ -368,6 +372,7 @@ class BrandController extends Controller
         if ($request->filled('phone')) {
             $request->merge(['phone' => VoteService::normalizePhone((string) $request->input('phone')) ?? $request->input('phone')]);
         }
+        $request->merge(['facebook' => FacebookPageUrl::normalize($request->input('facebook'))]);
 
         $data = $request->validate([
             'name' => 'required|string|min:2|max:150',
@@ -376,7 +381,8 @@ class BrandController extends Controller
             'brand_category_id' => 'required|exists:brand_categories,id',
             'sub_category' => 'nullable|string|max:100',
             'founder_name' => 'required|string|max:150',
-            'phone' => ['required', 'regex:/^01[3-9]\d{8}$/'],
+            // One mobile number = one business profile (soft-deleted ones included, like the unique key).
+            'phone' => ['required', 'regex:/^01[3-9]\d{8}$/', Rule::unique('brands', 'phone')->ignore($brand?->id)],
             'email' => 'required|email|max:150',
             'division' => 'required|string|max:50',
             'district' => 'required|string|max:50',
@@ -384,11 +390,15 @@ class BrandController extends Controller
             'products_info' => 'nullable|string|max:3000',
             'founded_year' => 'nullable|integer|min:1900|max:'.now()->year,
             'website' => 'nullable|url|max:255',
-            'facebook' => 'nullable|url|max:255',
+            // Required for new profiles; ones created before this rule may still lack it.
+            'facebook' => [$brand ? 'nullable' : 'required', 'string', 'max:255', new FacebookPageUrl],
             'instagram' => 'nullable|url|max:255',
             'tiktok' => 'nullable|url|max:255',
             'youtube' => 'nullable|url|max:255',
-        ], ['slug.regex' => 'Use lowercase letters, numbers and single hyphens only.']);
+        ], [
+            'slug.regex' => 'Use lowercase letters, numbers and single hyphens only.',
+            'phone.unique' => 'Another business profile already uses this mobile number.',
+        ]);
 
         if (! BdLocations::valid($data['division'], $data['district'])) {
             throw ValidationException::withMessages(['district' => 'Choose a district inside the selected division.']);

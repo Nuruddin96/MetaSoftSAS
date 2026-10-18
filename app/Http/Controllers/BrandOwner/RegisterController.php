@@ -7,6 +7,7 @@ use App\Models\Brand;
 use App\Models\BrandCategory;
 use App\Models\BrandOwner;
 use App\Models\PlatformAuditLog;
+use App\Rules\FacebookPageUrl;
 use App\Support\Platform\BdLocations;
 use App\Support\Platform\PlatformNotifier;
 use App\Support\Platform\VoteService;
@@ -22,7 +23,10 @@ use Illuminate\Validation\ValidationException;
  * "List Your Brand" — self-service registration that replaces sending
  * brand details over WhatsApp. Creates the owner login and the brand in
  * one step; the brand starts as `pending` and is only published after
- * Super Admin approval. Only core identity fields are required.
+ * Super Admin approval. Only core identity fields and the brand's Facebook
+ * Page link are required. One mobile number = one business profile: the
+ * number is normalized (01XXXXXXXXX) before every check, and the unique keys
+ * on brand_owners.phone and brands.phone (chunk67.sql) back the check up.
  */
 class RegisterController extends Controller
 {
@@ -47,7 +51,10 @@ class RegisterController extends Controller
             return redirect()->route('owner.register');
         }
 
-        $request->merge(['phone' => VoteService::normalizePhone((string) $request->input('phone')) ?? $request->input('phone')]);
+        $request->merge([
+            'phone' => VoteService::normalizePhone((string) $request->input('phone')) ?? $request->input('phone'),
+            'facebook' => FacebookPageUrl::normalize($request->input('facebook')),
+        ]);
 
         $data = $request->validate([
             'brand_name' => 'required|string|min:2|max:150',
@@ -63,11 +70,13 @@ class RegisterController extends Controller
             'sub_category' => 'nullable|string|max:100',
             'description' => 'nullable|string|max:2000',
             'website' => 'nullable|url|max:255',
-            'facebook' => 'nullable|url|max:255',
+            'facebook' => ['required', 'string', 'max:255', new FacebookPageUrl],
+            'instagram' => 'nullable|url|max:255',
         ], [
             'phone.regex' => 'Enter a valid Bangladeshi mobile number (01XXXXXXXXX).',
             'terms.accepted' => 'Please accept the platform rules to continue.',
             'logo.required' => 'Please upload your brand logo.',
+            'facebook.required' => 'Add your business’s Facebook Page link.',
         ]);
 
         if (! BdLocations::valid($data['division'], $data['district'])) {
@@ -83,7 +92,8 @@ class RegisterController extends Controller
         // can't be used to look up who has an account. The unique keys on
         // brand_owners still back this up inside the transaction below.
         $data['email'] = strtolower($data['email']);
-        if (BrandOwner::where('email', $data['email'])->orWhere('phone', $data['phone'])->exists()) {
+        if (BrandOwner::where('email', $data['email'])->orWhere('phone', $data['phone'])->exists()
+            || Brand::withTrashed()->where('phone', $data['phone'])->exists()) {
             throw ValidationException::withMessages(['account' => self::ACCOUNT_UNAVAILABLE]);
         }
 
@@ -92,7 +102,7 @@ class RegisterController extends Controller
         try {
             [$owner, $brand] = DB::transaction(fn () => $this->createOwnerAndBrand($data, $logoPath));
         } catch (UniqueConstraintViolationException) {
-            // A parallel request registered the same email/phone first.
+            // A parallel request registered the same email/phone first (unique keys on brand_owners and brands).
             Storage::disk('public')->delete($logoPath);
             throw ValidationException::withMessages(['account' => self::ACCOUNT_UNAVAILABLE]);
         }
@@ -134,7 +144,8 @@ class RegisterController extends Controller
             'logo_path' => $logoPath,
             'description' => $data['description'] ?? null,
             'website' => $data['website'] ?? null,
-            'facebook' => $data['facebook'] ?? null,
+            'facebook' => $data['facebook'],
+            'instagram' => $data['instagram'] ?? null,
             'status' => 'pending',
         ]);
 

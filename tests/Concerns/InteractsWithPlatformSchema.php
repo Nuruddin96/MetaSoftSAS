@@ -268,6 +268,11 @@ trait InteractsWithPlatformSchema
             $this->setUpPlatformReviewSchema();
         }
 
+        // database/sql/chunk67.sql — one mobile number per business profile.
+        Schema::table('brands', function (Blueprint $t) {
+            $t->unique('phone', 'uq_brand_phone');
+        });
+
         PlatformSchema::flush();
         BdLocations::flush();
         PlatformSetting::flush();

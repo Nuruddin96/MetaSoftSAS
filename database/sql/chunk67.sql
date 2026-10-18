@@ -1,0 +1,21 @@
+-- Recognition platform, part 4 (import after chunk66.sql). Additive only —
+-- no row is changed or deleted.
+--
+-- One mobile number = one business profile. brand_owners.phone is already
+-- unique (chunk64.sql); this adds the same guarantee to brands.phone, which
+-- also covers brands added by Super Admin without an owner account. Phones
+-- are stored normalized (01XXXXXXXXX) by every write path, so the key on the
+-- stored value is the key on the normalized number. Soft-deleted brands keep
+-- their number reserved, matching the app's duplicate checks.
+--
+-- Before importing, confirm there are no duplicates (must return no rows):
+--   SELECT phone, COUNT(*) FROM brands GROUP BY phone HAVING COUNT(*) > 1;
+-- If any exist, MySQL/MariaDB refuses the ALTER and nothing changes; resolve
+-- the duplicates with the profile owners first (never by deleting profiles
+-- without authorization).
+--
+-- The app enforces the rule with or without this key (RegisterController,
+-- Super Admin and owner profile validation); the key stops two simultaneous
+-- submissions from both getting through.
+
+ALTER TABLE brands ADD UNIQUE KEY uq_brand_phone (phone);
