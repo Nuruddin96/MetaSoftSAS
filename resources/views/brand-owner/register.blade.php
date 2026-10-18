@@ -5,7 +5,7 @@
 
 @section('page')
 @php
-    $input = 'mt-1.5 w-full rounded-xl border bg-white px-3.5 py-3 text-[15px] focus:border-leaf focus:outline-none focus:ring-2 focus:ring-leaf/20';
+    $input = 'mt-1.5 w-full rounded-xl border bg-white px-3.5 py-3 text-base focus:border-leaf sm:text-[15px] focus:outline-none focus:ring-2 focus:ring-leaf/20';
     $ok = 'border-hair';
     $bad = 'border-rose-400';
     $label = 'text-sm font-bold text-night';

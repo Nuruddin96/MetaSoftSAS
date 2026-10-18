@@ -28,6 +28,17 @@
                     @endforeach
                 </ul>
                 <p class="mt-3 rounded-xl bg-cloud px-3.5 py-2.5 text-[13px] text-slate2">Each verified profile lists exactly what was reviewed for that brand. Verification is not an award, a vote result or a paid placement.</p>
+                {{-- How the seal looks beside a verified brand's name: an illustration only, not a real brand. --}}
+                <div class="mt-4 rounded-xl border border-dashed border-hair p-3" aria-label="Example of a verified brand">
+                    <p class="text-[11px] font-extrabold uppercase tracking-[0.12em] text-slate2">Example · how it looks</p>
+                    <div class="mt-2 flex min-w-0 items-center gap-3">
+                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#1769AA,#073B66)] text-[15px] font-extrabold text-white" aria-hidden="true">BN</span>
+                        <div class="min-w-0">
+                            <p class="flex min-w-0 items-center gap-1.5"><span class="truncate text-[15.5px] font-extrabold text-night">Brand name</span> <x-plat.verified size="w-5 h-5" /></p>
+                            <p class="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-[#E8F1FC] px-2.5 py-0.5 text-[12px] font-bold text-[#1769AA]"><x-plat.verified size="w-3.5 h-3.5" /> MetaSoft BD Verified</p>
+                        </div>
+                    </div>
+                </div>
             </article>
 
             <article class="rounded-[20px] border border-hair bg-white p-5 sm:p-6">

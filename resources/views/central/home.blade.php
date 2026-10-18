@@ -31,7 +31,7 @@
 @endphp
 
 @section('content')
-<div id="top" class="plat-theme font-plat bg-white text-night pb-[76px] lg:pb-0">
+<div id="top" class="plat-theme font-plat bg-white text-night pb-[calc(72px+env(safe-area-inset-bottom))] lg:pb-0">
 
     @include('central.home.header')
 

@@ -107,18 +107,22 @@
     </div>
 </div>
 
-{{-- Mobile bottom tab bar: the app-like shortcuts mobile visitors need most --}}
-<nav class="fixed inset-x-0 bottom-0 z-40 border-t border-hair bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden" aria-label="Quick">
-    <div class="mx-auto grid max-w-md grid-cols-5">
-        @foreach([['Home', '#top', 'home'], ['Brands', '#brands', 'store'], ['Vote', '#voting', 'vote'], ['Awards', '#awards', 'trophy'], ['Join', '#join', 'user-plus']] as [$label, $href, $icon])
-            <a href="{{ $href }}" class="flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold {{ $label === 'Vote' ? 'text-leaf' : 'text-slate2' }} hover:text-night">
-                @if($label === 'Vote')
-                    <span class="-mt-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-leaf text-white shadow-lg shadow-leaf/30 ring-4 ring-white"><x-plat.icon name="vote" class="w-5 h-5" /></span>
-                @else
-                    <x-plat.icon :name="$icon" class="w-5 h-5" />
-                @endif
-                {{ $label }}
+{{--
+    Phones and tablets: two actions always one tap away. WhatsApp opens the
+    configured MetaSoft BD support number (payment.support_whatsapp, the same
+    one the footer uses); without one, only the profile button shows. The
+    page container's bottom padding (central/home.blade.php) keeps the bar
+    off the content.
+--}}
+<div class="fixed inset-x-0 bottom-0 z-40 border-t border-hair bg-white/95 pb-[max(10px,env(safe-area-inset-bottom))] pl-[max(16px,env(safe-area-inset-left))] pr-[max(16px,env(safe-area-inset-right))] pt-2.5 backdrop-blur-md lg:hidden" data-mobile-cta>
+    <div class="mx-auto flex max-w-xl gap-2">
+        <a href="{{ $joinUrl }}" class="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-night px-2.5 text-[14px] font-extrabold text-white min-[380px]:gap-2 min-[380px]:px-3 min-[380px]:text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+            <x-plat.icon name="user-plus" class="w-[18px] h-[18px] shrink-0 text-gold" /> <span class="truncate">Create Free Profile</span>
+        </a>
+        @if($whatsapp)
+            <a href="{{ $wa('Hi MetaSoft BD, I would like to create a free business profile.') }}" target="_blank" rel="noopener" class="inline-flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#25D366] px-3 text-[14px] font-extrabold text-white min-[380px]:gap-2 min-[380px]:px-4 min-[380px]:text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] focus-visible:ring-offset-2">
+                @include('partials.icon', ['platform' => 'whatsapp', 'class' => 'w-5 h-5 shrink-0']) WhatsApp
             </a>
-        @endforeach
+        @endif
     </div>
-</nav>
+</div>

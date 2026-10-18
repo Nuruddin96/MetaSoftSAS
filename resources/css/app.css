@@ -62,7 +62,8 @@
  * tokens inside .plat-theme only, so every platform component (cards,
  * buttons, bottom tab bar, badges) picks up the palette while the tenant
  * panel, storefront and super admin keep their own green/amber tokens.
- * "gold" becomes a light-blue accent for use on navy backgrounds.
+ * "gold" is the secondary accent: amber on navy, with a deeper amber
+ * ("golddk") for text and icons on white (approved Concept C, option C).
  */
 .plat-theme {
     --color-night: #0B2545;
@@ -74,8 +75,8 @@
     --color-cream: #F4F8FC;
     --color-hair: #DDE6F0;
     --color-slate2: #4E5D72;
-    --color-gold: #9DCBF2;
-    --color-golddk: #1769AA;
+    --color-gold: #F2C462;
+    --color-golddk: #9A5B07;
 }
 
 /*
@@ -409,14 +410,39 @@
 
 .bd-paused * { animation-play-state: paused !important; }
 
+/*
+ * Homepage hero copy (central/home/hero.blade.php). The headline's size
+ * follows the text column (container units) so the highlight line stays on
+ * one line; --k is the highlight's width in em, set from its length.
+ */
+.hero-fit { container-type: inline-size; }
+.hero-title { font-size: clamp(17px, calc(100cqi / var(--k)), 46px); text-wrap: balance; }
+/* Glass action tiles on the navy hero; icons use the amber accent. */
+.glass-tile {
+    background: linear-gradient(135deg, rgba(255, 255, 255, .15), rgba(255, 255, 255, .05));
+    border: 1px solid rgba(255, 255, 255, .18);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 12px 26px -18px rgba(0, 0, 0, .6);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    backdrop-filter: blur(12px) saturate(140%);
+    transition: background .2s, border-color .2s;
+}
+.glass-tile:hover { background: linear-gradient(135deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .08)); border-color: rgba(255, 255, 255, .3); }
+.glass-tile:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; }
+
 @media (max-width: 1023.98px) {
     .bd-stage { width: min(100%, 360px); }
     .bd-chip-nation { right: -34%; }
     .bd-chip-wide { left: -34%; }
 }
+/*
+ * Phones: the map is a faded backdrop centred in the hero with 6% gutters
+ * (it used to hang 30% off the right edge, cutting off a third of the
+ * pointers), and sized by container units so it also fits the hero's height.
+ * 600 / 819 = the BangladeshNetwork outline's width / height.
+ */
 @media (max-width: 639.98px) {
-    .bd-viz { position: absolute; top: 8px; right: -30%; width: 88%; z-index: 0; opacity: .3; pointer-events: none; }
-    .bd-stage { width: 100%; animation: none; }
+    .bd-viz { position: absolute; top: 8px; bottom: 8px; left: 6%; right: 6%; z-index: 0; opacity: .3; pointer-events: none; container-type: size; align-content: center; }
+    .bd-stage { width: min(100cqw, 100cqh * 600 / 819); animation: none; }
     .bd-chip, .bd-legend, .bd-label { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {

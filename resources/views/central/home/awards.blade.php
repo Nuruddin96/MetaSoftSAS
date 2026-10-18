@@ -136,5 +136,6 @@
                 <p class="text-sm text-slate2">Brands compete nationally under one set of rules.</p>
             </div>
         </div>
+        <p class="mx-auto mt-6 flex w-fit max-w-full items-center justify-center gap-2 text-center text-[15px] font-semibold text-night"><x-plat.icon name="trophy" class="w-[18px] h-[18px] shrink-0 text-golddk" /> Award entry is free and doesn’t need membership.</p>
     </div>
 </section>
