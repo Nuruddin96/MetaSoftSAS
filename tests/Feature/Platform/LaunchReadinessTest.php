@@ -55,6 +55,7 @@ class LaunchReadinessTest extends TestCase
             'email' => 'rina@example.com',
             'division' => 'Dhaka',
             'district' => 'Gazipur',
+            'facebook' => 'https://www.facebook.com/nakshighor',
             'password' => 'secret123',
             'password_confirmation' => 'secret123',
             'terms' => '1',
