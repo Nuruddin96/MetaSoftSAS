@@ -31,13 +31,13 @@ class HomepageTest extends TestCase
 
         $response->assertOk();
         // Concept C order: hero, photo strip, brands, verified, journey, consultancy, awards (+ #voting), join (+ #community).
-        $response->assertSeeInOrder(['<h1', 'id="momentsRow"', 'id="brands"', 'id="verified"', 'id="impact"', 'id="consultancy"', 'id="awards"', 'id="voting"', 'id="join"', 'id="community"', '<footer'], false);
+        $response->assertSeeInOrder(['<h1', 'id="momentsRow"', 'id="brands"', 'id="verified"', 'id="impact"', 'id="consultancy"', 'id="awards"', 'id="voting"', 'id="credentials"', 'id="join"', 'id="community"', '<footer'], false);
         // The pre-redesign sections are gone.
         foreach (['id="how"', 'id="standards"', 'id="trending"', 'id="entrepreneurs"', 'id="recognition"', 'id="automation"', 'id="sponsors"', 'id="vote-now"'] as $anchor) {
             $response->assertDontSee($anchor, false);
         }
-        // No certificate supplied in the test tree: the credentials section (and its menu link) stays hidden.
-        $response->assertDontSee('id="credentials"', false)->assertDontSee('href="#credentials"', false);
+        // The supplied DBID certificate is shown, with its menu/footer links.
+        $response->assertSee('href="#credentials"', false)->assertSee('DBID no.');
         $response->assertSee('building Bangladesh.');
     }
 

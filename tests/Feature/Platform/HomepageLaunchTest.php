@@ -36,7 +36,7 @@ class HomepageLaunchTest extends TestCase
     public function test_benefits_are_listed_with_honest_qualifiers_and_no_unsupported_promises(): void
     {
         $html = $this->get('/')->assertOk()->getContent();
-        $join = Str::between($html, 'id="join"', '</section>');
+        $join = Str::betweenFirst($html, 'id="join"', '</section>');
 
         foreach (['Your business profile', 'A link you can share', 'Findable on Google', 'More visibility', 'Meet other businesses', 'Free award entry', 'Blue Verified badge, after review'] as $title) {
             $this->assertStringContainsString($title, $join);
@@ -56,7 +56,7 @@ class HomepageLaunchTest extends TestCase
         $register = route('owner.register');
 
         $this->assertStringContainsString('href="'.$register.'"', Str::between($html, '<h1', 'Quick actions'), 'Hero button');
-        $this->assertStringContainsString('href="'.$register.'"', Str::between($html, 'id="join"', '</section>'), 'Join section');
+        $this->assertStringContainsString('href="'.$register.'"', Str::betweenFirst($html, 'id="join"', '</section>'), 'Join section');
         $this->assertStringContainsString('href="'.$register.'"', $this->phoneBar(), 'Phone bar');
     }
 
