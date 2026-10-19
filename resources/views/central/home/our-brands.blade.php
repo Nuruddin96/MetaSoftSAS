@@ -49,6 +49,6 @@
                 View All Brands @if($realBrands)<span class="font-semibold text-white/60">({{ number_format($realBrands) }})</span>@endif <x-plat.icon name="arrow-right" class="w-4 h-4" />
             </a>
         </div>
-        <p class="mt-3 text-center text-[12.5px] text-slate2">Only brands checked by MetaSoft BD carry the blue Verified badge.</p>
+        <p class="mt-3 text-center text-[12.5px] text-slate2">Only brands checked by MetaSoft BD carry the blue Verified badge. Cards marked “Sponsored” are paid placements and never affect awards or verification.</p>
     </div>
 </section>

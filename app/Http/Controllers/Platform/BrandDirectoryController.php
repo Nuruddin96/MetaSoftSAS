@@ -22,7 +22,9 @@ class BrandDirectoryController extends Controller
     public function index(Request $request)
     {
         $q = mb_substr(trim((string) $request->query('q', '')), 0, 80);
-        $category = BrandCategory::active()->where('slug', (string) $request->query('category'))->first();
+        // Filterable: every active category, plus any retired one that still has published brands (chunk68.sql).
+        $filterable = fn ($c) => $c->where(fn ($w) => $w->where('is_active', true)->orWhereHas('brands', fn ($b) => $b->published()));
+        $category = $filterable(BrandCategory::query())->where('slug', (string) $request->query('category'))->first();
         $division = in_array($request->query('division'), BdLocations::divisions(), true) ? $request->query('division') : null;
 
         $brands = Brand::published()->with(Brand::CARD_RELATIONS)
@@ -42,7 +44,7 @@ class BrandDirectoryController extends Controller
             'q' => $q,
             'category' => $category,
             'division' => $division,
-            'categories' => BrandCategory::active()->ordered()->withCount(['brands' => fn ($b) => $b->published()])->get(),
+            'categories' => $filterable(BrandCategory::query())->ordered()->withCount(['brands' => fn ($b) => $b->published()])->get(),
             'divisions' => BdLocations::divisions(),
         ]);
     }
