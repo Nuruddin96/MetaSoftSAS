@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ShopSaaS — a multi-tenant e-commerce + business automation SaaS for Bangladeshi merchants, built on Laravel 12 / PHP 8.2. Each tenant gets a storefront, an admin panel (`/panel`), POS, inventory, orders, courier integration, fraud checking, a website builder, and messenger inbox. The platform also runs a central marketing site, a super-admin console, an affiliate program, and a personal Telegram AI assistant for the owner. Bengali strings appear throughout user-facing text (flash messages, the assistant's system prompt, theme labels) — preserve them when editing nearby code.
 
+## Working on a request
+
+Follow the autonomous workflow in `.claude/rules/` (loaded automatically): plan in
+`docs/ai-workflow/IMPLEMENTATION_PLAN.md`, verify with `docs/ai-workflow/TESTING.md`,
+record lasting choices in `docs/ai-workflow/DECISIONS.md`. Production changes
+(merge to `main`, `deploy.sh`, SQL, server edits) are gated by
+`docs/ai-workflow/DEPLOYMENT.md` and always need explicit user approval.
+
 ## Commands
 
 ```bash
@@ -22,11 +30,11 @@ php artisan test tests/Feature/SomeTest.php
 vendor/bin/pint         # code style (Laravel Pint, no custom pint.json — defaults apply)
 ```
 
-There is now a real, substantial test suite (96 test files, 850+ tests as of the AI Agent 2.0 work) — `tests/Feature/ExampleTest.php` and `tests/Unit/ExampleTest.php` are leftover framework stubs, not representative of coverage. The AI Agent feature set in particular (`tests/Feature/AiAgent/`) has extensive coverage including a dedicated tenant-isolation audit (`TenantIsolationAuditTest`/`TenantIsolationAuditWhatsAppTest`) — see `docs/AI_AGENT_2_TEST_MATRIX.md` for what is and isn't covered by it.
+There is now a real, substantial test suite (200+ test files, ~1,870 tests as of October 2026; run the full suite with `php -d memory_limit=2G vendor/bin/phpunit`, and see `docs/ai-workflow/TESTING.md` for known baseline failures) — `tests/Feature/ExampleTest.php` and `tests/Unit/ExampleTest.php` are leftover framework stubs, not representative of coverage. The AI Agent feature set in particular (`tests/Feature/AiAgent/`) has extensive coverage including a dedicated tenant-isolation audit (`TenantIsolationAuditTest`/`TenantIsolationAuditWhatsAppTest`) — see `docs/AI_AGENT_2_TEST_MATRIX.md` for what is and isn't covered by it.
 
 ## Database: NOT migration-driven
 
-This is the single most important deviation from a standard Laravel app. The full schema lives as raw SQL in `database/sql/` (`schema.sql` plus numbered `chunk*.sql` files, split for shared-hosting import limits) — **not** in `database/migrations/`. The `migrations/` directory only has Laravel's default `cache` and `jobs` tables.
+This is the single most important deviation from a standard Laravel app. The full schema lives as raw SQL in `database/sql/` (`schema.sql` plus numbered `chunk*.sql` files, split for shared-hosting import limits) — **not** in `database/migrations/`. The `migrations/` directory only has Laravel's default `cache` and `jobs` tables plus a few small additions (Sanctum `personal_access_tokens`, app-version tables) that were applied by hand; `deploy.sh` never runs migrations.
 
 - Do not "fix" a schema issue by writing a new Laravel migration unless asked — check `database/sql/schema.sql` first for the authoritative table definitions.
 - If a schema change is needed, it should generally be reflected in the SQL files, matching the existing style.
@@ -52,13 +60,14 @@ Apply this trait to every new tenant-owned model (see `Product`, `Order`, etc. f
 
 ## Auth guards
 
-Four separate guards in `config/auth.php`, each session-based with its own Eloquent provider — there is no cross-guard user model:
+Five separate guards in `config/auth.php`, each session-based with its own Eloquent provider — there is no cross-guard user model:
 - `tenant` (default) → `App\Models\User` — tenant panel staff/owner
 - `super_admin` → `App\Models\SuperAdmin` — platform operator
 - `affiliate` → `App\Models\Affiliate`
+- `brand_owner` → `App\Models\BrandOwner` — brand-platform owners (`/brand-owner`, "List your brand")
 - `web` → kept pointing at the same `User`/`tenant_users` provider purely for framework/package compatibility
 
-When adding auth-protected routes, pick the guard matching the route group (`auth:tenant`, `auth:super_admin`, `auth:affiliate`) — don't rely on the unqualified default outside the tenant panel.
+When adding auth-protected routes, pick the guard matching the route group (`auth:tenant`, `auth:super_admin`, `auth:affiliate`, `auth:brand_owner`) — don't rely on the unqualified default outside the tenant panel.
 
 ## Controller/view namespacing convention
 
