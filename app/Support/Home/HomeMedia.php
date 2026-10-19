@@ -4,44 +4,48 @@ namespace App\Support\Home;
 
 /**
  * Real photos and documents for the Concept C homepage
- * (resources/views/central/home/*). Only files that exist are returned:
+ * (resources/views/central/home/*). Only readable image files are returned:
  * nothing is invented, and a section whose material hasn't been supplied
- * yet shows an honest fallback or stays hidden.
+ * yet shows an honest fallback or stays hidden. Empty folders, non-image
+ * files and unreadable images are skipped, so no broken image is ever shown.
  *
- * public/images/home/programme/  — consultancy / programme photos (supplied 2026-10-18,
- *                                   web copies of public/images/Homepage/consultancy)
- * public/images/home/certificate.{jpg,png,webp} — company registration certificate (not supplied yet)
- * public/images/home/recipients/ — past award recipient portraits (not supplied yet)
+ * public/images/home/programme/      — web copies of the consultancy/programme photos (supplied 2026-10-18)
+ * public/images/Homepage/programme/  — further programme photos as uploaded (optional, may be empty)
+ * public/images/home/certificate.{jpg,jpeg,png,webp} — company registration certificate
+ * public/images/home/recipients/     — past award recipient portraits; file name = caption
  */
 class HomeMedia
 {
     private const ALT = 'Business consultancy session with entrepreneurs';
 
-    /** @return list<array{src: string, alt: string, portrait: bool}> */
+    private const IMAGE = '/\.(jpe?g|png|webp)$/i';
+
+    /** @return list<array{src: string, alt: string, portrait: bool, name: string}> */
     public static function programme(): array
     {
         $photos = [];
-        foreach (['consultancy-01', 'consultancy-03', 'consultancy-02', 'consultancy-06', 'consultancy-04', 'consultancy-07', 'consultancy-08', 'consultancy-09'] as $name) {
-            $file = public_path("images/home/programme/{$name}.jpg");
-            if (is_file($file)) {
-                [$w, $h] = getimagesize($file) ?: [4, 3];
-                $photos[] = ['src' => asset("images/home/programme/{$name}.jpg"), 'alt' => self::ALT, 'portrait' => $h > $w];
+        foreach (['images/home/programme', 'images/Homepage/programme'] as $dir) {
+            foreach (self::images($dir) as $rel => [$w, $h]) {
+                $name = strtolower(preg_replace('/(\.(jpe?g|png|webp))+$/i', '', basename($rel)));
+                $photos[$name] ??= ['src' => asset($rel), 'alt' => self::ALT, 'portrait' => $h > $w, 'name' => $name];
             }
         }
 
-        return $photos;
+        return array_values($photos);
     }
 
     /** Four photos for the strip that overlaps the hero. */
     public static function moments(): array
     {
-        return array_slice(array_merge(array_slice(self::programme(), 3), self::programme()), 0, 4);
+        $all = self::programme();
+
+        return array_slice(array_merge(array_slice($all, 4), $all), 0, min(4, count($all)));
     }
 
-    /** Consultancy & networking pairs: a wide main photo and a square detail. */
+    /** Consultancy & networking pairs: a wide main photo and a square-ish detail, when the supplied set allows. */
     public static function consultancy(): array
     {
-        $by = collect(self::programme())->keyBy(fn ($p) => basename($p['src'], '.jpg'));
+        $by = collect(self::programme())->keyBy('name');
 
         return array_values(array_filter([
             isset($by['consultancy-01'], $by['consultancy-02']) ? [$by['consultancy-01'], $by['consultancy-02']] : null,
@@ -49,12 +53,13 @@ class HomeMedia
         ]));
     }
 
-    /** The registration certificate scan, or null until it is supplied. */
+    /** The registration certificate scan, or null until a readable one is supplied. */
     public static function certificate(): ?string
     {
-        foreach (['webp', 'jpg', 'jpeg', 'png'] as $ext) {
-            if (is_file(public_path("images/home/certificate.{$ext}"))) {
-                return asset("images/home/certificate.{$ext}");
+        foreach (['jpg', 'jpeg', 'png', 'webp'] as $ext) {
+            $rel = "images/home/certificate.{$ext}";
+            if (self::readable(public_path($rel))) {
+                return asset($rel);
             }
         }
 
@@ -64,8 +69,31 @@ class HomeMedia
     /** Past recipient portraits (file name = caption), empty until supplied. */
     public static function recipients(): array
     {
-        return collect(glob(public_path('images/home/recipients/*.{jpg,jpeg,png,webp}'), GLOB_BRACE) ?: [])
-            ->map(fn ($f) => ['src' => asset('images/home/recipients/'.basename($f)), 'caption' => str_replace(['-', '_'], ' ', pathinfo($f, PATHINFO_FILENAME))])
+        return collect(self::images('images/home/recipients'))
+            ->map(fn ($size, $rel) => ['src' => asset($rel), 'caption' => trim(preg_replace('/\s+/', ' ', str_replace(['-', '_'], ' ', pathinfo($rel, PATHINFO_FILENAME))))])
             ->values()->all();
+    }
+
+    /** @return array<string, array{0: int, 1: int}> public-relative path => [width, height], readable images only, by name */
+    private static function images(string $dir): array
+    {
+        $found = [];
+        foreach (is_dir(public_path($dir)) ? (scandir(public_path($dir)) ?: []) : [] as $file) {
+            $path = public_path("{$dir}/{$file}");
+            if ($file[0] !== '.' && preg_match(self::IMAGE, $file) && ($size = self::readable($path))) {
+                $found["{$dir}/{$file}"] = $size;
+            }
+        }
+        ksort($found, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $found;
+    }
+
+    /** @return array{0: int, 1: int}|null */
+    private static function readable(string $path): ?array
+    {
+        $info = is_file($path) ? @getimagesize($path) : false;
+
+        return $info && $info[0] > 0 ? [$info[0], $info[1]] : null;
     }
 }

@@ -45,9 +45,7 @@ class HomepageController extends Controller
             'award_id' => ['nullable', 'integer', Rule::exists('awards', 'id')],
             'campaign_id' => ['nullable', 'integer', Rule::exists('vote_campaigns', 'id')],
         ]);
-        foreach (['sample_fallback', 'show_stories', 'show_events', 'show_sponsors'] as $flag) {
-            $data[$flag] = $request->boolean($flag);
-        }
+        $data['sample_fallback'] = $request->boolean('sample_fallback');
         $data['award_id'] = ($data['award_id'] ?? null) ? (int) $data['award_id'] : null;
         $data['campaign_id'] = ($data['campaign_id'] ?? null) ? (int) $data['campaign_id'] : null;
         $data['hero_highlight'] ??= '';
@@ -57,6 +55,8 @@ class HomepageController extends Controller
         }
 
         $before = PlatformSetting::get('homepage', HomepageContent::defaults());
+        // Keys the form no longer edits (show_sponsors/stories/events) keep their saved values.
+        $data = array_merge($before, $data);
         PlatformSetting::put('homepage', $data);
         PlatformAuditLog::record('homepage.updated', new PlatformSetting, [
             'changed' => array_keys(array_diff_assoc(array_map('strval', $data), array_map(fn ($v) => (string) $v, $before))),

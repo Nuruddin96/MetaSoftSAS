@@ -30,6 +30,11 @@
     <a href="{{ route('super.brands.edit', $brand) }}" class="{{ $btn }} border border-ink/10 bg-white hover:border-leaf">✏️ Edit brand</a>
 </div>
 
+@if($brand->category && ! $brand->category->is_active)
+    {{-- Retired by the 50 business categories (chunk68.sql); kept working until someone picks a current one. --}}
+    <p class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><b>Retired category:</b> “{{ $brand->category->name }}” is no longer offered to new brands. It still works for this brand; choose one of the current categories via <a href="{{ route('super.brands.edit', $brand) }}" class="font-semibold underline">Edit brand</a> when convenient.</p>
+@endif
+
 @if($brand->status_reason)
     <p class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"><b>Reason shown to owner:</b> {{ $brand->status_reason }}</p>
 @endif
