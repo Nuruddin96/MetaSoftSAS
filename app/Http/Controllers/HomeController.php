@@ -78,6 +78,7 @@ class HomeController extends Controller
                 'consultancy' => HomeMedia::consultancy(),
                 'certificate' => HomeMedia::certificate(),
                 'recipients' => HomeMedia::recipients(),
+                'awards' => HomeMedia::awards(),
             ],
             'whatsapp' => preg_replace('/\D/', '', (string) config('payment.support_whatsapp')),
         ]);

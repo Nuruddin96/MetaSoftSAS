@@ -41,6 +41,21 @@
                     </div>
                 @endif
 
+                {{-- Award presentation photos (HomeMedia::awards): no names or awards were supplied, so they're shown as moments, not as named recipients. --}}
+                @if($media['awards'])
+                    <div class="mb-2.5 mt-5 flex items-center justify-between gap-3">
+                        <p class="text-[12px] font-extrabold uppercase tracking-[0.12em] text-white/70">Award moments</p>
+                        @include('central.home.marquee-controls', ['id' => 'awardsRow', 'dark' => true, 'compact' => true])
+                    </div>
+                    <div id="awardsRow" data-marquee="12" class="-mx-4 flex gap-3 px-4 sm:mx-0 sm:px-0" aria-label="Award moments">
+                        @foreach($media['awards'] as $p)
+                            <figure class="w-[64vw] max-w-[280px] shrink-0 overflow-hidden rounded-xl ring-1 ring-white/12 sm:w-[260px] sm:max-w-none">
+                                @include('central.home.photo', ['p' => $p, 'ratio' => '3/2', 'class' => 'rounded-xl', 'position' => 'center 30%'])
+                            </figure>
+                        @endforeach
+                    </div>
+                @endif
+
             </div>
 
             <div class="grid content-start gap-3">

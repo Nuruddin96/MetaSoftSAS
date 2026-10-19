@@ -66,26 +66,34 @@ class HomeAssetsAndLegacyCategoriesTest extends TestCase
 
     // --- homepage material ----------------------------------------------------------------------
 
-    public function test_credentials_appear_with_their_links_once_a_real_certificate_exists(): void
+    public function test_the_dbid_certificate_is_shown_with_its_facts_and_hidden_when_missing(): void
     {
-        $this->assertNull(HomeMedia::certificate());
-        $this->get('/')->assertOk()->assertDontSee('id="credentials"', false)->assertDontSee('href="#credentials"', false);
-
-        // A file that isn't a readable image is ignored.
-        $this->raw('images/home/certificate.jpg', 'not an image');
-        $this->assertNull(HomeMedia::certificate());
-        $this->get('/')->assertDontSee('id="credentials"', false);
-
-        File::delete(public_path('images/home/certificate.jpg'));
-        $this->jpeg('images/home/certificate.jpg', 200, 283);
-        $this->assertSame(asset('images/home/certificate.jpg'), HomeMedia::certificate());
+        // The supplied certificate (address and personal email masked) unlocks the section and its links.
+        $this->assertSame(asset('images/home/certificate.png'), HomeMedia::certificate());
         $this->get('/')->assertOk()
             ->assertSee('id="credentials"', false)
-            ->assertSee('src="'.asset('images/home/certificate.jpg').'"', false)
-            ->assertSee('Ministry of Commerce, Government of Bangladesh')
-            ->assertSee('It is not a government endorsement', false)
-            ->assertSee('href="#credentials"', false) // menu "About us" and the footer links
-            ->assertSee('Registered business · see certificate');
+            ->assertSee('src="'.asset('images/home/certificate.png').'"', false)
+            ->assertSee('Certificate of Digital Business Identity (DBID)')
+            ->assertSee('Office of the Registrar of Joint Stock Companies and Firms (RJSC), Ministry of Commerce, Government of Bangladesh')
+            ->assertSee('638491954')->assertSee('11 March 2025')
+            ->assertSee('hidden on this copy for privacy')
+            ->assertSee('it is not a government endorsement', false)
+            ->assertSee('href="#credentials"', false)
+            ->assertSee('Registered business · see certificate')
+            ->assertDontSee('mdnuruddinceo')->assertDontSee('Sonali Bank Colony');
+
+        // An unreadable file is never used, even when it is checked first.
+        $this->raw('images/home/certificate.jpg', 'not an image');
+        $this->assertSame(asset('images/home/certificate.png'), HomeMedia::certificate());
+
+        // Without a readable certificate the section and every link to it disappear.
+        rename(public_path('images/home/certificate.png'), public_path('images/home/certificate.png.bak'));
+        try {
+            $this->assertNull(HomeMedia::certificate());
+            $this->get('/')->assertOk()->assertDontSee('id="credentials"', false)->assertDontSee('href="#credentials"', false)->assertDontSee('see certificate');
+        } finally {
+            rename(public_path('images/home/certificate.png.bak'), public_path('images/home/certificate.png'));
+        }
     }
 
     public function test_past_recipients_show_only_readable_portraits_and_otherwise_a_note(): void
@@ -119,7 +127,9 @@ class HomeAssetsAndLegacyCategoriesTest extends TestCase
         $this->jpeg('images/Homepage/programme/programme-workshop.jpg', 160, 120);
         $after = HomeMedia::programme();
         $this->assertCount(count($before) + 1, $after);
-        $this->assertSame(asset('images/Homepage/programme/programme-workshop.jpg'), end($after)['src']);
+        $this->assertContains(asset('images/Homepage/programme/programme-workshop.jpg'), array_column($after, 'src'));
+        // Event photos lead the journey carousel, consultancy sessions follow.
+        $this->assertStringStartsWith('programme-', $after[0]['name']);
 
         $html = $this->get('/')->assertOk()->getContent();
         $this->assertStringNotContainsString('broken.jpg', $html);
