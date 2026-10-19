@@ -311,7 +311,7 @@ class OwnerAuthHardeningTest extends TestCase
         $this->post(route('owner.register.store'), [
             'brand_name' => 'Nakshi Ghor', 'logo' => UploadedFile::fake()->image('logo.png', 200, 200), 'brand_category_id' => $category->id,
             'founder_name' => 'Rina Akter', 'phone' => '01712345678', 'email' => 'rina@example.com', 'division' => 'Dhaka', 'district' => 'Gazipur',
-            'password' => 'secret123', 'password_confirmation' => 'secret123', 'terms' => '1',
+            'facebook' => 'https://www.facebook.com/nakshighor', 'password' => 'secret123', 'password_confirmation' => 'secret123', 'terms' => '1',
         ])->assertSessionHasErrors(['account' => RegisterController::ACCOUNT_UNAVAILABLE]);
 
         $this->assertTrue($raced);

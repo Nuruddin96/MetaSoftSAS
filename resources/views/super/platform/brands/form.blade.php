@@ -29,6 +29,8 @@
         <label class="{{ $lbl }}">Owner / founder name *<input name="founder_name" value="{{ old('founder_name', $brand->founder_name) }}" required class="{{ $field }}">{!! $e('founder_name') !!}</label>
         <label class="{{ $lbl }}">Phone *<input name="phone" value="{{ old('phone', $brand->phone) }}" required placeholder="01XXXXXXXXX" class="{{ $field }}">{!! $e('phone') !!}</label>
         <label class="{{ $lbl }}">Email *<input type="email" name="email" value="{{ old('email', $brand->email) }}" required class="{{ $field }}">{!! $e('email') !!}</label>
+        {{-- Required for new profiles (format only — it does not prove who runs the page); older profiles may lack it. --}}
+        <label class="{{ $lbl }} sm:col-span-2">Facebook Page link{{ $brand->exists ? '' : ' *' }}<input type="text" inputmode="url" name="facebook" value="{{ old('facebook', $brand->facebook) }}" @required(! $brand->exists) maxlength="255" pattern="{{ \App\Rules\FacebookPageUrl::HTML_PATTERN }}" title="A facebook.com Page link, e.g. https://www.facebook.com/yourbrand" placeholder="https://www.facebook.com/yourbrand" class="{{ $field }}">{!! $e('facebook') !!}</label>
         <label class="{{ $lbl }}">Division *
             <select name="division" required class="{{ $field }}">
                 <option value="">—</option>
@@ -50,14 +52,14 @@
         @endif
     </div>
 
-    <details class="rounded-lg border border-ink/10 p-4" @if($brand->description || $brand->website || $errors->hasAny(['website', 'facebook', 'instagram', 'tiktok', 'youtube', 'founded_year'])) open @endif>
+    <details class="rounded-lg border border-ink/10 p-4" @if($brand->description || $brand->website || $errors->hasAny(['website', 'instagram', 'tiktok', 'youtube', 'founded_year'])) open @endif>
         <summary class="cursor-pointer text-sm font-semibold">Optional details</summary>
         <div class="mt-4 grid gap-4 sm:grid-cols-2">
             <label class="{{ $lbl }}">Sub-category<input name="sub_category" value="{{ old('sub_category', $brand->sub_category) }}" class="{{ $field }}"></label>
             <label class="{{ $lbl }}">Year founded<input type="number" name="founded_year" value="{{ old('founded_year', $brand->founded_year) }}" class="{{ $field }}">{!! $e('founded_year') !!}</label>
             <label class="{{ $lbl }} sm:col-span-2">Description<textarea name="description" rows="4" class="{{ $field }}">{{ old('description', $brand->description) }}</textarea></label>
             <label class="{{ $lbl }} sm:col-span-2">Products / services<textarea name="products_info" rows="3" class="{{ $field }}">{{ old('products_info', $brand->products_info) }}</textarea></label>
-            @foreach(['website', 'facebook', 'instagram', 'tiktok', 'youtube'] as $f)
+            @foreach(['website', 'instagram', 'tiktok', 'youtube'] as $f)
                 <label class="{{ $lbl }}">{{ ucfirst($f) }}<input type="url" name="{{ $f }}" value="{{ old($f, $brand->{$f}) }}" placeholder="https://" class="{{ $field }}">{!! $e($f) !!}</label>
             @endforeach
         </div>

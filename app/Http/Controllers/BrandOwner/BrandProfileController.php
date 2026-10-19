@@ -7,6 +7,7 @@ use App\Models\Brand;
 use App\Models\BrandCategory;
 use App\Models\BrandChangeRequest;
 use App\Models\PlatformAuditLog;
+use App\Rules\FacebookPageUrl;
 use App\Support\Platform\BdLocations;
 use App\Support\Platform\PlatformNotifier;
 use App\Support\Platform\VoteService;
@@ -43,7 +44,10 @@ class BrandProfileController extends Controller
     public function update(Request $request)
     {
         $brand = $this->brand($request);
-        $request->merge(['phone' => VoteService::normalizePhone((string) $request->input('phone')) ?? $request->input('phone')]);
+        $request->merge([
+            'phone' => VoteService::normalizePhone((string) $request->input('phone')) ?? $request->input('phone'),
+            'facebook' => FacebookPageUrl::normalize($request->input('facebook')),
+        ]);
 
         $data = $request->validate([
             'name' => 'required|string|min:2|max:150',
@@ -51,7 +55,7 @@ class BrandProfileController extends Controller
             'brand_category_id' => ['required', Rule::exists('brand_categories', 'id')->where('is_active', 1)],
             'sub_category' => 'nullable|string|max:100',
             'founder_name' => 'required|string|max:150',
-            'phone' => ['required', 'regex:/^01[3-9]\d{8}$/'],
+            'phone' => ['required', 'regex:/^01[3-9]\d{8}$/', Rule::unique('brands', 'phone')->ignore($brand->id)],
             'email' => 'required|email:rfc|max:150',
             'division' => 'required|string|max:50',
             'district' => 'required|string|max:50',
@@ -59,11 +63,16 @@ class BrandProfileController extends Controller
             'products_info' => 'nullable|string|max:3000',
             'founded_year' => 'nullable|integer|min:1900|max:'.now()->year,
             'website' => 'nullable|url|max:255',
-            'facebook' => 'nullable|url|max:255',
+            // Can be changed but not removed once set; profiles created before the rule may stay without one.
+            'facebook' => [filled($brand->facebook) ? 'required' : 'nullable', 'string', 'max:255', new FacebookPageUrl],
             'instagram' => 'nullable|url|max:255',
             'tiktok' => 'nullable|url|max:255',
             'youtube' => 'nullable|url|max:255',
-        ], ['phone.regex' => 'Enter a valid Bangladeshi mobile number (01XXXXXXXXX).']);
+        ], [
+            'phone.regex' => 'Enter a valid Bangladeshi mobile number (01XXXXXXXXX).',
+            'phone.unique' => 'Another business profile already uses this mobile number.',
+            'facebook.required' => 'Your Facebook Page link can be changed but not removed.',
+        ]);
 
         if (! BdLocations::valid($data['division'], $data['district'])) {
             throw ValidationException::withMessages(['district' => 'Choose a district inside the selected division.']);

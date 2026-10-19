@@ -87,6 +87,7 @@ class HomepageLaunchTest extends TestCase
             'email' => 'founder@example.com',
             'division' => 'Dhaka',
             'district' => 'Gazipur',
+            'facebook' => 'https://www.facebook.com/launchcheckcrafts',
             'password' => 'secret123',
             'password_confirmation' => 'secret123',
             'terms' => '1',

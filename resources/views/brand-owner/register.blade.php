@@ -5,11 +5,12 @@
 
 @section('page')
 @php
-    $input = 'mt-1.5 w-full rounded-xl border bg-white px-3.5 py-3 text-base focus:border-leaf sm:text-[15px] focus:outline-none focus:ring-2 focus:ring-leaf/20';
+    // 16px on phones so iOS Safari doesn't zoom into each field.
+    $input = 'mt-1.5 w-full rounded-xl border bg-white px-3.5 py-3 text-base focus:border-leaf focus:outline-none focus:ring-2 focus:ring-leaf/20 sm:text-[15px]';
     $ok = 'border-hair';
     $bad = 'border-rose-400';
     $label = 'text-sm font-bold text-night';
-    $optionalOpen = old('sub_category') || old('description') || old('website') || old('facebook');
+    $optionalOpen = old('sub_category') || old('description') || old('website') || old('instagram') || $errors->hasAny(['website', 'instagram']);
 @endphp
 <script type="application/json" id="bdLocations">@json($locations)</script>
 
@@ -102,6 +103,14 @@
                 </select>
                 @error('district')<p class="mt-1 text-xs font-semibold text-rose-600">{{ $message }}</p>@enderror
             </label>
+            <label class="block sm:col-span-2">
+                <span class="{{ $label }}">Facebook Page link <span class="text-rose-600">*</span></span>
+                <input type="text" name="facebook" value="{{ old('facebook') }}" required maxlength="255" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false"
+                       pattern="{{ \App\Rules\FacebookPageUrl::HTML_PATTERN }}" title="Your business’s Facebook Page link, e.g. https://www.facebook.com/yourbrand"
+                       placeholder="https://www.facebook.com/yourbrand" aria-describedby="facebookHelp" class="{{ $input }} {{ $errors->has('facebook') ? $bad : $ok }}">
+                <span id="facebookHelp" class="mt-1 block text-[11.5px] leading-snug text-slate2">Shown on your profile so customers can find your page. Adding a link doesn’t prove you run the page; our team reviews every registration.</span>
+                @error('facebook')<p class="mt-1 text-xs font-semibold text-rose-600">{{ $message }}</p>@enderror
+            </label>
         </div>
 
         <h2 class="mt-8 text-lg font-extrabold">Owner / founder</h2>
@@ -152,10 +161,10 @@
                     <input type="url" name="website" value="{{ old('website') }}" placeholder="https://" class="{{ $input }} {{ $errors->has('website') ? $bad : $ok }}">
                     @error('website')<p class="mt-1 text-xs font-semibold text-rose-600">{{ $message }}</p>@enderror
                 </label>
-                <label class="block sm:col-span-2">
-                    <span class="{{ $label }}">Facebook page</span>
-                    <input type="url" name="facebook" value="{{ old('facebook') }}" placeholder="https://facebook.com/yourbrand" class="{{ $input }} {{ $errors->has('facebook') ? $bad : $ok }}">
-                    @error('facebook')<p class="mt-1 text-xs font-semibold text-rose-600">{{ $message }}</p>@enderror
+                <label class="block">
+                    <span class="{{ $label }}">Instagram</span>
+                    <input type="url" name="instagram" value="{{ old('instagram') }}" maxlength="255" placeholder="https://instagram.com/yourbrand" class="{{ $input }} {{ $errors->has('instagram') ? $bad : $ok }}">
+                    @error('instagram')<p class="mt-1 text-xs font-semibold text-rose-600">{{ $message }}</p>@enderror
                 </label>
                 <label class="block sm:col-span-2">
                     <span class="{{ $label }}">Business description</span>
