@@ -58,6 +58,10 @@
         @yield('page')
     </main>
 
+    {{-- A page may supply its own footer (e.g. the registration page uses the homepage-style x-plat.site-footer). --}}
+    @hasSection('footer')
+        @yield('footer')
+    @else
     <footer class="border-t border-hair bg-white">
         <div class="{{ $wrap }} flex flex-col gap-4 py-8 text-sm text-slate2 sm:flex-row sm:items-center sm:justify-between">
             <p class="flex items-center gap-2"><x-ui.brand-mark size="sm" /> <span><b class="text-night">MetaSoft BD</b> · Bangladesh’s Entrepreneur & Brand Growth Network</span></p>
@@ -69,5 +73,6 @@
             </nav>
         </div>
     </footer>
+    @endif
 </div>
 @endsection
