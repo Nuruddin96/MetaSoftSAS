@@ -1,5 +1,15 @@
 @php
     $loop6 = ['Brand joins', 'Creates profile', 'Gets nominated', 'Shares link', 'Audience visits', 'Discovers more brands'];
+    // What free registration gives, stated only as strongly as the platform delivers it:
+    // no certificate, messaging or guaranteed reach is offered because none exists.
+    $benefits = [
+        ['store', 'Your business profile', 'A public brand page with your logo, category, location and story: your business identity online.'],
+        ['link', 'A link you can share', 'One permanent profile link for WhatsApp, Facebook, TikTok or your visiting card.'],
+        ['search', 'Findable on Google', 'Approved profiles are public pages search engines can index. Google decides if and where they appear.'],
+        ['eye', 'More visibility', 'People browsing the MetaSoft BD directory can discover your brand alongside others.'],
+        ['users', 'Meet other businesses', 'Find brands and entrepreneurs in the directory and reach them through the contact details they publish.'],
+        ['trophy', 'Free award entry', 'Take part in eligible MetaSoft BD award programmes at no cost, under each programme’s rules.'],
+    ];
 @endphp
 <section id="join" class="scroll-mt-20 bg-white py-12 sm:py-16 lg:py-20">
     <div class="{{ $wrap }}">
@@ -9,12 +19,7 @@
                 <span class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[13px] font-semibold"><span class="h-2 w-2 rounded-full bg-gold"></span> Free for every brand</span>
                 <h2 class="mt-4 text-[24px] font-extrabold leading-[1.15] tracking-tight sm:text-[32px] lg:text-[36px]">List your brand. Get discovered.</h2>
                 <p class="mt-2 font-body text-base font-medium text-sky-200 sm:text-lg" lang="bn">আপনার ব্র্যান্ডের স্থায়ী ডিজিটাল পরিচয় তৈরি করুন</p>
-                <p class="mt-3 max-w-lg text-[14.5px] leading-relaxed text-white/75 sm:text-base">A free profile, award nominations and new customers.</p>
-                <ul class="mt-5 space-y-2.5">
-                    @foreach(['Your own permanent profile link', 'Free award nominations', 'Share kits for WhatsApp, Facebook & TikTok', 'Customers across Bangladesh'] as $item)
-                        <li class="flex items-start gap-3 text-[15px]"><span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gold text-night"><x-plat.icon name="check" class="w-3 h-3" stroke="3.2" /></span>{{ $item }}</li>
-                    @endforeach
-                </ul>
+                <p class="mt-3 max-w-lg text-[14.5px] leading-relaxed text-white/75 sm:text-base">A free business profile, a link to share, free award entry and, after our review, the blue Verified badge. <a href="#join-benefits" class="font-semibold text-white underline decoration-white/40 underline-offset-4 hover:decoration-white">See what you get</a></p>
                 <div class="mt-6 flex flex-col gap-3 sm:flex-row">
                     <a href="{{ $joinUrl }}" class="inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-6 py-3.5 text-[15px] font-bold text-night hover:brightness-105">
                         <x-plat.icon name="user-plus" class="w-[18px] h-[18px]" /> List your brand free
@@ -46,6 +51,25 @@
                         <li class="flex items-center gap-2 rounded-xl bg-white/10 p-2.5 text-[13px] font-semibold"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-leaf text-[11px] font-extrabold">{{ $i + 1 }}</span>{{ $step }}</li>
                     @endforeach
                 </ol>
+            </div>
+
+            {{-- Free registration benefits: what each one means for the entrepreneur. --}}
+            <div id="join-benefits" class="relative scroll-mt-24 lg:col-span-2">
+                <h3 class="text-[13px] font-extrabold uppercase tracking-[0.14em] text-gold">What free registration gives you</h3>
+                <ul class="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-3">
+                    @foreach($benefits as [$icon, $title, $text])
+                        <li class="flex gap-3 rounded-2xl bg-white/[0.07] p-3.5 ring-1 ring-white/12 sm:p-4">
+                            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-gold ring-1 ring-white/15"><x-plat.icon :name="$icon" class="w-[18px] h-[18px]" /></span>
+                            <span class="min-w-0"><span class="block text-[15px] font-extrabold leading-snug">{{ $title }}</span><span class="mt-0.5 block text-[13.5px] leading-relaxed text-white/75">{{ $text }}</span></span>
+                        </li>
+                    @endforeach
+                    {{-- The badge is set only by the MetaSoft BD team on approved brands (Super Admin → Brands → Verification, audited); registration never grants it. --}}
+                    <li class="flex gap-3 rounded-2xl bg-white p-3.5 text-night ring-1 ring-white/20 sm:col-span-2 sm:p-4 lg:col-span-3 lg:items-center">
+                        <x-plat.verified size="w-9 h-9" class="mt-0.5 lg:mt-0" />
+                        <span class="min-w-0"><span class="block text-[15px] font-extrabold leading-snug">Blue Verified badge, after review</span><span class="mt-0.5 block text-[13.5px] leading-relaxed text-slate2">After your brand is approved, our team can review your business details. If they check out, the blue badge appears beside your brand name. It is never shown before that review.</span></span>
+                    </li>
+                </ul>
+                <p class="mt-3 text-[12.5px] text-white/60">Registration is free. We don’t promise search rankings, customers or sales.</p>
             </div>
         </div>
     </div>

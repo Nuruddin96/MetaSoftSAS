@@ -148,7 +148,8 @@ class AwardsHomepageTest extends TestCase
         $this->brand('Not Yet Approved', ['status' => 'pending']);
 
         $this->assertSame([['value' => '2', 'label' => 'Brand profiles', 'n' => 2]], app(HomepageContent::class)->stats());
-        $this->get('/')->assertOk()->assertSee('Brand profiles')->assertDontSee('Votes counted')->assertDontSee('1.2M');
+        // The hero now shows action tiles instead of counts; no invented figure appears anywhere.
+        $this->get('/')->assertOk()->assertDontSee('Votes counted')->assertDontSee('1.2M');
     }
 
     public function test_sample_brand_pages_yield_to_real_brands_and_the_sample_switch(): void
@@ -475,7 +476,7 @@ class AwardsHomepageTest extends TestCase
             ->assertDontSee('id="entrepreneurs"', false)->assertDontSee('href="#entrepreneurs"', false)
             ->assertDontSee('Sample nominees')->assertDontSee('>Sample</span>', false)
             ->assertDontSee('images/showcase/logos/', false)
-            ->assertSee('No voting campaign is open yet.')
+            ->assertSee('Nominee profiles appear during active voting campaigns.')
             // Real categories link to the filtered directory.
             ->assertSee(route('brands.index', ['category' => $real->category->slug]), false);
     }

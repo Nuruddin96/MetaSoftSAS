@@ -38,7 +38,7 @@
 
         @if(! $voting)
             <div class="mt-6 rounded-2xl border border-dashed border-hair bg-cloud px-6 py-8 text-center">
-                <p class="font-bold text-night">No voting campaign is open yet.</p>
+                <p class="font-bold text-night">Nominee profiles appear during active voting campaigns.</p>
                 <p class="mt-1 text-sm text-slate2">Approved brands can be nominated once an award campaign starts.</p>
                 <a href="{{ $joinUrl }}" class="mt-3 inline-flex text-sm font-bold text-leaf hover:underline">List your brand — free</a>
             </div>

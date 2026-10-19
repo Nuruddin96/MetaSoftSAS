@@ -97,6 +97,15 @@ $$('[data-countdown]').forEach((el) => {
 
 // ---- copy / share buttons ----
 $$('[data-copy]').forEach((b) => b.addEventListener('click', () => copyText(b.dataset.copy)));
+
+// ---- "Find Brands" hero tile: scroll to and focus the hero search ----
+$$('[data-focus]').forEach((a) => a.addEventListener('click', (e) => {
+    const field = $(a.dataset.focus);
+    if (!field) return;
+    e.preventDefault();
+    field.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    field.focus({ preventScroll: true });
+}));
 $$('[data-share]').forEach((b) => b.addEventListener('click', () => share(b.dataset.shareTitle || document.title, b.dataset.shareUrl || location.href)));
 
 // ---- entrepreneur profile dialog (brands have their own /brand/{slug} page) ----
