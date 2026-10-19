@@ -25,14 +25,19 @@ class HomepageTest extends TestCase
         PlatformSetting::flush();
     }
 
-    public function test_homepage_renders_every_platform_section(): void
+    public function test_homepage_renders_the_concept_c_sections_in_order(): void
     {
         $response = $this->get('/');
 
         $response->assertOk();
-        foreach (['id="how"', 'id="awards"', 'id="voting"', 'id="standards"', 'id="verified"', 'id="trending"', 'id="brands"', 'id="entrepreneurs"', 'id="recognition"', 'id="join"', 'id="automation"', 'id="sponsors"'] as $anchor) {
-            $response->assertSee($anchor, false);
+        // Concept C order: hero, photo strip, brands, verified, journey, consultancy, awards (+ #voting), join (+ #community).
+        $response->assertSeeInOrder(['<h1', 'id="momentsRow"', 'id="brands"', 'id="verified"', 'id="impact"', 'id="consultancy"', 'id="awards"', 'id="voting"', 'id="join"', 'id="community"', '<footer'], false);
+        // The pre-redesign sections are gone.
+        foreach (['id="how"', 'id="standards"', 'id="trending"', 'id="entrepreneurs"', 'id="recognition"', 'id="automation"', 'id="sponsors"', 'id="vote-now"'] as $anchor) {
+            $response->assertDontSee($anchor, false);
         }
+        // No certificate supplied in the test tree: the credentials section (and its menu link) stays hidden.
+        $response->assertDontSee('id="credentials"', false)->assertDontSee('href="#credentials"', false);
         $response->assertSee('building Bangladesh.');
     }
 
@@ -49,21 +54,21 @@ class HomepageTest extends TestCase
     {
         $home = $this->get('/')->assertOk();
 
-        $home->assertSee('The Verified badge')->assertSee('Each verified profile lists exactly what was reviewed', false);
+        $home->assertSee('The blue Verified badge')->assertSee('Each verified profile lists exactly what was reviewed', false);
         foreach (Brand::VERIFICATION_EVIDENCE as $label) {
             $home->assertSee($label);
         }
         // Voting copy must not overstate phone checks.
-        $home->assertSee('not verified by SMS or OTP', false)->assertSee('Numbers are not OTP-verified')
+        $home->assertSee('Numbers are not OTP-verified')
             ->assertDontSee('audited for fraud')->assertDontSee('audited public voting')->assertDontSee('Audited votes');
-        $home->assertSee('What Verified means')->assertSee(route('automation'), false)->assertSee(route('owner.register'), false);
+        $home->assertSee('Verified badge')->assertSee(route('automation'), false)->assertSee(route('owner.register'), false);
     }
 
     public function test_sample_cards_are_labelled_and_sample_nominees_show_no_vote_counts(): void
     {
         $home = $this->get('/')->assertOk();
 
-        $home->assertSee('>Sample</span>', false)->assertSee('Sample nominees')->assertDontSee('votes so far');
+        $home->assertSee('>Sample</span>', false)->assertDontSee('votes so far');
     }
 
     public function test_homepage_links_to_business_automation_and_existing_auth(): void
@@ -154,7 +159,6 @@ class HomepageTest extends TestCase
         }
         // Without platform tables there are no real counts, so the hero figures are hidden.
         $this->assertSame([], app(HomepageContent::class)->stats());
-        $home->assertSee('Not a ranking.');
     }
 
     public function test_no_voting_cues_or_unlabelled_demo_content_without_a_real_campaign(): void
@@ -165,9 +169,9 @@ class HomepageTest extends TestCase
             $home->assertDontSee($cue, false);
         }
         $home->assertSee('Voting not open yet')
-            ->assertSee('Example content')
-            ->assertSee('No partners have been announced yet.')
-            ->assertSee('Sample nominees');
+            ->assertSee('Nominee profiles appear during active voting campaigns.')
+            // The verified-badge illustration is labelled as an example, never a real brand.
+            ->assertSee('not a real brand');
         $this->assertFalse(app(HomepageContent::class)->votingOpen());
         $this->assertSame([], app(HomepageContent::class)->otherAwards('x'));
     }

@@ -1,19 +1,18 @@
 @php
-    $navLinks = [
+    // Concept C sections only; "About us" needs the credentials section, which shows once the certificate is supplied.
+    $navLinks = array_values(array_filter([
         ['Home', '#top', 'home'],
         ['Brands', '#brands', 'store'],
-        ['Entrepreneurs', '#entrepreneurs', 'users'],
-        ['Awards', '#awards', 'trophy'],
-        ['Voting', '#voting', 'vote'],
         ['Verified', '#verified', 'shield'],
-        ['Events', '#events', 'calendar'],
-        ['Media', '#stories', 'newspaper'],
-    ];
-    $navLinks = array_values(array_filter($navLinks, fn ($l) => ! in_array($l[1], $hiddenAnchors, true)));
+        ['Awards', '#awards', 'trophy'],
+        ['Community', '#community', 'users'],
+        $media['certificate'] ? ['About us', '#credentials', 'info'] : null,
+    ]));
+    $awardRulesUrl = ($award['live'] ?? false) ? $award['url'] : '#awards';
 @endphp
 
-{{-- Utility strip: award name + sample-preview notice. The pulsing dot, "Vote now" and LIVE badges need a server-confirmed open campaign ($votingOpen). --}}
-<div class="bg-night text-white">
+{{-- Utility strip (tablet/desktop only, so the phone header stays compact): award name + sample-preview notice. The pulsing dot and "Vote now" need a server-confirmed open campaign ($votingOpen). --}}
+<div class="hidden bg-night text-white sm:block">
     <div class="{{ $wrap }} flex items-center justify-between gap-4 py-2 text-xs">
         <a href="#awards" class="flex min-w-0 items-center gap-2 rounded hover:text-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold">
             @if($votingOpen)<span class="relative flex h-2 w-2 shrink-0"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-flag opacity-75"></span><span class="relative inline-flex h-2 w-2 rounded-full bg-flag"></span></span>@else<span class="h-2 w-2 shrink-0 rounded-full bg-gold"></span>@endif
@@ -24,8 +23,7 @@
             @if($preview)
                 <span class="hidden rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white/80 md:inline" title="Brands, people and numbers on this page are sample content.">Preview · sample data</span>
             @endif
-            <a href="#recognition" class="hidden text-white/70 hover:text-white md:inline">Award rules</a>
-            @unless(in_array('#sponsors', $hiddenAnchors, true))<a href="#sponsors" class="hidden text-white/70 hover:text-white md:inline">For sponsors</a>@endunless
+            <a href="{{ $awardRulesUrl }}" class="hidden text-white/70 hover:text-white md:inline">Award rules</a>
             <span class="font-body text-white/70" lang="bn">বাংলা + English</span>
         </div>
     </div>
@@ -33,11 +31,11 @@
 
 {{-- Main navigation --}}
 <header id="siteHeader" class="sticky top-0 z-40 border-b border-hair bg-white/90 backdrop-blur-md">
-    <div class="{{ $wrap }} flex h-16 items-center justify-between gap-4 lg:h-[72px]">
-        <a href="{{ url('/') }}" class="flex items-center gap-2.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+    <div class="{{ $wrap }} flex h-12 items-center justify-between gap-4 sm:h-16 lg:h-[72px]">
+        <a href="{{ url('/') }}" class="flex items-center gap-2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2 sm:gap-2.5">
             <x-ui.brand-mark />
             <span class="leading-none">
-                <span class="block text-[17px] font-extrabold tracking-tight text-night">MetaSoft BD</span>
+                <span class="block text-[16px] font-extrabold tracking-tight text-night sm:text-[17px]">MetaSoft BD</span>
                 <span class="mt-1 hidden whitespace-nowrap text-[9.5px] font-bold uppercase tracking-[0.16em] text-leaf sm:block lg:hidden xl:block">Brand & Entrepreneur Network</span>
             </span>
         </a>
@@ -47,7 +45,7 @@
                 <a href="{{ $href }}" data-nav="{{ ltrim($href, '#') }}"
                    class="relative flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-2 text-[14px] xl:px-2.5 xl:text-[14.5px] font-semibold text-slate2 transition hover:bg-cloud hover:text-night focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf aria-[current=true]:text-night">
                     {{ $label }}
-                    @if($label === 'Voting' && $votingOpen)<span class="rounded bg-flag px-1.5 py-px text-[9px] font-extrabold tracking-wide text-white">LIVE</span>@endif
+                    @if($label === 'Awards' && $votingOpen)<span class="rounded bg-flag px-1.5 py-px text-[9px] font-extrabold tracking-wide text-white">LIVE</span>@endif
                 </a>
             @endforeach
         </nav>
@@ -64,7 +62,7 @@
                 List your brand
             </a>
             <button type="button" id="menuOpen" aria-controls="mobileMenu" aria-expanded="false"
-                    class="flex h-10 w-10 items-center justify-center rounded-xl border border-hair text-night lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf">
+                    class="flex h-9 w-9 items-center justify-center rounded-xl border border-hair text-night sm:h-10 sm:w-10 lg:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf">
                 <x-plat.icon name="menu" class="w-5 h-5" /><span class="sr-only">Open menu</span>
             </button>
         </div>
@@ -91,7 +89,7 @@
                 @foreach($navLinks as [$label, $href, $icon])
                     <a href="{{ $href }}" data-close-menu class="flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] font-semibold text-night hover:bg-cloud">
                         <x-plat.icon :name="$icon" class="w-5 h-5 text-leaf" /> {{ $label }}
-                        @if($label === 'Voting' && $votingOpen)<span class="ml-auto rounded bg-flag px-1.5 py-px text-[10px] font-extrabold text-white">LIVE</span>@endif
+                        @if($label === 'Awards' && $votingOpen)<span class="ml-auto rounded bg-flag px-1.5 py-px text-[10px] font-extrabold text-white">LIVE</span>@endif
                     </a>
                 @endforeach
             </nav>
@@ -108,20 +106,21 @@
 </div>
 
 {{--
-    Phones and tablets: two actions always one tap away. WhatsApp opens the
-    configured MetaSoft BD support number (payment.support_whatsapp, the same
-    one the footer uses); without one, only the profile button shows. The
-    page container's bottom padding (central/home.blade.php) keeps the bar
-    off the content.
+    Phones and tablets: two compact actions always one tap away. The WhatsApp
+    button (icon only, labelled for screen readers) opens the configured
+    MetaSoft BD support number (payment.support_whatsapp, the same one the
+    footer uses); without one, only the profile button shows. The page
+    container's bottom padding (central/home.blade.php) keeps the bar off
+    the content.
 --}}
-<div class="fixed inset-x-0 bottom-0 z-40 border-t border-hair bg-white/95 pb-[max(10px,env(safe-area-inset-bottom))] pl-[max(16px,env(safe-area-inset-left))] pr-[max(16px,env(safe-area-inset-right))] pt-2.5 backdrop-blur-md lg:hidden" data-mobile-cta>
+<div class="fixed inset-x-0 bottom-0 z-40 border-t border-hair bg-white/95 pb-[max(6px,env(safe-area-inset-bottom))] pl-[max(12px,env(safe-area-inset-left))] pr-[max(12px,env(safe-area-inset-right))] pt-1.5 backdrop-blur-md lg:hidden" data-mobile-cta>
     <div class="mx-auto flex max-w-xl gap-2">
-        <a href="{{ $joinUrl }}" class="inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-night px-2.5 text-[14px] font-extrabold text-white min-[380px]:gap-2 min-[380px]:px-3 min-[380px]:text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
-            <x-plat.icon name="user-plus" class="w-[18px] h-[18px] shrink-0 text-gold" /> <span class="truncate">Create Free Profile</span>
+        <a href="{{ $joinUrl }}" class="inline-flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-night px-3 text-[14px] font-extrabold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf focus-visible:ring-offset-2">
+            <x-plat.icon name="user-plus" class="w-4 h-4 shrink-0 text-gold" /> <span class="truncate">Create Free Business Profile</span>
         </a>
         @if($whatsapp)
-            <a href="{{ $wa('Hi MetaSoft BD, I would like to create a free business profile.') }}" target="_blank" rel="noopener" class="inline-flex h-12 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#25D366] px-3 text-[14px] font-extrabold text-white min-[380px]:gap-2 min-[380px]:px-4 min-[380px]:text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] focus-visible:ring-offset-2">
-                @include('partials.icon', ['platform' => 'whatsapp', 'class' => 'w-5 h-5 shrink-0']) WhatsApp
+            <a href="{{ $wa('Hi MetaSoft BD, I would like to create a free business profile.') }}" target="_blank" rel="noopener" aria-label="Chat with MetaSoft BD on WhatsApp" title="WhatsApp" class="inline-flex h-10 w-12 shrink-0 items-center justify-center rounded-xl bg-[#25D366] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] focus-visible:ring-offset-2">
+                @include('partials.icon', ['platform' => 'whatsapp', 'class' => 'w-5 h-5'])
             </a>
         @endif
     </div>

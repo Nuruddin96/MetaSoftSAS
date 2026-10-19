@@ -118,7 +118,8 @@ class AwardsHomepageTest extends TestCase
         $this->assertTrue(app(HomepageContent::class)->votingOpen());
         $this->get('/')->assertOk()
             ->assertSee('Vote now')->assertSee('>LIVE<', false)->assertSee('data-countdown', false)
-            ->assertSee(route('vote.show', $brand->slug), false);
+            ->assertSee(route('vote.show', $brand->slug), false)
+            ->assertSee('Numbers are not OTP-verified');
 
         foreach ([['status' => 'paused'], ['status' => 'ended'], ['starts_at' => now()->addDay()], ['ends_at' => now()->subMinute()]] as $state) {
             $campaign->update(array_merge(['status' => 'active', 'starts_at' => null, 'ends_at' => null], $state));
@@ -393,8 +394,8 @@ class AwardsHomepageTest extends TestCase
 
         $home = $this->get('/')->assertOk();
         $html = $home->getContent();
-        // Our Brands comes right after the hero and links to the directory.
-        $this->assertLessThan(strpos($html, 'id="vote-now"'), strpos($html, 'id="brands"'));
+        // Our Brands comes right after the hero (and its photo strip) and links to the directory.
+        $this->assertLessThan(strpos($html, 'id="verified"'), strpos($html, 'id="brands"'));
         $this->assertLessThan(strpos($html, 'id="brands"'), strpos($html, '<h1'));
         $home->assertSee('View All Brands')->assertSee(route('brands.index'), false)->assertSee(route('brands.show', $verified->slug), false);
 
@@ -410,9 +411,9 @@ class AwardsHomepageTest extends TestCase
         $this->campaign($award, 'program', [$brand], 'Peoples Choice');
 
         $this->get('/')->assertOk()
-            ->assertSee('Vote for Your Favorite Brand')
+            ->assertSee('Current nominees')
             ->assertSee('data-vote-finder', false)
-            ->assertSee('data-url="'.route('vote.show', $brand->slug).'"', false)
+            ->assertSee('href="'.route('vote.show', $brand->slug).'"', false)
             ->assertSee(route('voting.campaign', 'peoples-choice'), false);
     }
 
@@ -461,8 +462,7 @@ class AwardsHomepageTest extends TestCase
             ->assertSee(route('awards.show', $award->slug), false)
             ->assertDontSee('id="events"', false)->assertDontSee('href="#events"', false)
             // Stories need real published content, which doesn't exist yet — the switch alone doesn't show examples.
-            ->assertDontSee('id="stories"', false)
-            ->assertSee('id="sponsors"', false);
+            ->assertDontSee('id="stories"', false);
     }
 
     public function test_sample_switch_off_leaves_only_real_content_on_the_homepage(): void
@@ -476,9 +476,9 @@ class AwardsHomepageTest extends TestCase
             ->assertDontSee('id="entrepreneurs"', false)->assertDontSee('href="#entrepreneurs"', false)
             ->assertDontSee('Sample nominees')->assertDontSee('>Sample</span>', false)
             ->assertDontSee('images/showcase/logos/', false)
-            ->assertSee('Nominee profiles appear during active voting campaigns.')
-            // Real categories link to the filtered directory.
-            ->assertSee(route('brands.index', ['category' => $real->category->slug]), false);
+            ->assertSee('Nominee profiles appear during active voting campaigns.');
+        // Real categories stay available as directory filters (the homepage no longer lists categories).
+        $this->get(route('brands.index'))->assertOk()->assertSee('value="'.$real->category->slug.'"', false);
     }
 
     public function test_brand_owner_cannot_reach_homepage_or_award_admin(): void

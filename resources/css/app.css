@@ -410,6 +410,9 @@
 
 .bd-paused * { animation-play-state: paused !important; }
 
+/* Desktop: Concept C keeps the map a little smaller so the hero stays compact. */
+@media (min-width: 1024px) { .bd-stage { width: min(100%, 360px); } }
+
 /*
  * Homepage hero copy (central/home/hero.blade.php). The headline's size
  * follows the text column (container units) so the highlight line stays on
@@ -428,6 +431,20 @@
 }
 .glass-tile:hover { background: linear-gradient(135deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .08)); border-color: rgba(255, 255, 255, .3); }
 .glass-tile:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; }
+
+/* Section headings that fit one line: size follows the column width (cqi); --k = the text's width in em. */
+.fit-line { container-type: inline-size; }
+.fit-line-t { font-size: clamp(var(--min, 16px), calc(100cqi / var(--k)), var(--max, 28px)); text-wrap: balance; }
+
+/* Slow continuous photo carousels ([data-marquee], resources/js/home.js); the edges fade out. */
+[data-marquee] {
+    overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; cursor: grab;
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+}
+[data-marquee]::-webkit-scrollbar { display: none; }
+[data-marquee].is-dragging { cursor: grabbing; user-select: none; }
+[data-marquee] img { -webkit-user-drag: none; }
 
 @media (max-width: 1023.98px) {
     .bd-stage { width: min(100%, 360px); }

@@ -280,6 +280,101 @@ if (network && 'IntersectionObserver' in window) {
     new IntersectionObserver(([en]) => network.classList.toggle('bd-paused', !en.isIntersecting)).observe(network);
 }
 
+// ---- slow continuous photo carousels ([data-marquee="px/s"]) ----
+// The row scrolls natively (touch, trackpad, wheel) and is advanced by script. Its items are repeated
+// as aria-hidden + inert copies until the loop is seamless. Holding, dragging, hovering or focusing
+// pauses it; it eases back in after release. Nothing moves under prefers-reduced-motion.
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+$$('[data-marquee]').forEach((row) => {
+    const items = [...row.children];
+    const speed = parseFloat(row.dataset.marquee) || 14;
+    const ctrl = $(`[data-marquee-controls="${row.id}"]`);
+    const pauseBtn = ctrl && $('[data-mq="pause"]', ctrl);
+    let set = 0, pos = 0, v = 0, last = 0, idleUntil = 0, held = false, hover = false, focus = false, paused = false, seen = true, drag = null;
+
+    const copy = () => items.forEach((it) => {
+        const c = it.cloneNode(true);
+        c.setAttribute('aria-hidden', 'true');
+        c.inert = true;
+        c.removeAttribute('id');
+        $$('[id]', c).forEach((n) => n.removeAttribute('id'));
+        row.appendChild(c);
+    });
+    const fill = () => {
+        if (row.children.length === items.length) copy();
+        set = row.children[items.length].offsetLeft - items[0].offsetLeft;
+        while (row.scrollWidth - set < row.clientWidth + 4) copy();
+    };
+    const wrap = () => { if (pos >= set) pos -= set; else if (pos < 0) pos += set; };
+    const rest = (ms) => { idleUntil = Math.max(idleUntil, performance.now() + ms); };
+    if (!items.length) return;
+    fill();
+    addEventListener('resize', fill);
+
+    row.addEventListener('scroll', () => {
+        if (Math.abs(row.scrollLeft - pos) < 2) return; // our own step
+        pos = row.scrollLeft;
+        rest(1400);
+        if (pos >= set) { pos -= set; row.scrollLeft = pos; } else if (pos <= 0) { pos += set; row.scrollLeft = pos; }
+    }, { passive: true });
+    row.addEventListener('pointerdown', (e) => {
+        held = true; v = 0;
+        if (e.pointerType === 'mouse' && e.button === 0) drag = { x: e.clientX, s: row.scrollLeft, moved: false };
+    });
+    row.addEventListener('pointermove', (e) => {
+        if (!drag) return;
+        const dx = e.clientX - drag.x;
+        if (!drag.moved && Math.abs(dx) > 4) { drag.moved = true; row.classList.add('is-dragging'); row.setPointerCapture(e.pointerId); }
+        if (drag.moved) { pos = drag.s - dx; wrap(); row.scrollLeft = pos; }
+    });
+    const release = () => {
+        held = false;
+        rest(1200);
+        if (!drag) return;
+        const moved = drag.moved;
+        drag = null;
+        row.classList.remove('is-dragging');
+        if (moved) row.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); }, { capture: true, once: true });
+    };
+    ['pointerup', 'pointercancel'].forEach((t) => row.addEventListener(t, release));
+    row.addEventListener('touchstart', () => { held = true; }, { passive: true });
+    row.addEventListener('touchend', release, { passive: true });
+    row.addEventListener('wheel', () => rest(1400), { passive: true });
+    row.addEventListener('mouseenter', () => { hover = true; });
+    row.addEventListener('mouseleave', () => { hover = false; if (drag) release(); });
+    row.addEventListener('focusin', () => { focus = true; });
+    row.addEventListener('focusout', () => { focus = false; rest(800); });
+    if ('IntersectionObserver' in window) new IntersectionObserver(([en]) => { seen = en.isIntersecting; }).observe(row);
+
+    if (ctrl) {
+        $$('[data-mq="prev"],[data-mq="next"]', ctrl).forEach((b) => b.addEventListener('click', () => {
+            const dir = b.dataset.mq === 'next' ? 1 : -1;
+            const step = items[0].offsetWidth + (parseFloat(getComputedStyle(row).columnGap) || 0);
+            if (dir < 0 && pos - step < 0) { pos += set; row.scrollLeft = pos; }
+            if (dir > 0 && pos + step > row.scrollWidth - row.clientWidth) { pos -= set; row.scrollLeft = pos; }
+            rest(2600);
+            row.scrollBy({ left: dir * step, behavior: reduceMotion.matches ? 'auto' : 'smooth' });
+        }));
+        pauseBtn?.addEventListener('click', () => {
+            paused = !paused;
+            pauseBtn.setAttribute('aria-pressed', paused);
+            $('[data-label]', pauseBtn).textContent = paused ? 'Play' : 'Pause';
+        });
+    }
+    const sync = () => { if (pauseBtn) pauseBtn.hidden = reduceMotion.matches; };
+    sync();
+    reduceMotion.addEventListener?.('change', sync);
+
+    requestAnimationFrame(function tick(t) {
+        const dt = last ? Math.min(0.05, (t - last) / 1000) : 0;
+        last = t;
+        const want = (held || hover || focus || paused || !seen || reduceMotion.matches || t < idleUntil || document.hidden) ? 0 : speed;
+        v += (want - v) * Math.min(1, dt * (want > v ? 0.7 : 8)); // eases in over ~2s, stops almost at once
+        if (v > 0.05 && !held) { pos += v * dt; wrap(); row.scrollLeft = pos; }
+        requestAnimationFrame(tick);
+    });
+});
+
 // ---- land on the requested section (e.g. /?q=Dhaka#results) ----
 // Smooth scrolling + late web-font layout shifts can leave the browser's
 // own hash jump short of the target, so re-apply it once layout settles.

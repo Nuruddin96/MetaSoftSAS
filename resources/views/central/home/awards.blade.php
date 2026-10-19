@@ -1,141 +1,107 @@
-<section id="awards" class="scroll-mt-20 bg-cream py-12 sm:py-16 lg:py-20">
+{{--
+    Concept C "Awards & recognition" on a navy stage. Real data only:
+    past recipients appear once their portraits are supplied (HomeMedia);
+    "Current nominees" uses HomepageContent::voteEntry() and only links into
+    the existing /vote/{brand} and /voting/{campaign} pages, which re-check
+    phase, category, vote limit and anti-abuse rules server-side — no vote
+    button unless the server says voting is open. The featured award is
+    $award (a real award when one exists, else the configured programme).
+--}}
+@php
+    $e = $voteEntry;
+    $open = $e && $e['phase'] === 'open';
+    $awardUrl = ($award['live'] ?? false) ? $award['url'] : null;
+    $categoryCount = count(config('platform.award_categories'));
+@endphp
+<section id="awards" class="relative isolate scroll-mt-20 overflow-hidden bg-night py-9 text-white sm:py-14" aria-labelledby="awardsTitle">
+    <div aria-hidden="true" class="absolute inset-0 -z-10 bg-[linear-gradient(160deg,#052B4C,#0B2545_60%,#073B66)]"></div>
     <div class="{{ $wrap }}">
-        <x-plat.section-head eyebrow="National awards" bn="অ্যাওয়ার্ড"
-            title="Fair recognition, clear rules."
-            sub="Free nominations, rule-based public voting and jury review."
-            link="Award rules" href="#recognition" />
+        <p class="flex items-center gap-2 text-[11.5px] font-extrabold uppercase tracking-[0.16em] text-gold"><span class="h-px w-6 bg-gold"></span> Awards & recognition</p>
+        <div class="fit-line"><h2 id="awardsTitle" class="fit-line-t mt-1.5 font-extrabold leading-tight tracking-tight sm:whitespace-nowrap" style="--k: 23.3; --min: 17px; --max: 23px">Celebrating entrepreneurs who build Bangladesh</h2></div>
 
-        {{-- "Voting open", the countdown and "Vote now" appear only when the server confirms an open campaign ($award['voting_open'], HomepageContent::openCampaigns). --}}
-        @php $awardVoting = ($award['voting_open'] ?? false) && $votingOpen; @endphp
-        <div class="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
-            {{-- Featured award --}}
-            <article class="relative min-w-0 overflow-hidden rounded-3xl bg-[linear-gradient(140deg,#052B4C,#0E528C)] p-5 text-white sm:p-9">
-                <span aria-hidden="true" class="absolute -right-16 -top-16 h-64 w-64 rounded-full border-[28px] border-gold/10"></span>
-                <div class="relative flex items-start justify-between gap-4">
-                    <div class="flex flex-wrap gap-2">
-                        <span @class(['inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold', 'bg-flag' => $awardVoting, 'bg-white/15' => ! $awardVoting])><span @class(['h-1.5 w-1.5 rounded-full bg-white', 'animate-pulse' => $awardVoting])></span>{{ $award['status'] }}</span>
-                        <span class="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold">{{ $award['edition'] }}</span>
-                    </div>
-                    <span class="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold to-golddk shadow-lg shadow-black/30"><x-plat.icon name="trophy" class="w-7 h-7" /></span>
-                </div>
-                @php
-                    // Phones: exactly two balanced lines, split at the word break nearest the middle and
-                    // sized to the viewport (card content width is 100vw − 72px) so neither line wraps or clips.
-                    $words = explode(' ', $award['title']);
-                    $cut = 1;
-                    foreach (range(1, max(1, count($words) - 1)) as $i) {
-                        if (abs(mb_strlen(implode(' ', array_slice($words, 0, $i))) - mb_strlen($award['title']) / 2) < abs(mb_strlen(implode(' ', array_slice($words, 0, $cut))) - mb_strlen($award['title']) / 2)) {
-                            $cut = $i;
-                        }
-                    }
-                    $titleLines = array_filter([implode(' ', array_slice($words, 0, $cut)), implode(' ', array_slice($words, $cut))]);
-                    $fit = round(max(array_map('mb_strlen', $titleLines)) * 0.62, 1);
-                @endphp
-                <h3 class="relative mt-4 max-w-lg text-[length:min(26px,calc((100vw_-_72px)/var(--fit)))] font-extrabold leading-[1.2] tracking-tight sm:mt-5 sm:text-[34px] sm:leading-[1.15]" style="--fit: {{ $fit }}">
-                    @foreach($titleLines as $line)<span class="block whitespace-nowrap sm:inline sm:whitespace-normal">{{ $line }}</span>@if(! $loop->last) @endif @endforeach
-                </h3>
-                <p class="mt-2 font-body text-[17px] font-medium text-gold" lang="bn">{{ $award['bn'] }}</p>
-
-                {{-- Real counts for a live award; the sample award shows only its configured category count. --}}
-                @if($award['stats'])
-                <dl class="mt-6 flex w-full overflow-hidden rounded-2xl border border-white/10 sm:w-fit">
-                    @foreach($award['stats'] as $s)
-                        <div class="min-w-0 flex-1 border-r border-white/10 px-3 py-3 last:border-r-0 sm:min-w-[120px] sm:px-4 sm:py-3.5">
-                            <dd class="text-xl font-extrabold sm:text-2xl">{{ $s['value'] }}</dd>
-                            <dt class="text-xs text-white/60">{{ $s['label'] }}</dt>
-                        </div>
-                    @endforeach
-                </dl>
-                @endif
-
-                @if($award['closes_label'])
-                <div class="mt-6 flex flex-wrap items-center gap-x-5 gap-y-3">
-                    <div>
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/55">{{ $award['closes_title'] }}</p>
-                        <p class="font-bold">{{ $award['closes_label'] }}</p>
-                    </div>
-                    @if($award['closes_at'])
-                        <div class="flex gap-2" data-countdown="{{ $award['closes_at'] }}" aria-label="Time left">
-                            @foreach(['days', 'hrs', 'min', 'sec'] as $unit)
-                                <div class="w-12 rounded-xl bg-white/[0.08] py-2 text-center sm:w-14">
-                                    <span class="block text-xl font-extrabold tabular-nums" data-unit="{{ $unit }}">--</span>
-                                    <span class="text-[10px] text-white/55">{{ $unit }}</span>
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-                @endif
-
-                <ol class="mt-7 grid grid-cols-2 gap-3 sm:flex sm:items-center sm:gap-2" aria-label="Award process">
-                    @foreach($award['steps'] as $i => $step)
-                        <li class="flex items-center gap-2">
-                            <span @class(['flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold',
-                                'bg-emerald-500' => $step['state'] === 'done',
-                                'bg-gold text-night ring-4 ring-gold/25' => $step['state'] === 'current',
-                                'bg-white/10' => $step['state'] === 'next'])>
-                                @if($step['state'] === 'done')<x-plat.icon name="check" class="w-3.5 h-3.5" stroke="3" />@else{{ $i + 1 }}@endif
-                            </span>
-                            <span class="leading-tight"><span class="block text-[13px] font-bold">{{ $step['label'] }}</span><span class="block text-[11px] text-white/55">{{ $step['meta'] }}</span></span>
-                            @if(! $loop->last)<span class="ml-1 hidden h-px w-6 bg-white/25 sm:block"></span>@endif
-                        </li>
-                    @endforeach
-                </ol>
-
-                <div class="mt-7 flex flex-col gap-3 sm:flex-row">
-                    @if($awardVoting)
-                        <a href="#voting" class="inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-6 py-3 text-[15px] font-bold text-night hover:brightness-105">Vote now <x-plat.icon name="arrow-right" class="w-4 h-4" /></a>
-                    @else
-                        <a href="#join" class="inline-flex items-center justify-center gap-2 rounded-xl bg-gold px-6 py-3 text-[15px] font-bold text-night hover:brightness-105">List your brand free <x-plat.icon name="arrow-right" class="w-4 h-4" /></a>
-                    @endif
-                    <a href="{{ ($award['live'] ?? false) ? $award['url'] : '#recognition' }}" class="inline-flex items-center justify-center rounded-xl border border-white/30 px-6 py-3 text-[15px] font-bold hover:bg-white/10">View categories & rules</a>
-                </div>
-            </article>
-
-            {{-- Other real public awards (none are invented); with none, the configured category list fills the column. --}}
-            @if($otherAwards)
-            <div class="flex flex-col gap-4">
-                @foreach($otherAwards as $a)
-                    @php $tone = ['voting' => 'bg-rose-50 text-rose-700', 'nominate' => 'bg-mint text-leafdk', 'jury' => 'bg-indigo-50 text-indigo-700', 'info' => 'bg-cloud text-slate2'][$a['state']]; @endphp
-                    <article class="flex flex-1 items-center gap-4 rounded-2xl border border-hair bg-white p-5">
-                        <x-plat.logo :initials="$a['initials']" :from="$a['from']" :to="$a['to']" :size="54" :src="$a['logo'] ?? null" :alt="$a['title'].' emblem'" />
-                        <div class="min-w-0 flex-1">
-                            <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold {{ $tone }}"><span class="h-1.5 w-1.5 rounded-full bg-current"></span>{{ $a['status'] }}</span>
-                            <h3 class="mt-1.5 text-base font-bold leading-snug">{{ $a['title'] }}</h3>
-                            <p class="mt-0.5 text-[13px] text-slate2">{{ $a['category'] }}@if($a['when']) · {{ $a['when'] }}@endif</p>
-                        </div>
-                        <a href="{{ $a['url'] }}" class="hidden shrink-0 rounded-lg border border-hair px-3 py-2 text-[13px] font-bold hover:border-leaf hover:text-leaf sm:inline-flex">
-                            {{ ['voting' => 'Vote', 'nominate' => 'Nominate', 'jury' => 'Follow', 'info' => 'View'][$a['state']] }}
-                        </a>
-                    </article>
-                @endforeach
-            </div>
-            @else
-                {{-- No other real awards yet: show the programme's configured categories (config('platform.award_categories')). --}}
-                @php $cats = config('platform.award_categories'); @endphp
-                <div class="flex min-w-0 flex-col rounded-3xl border border-hair bg-white p-5 sm:p-6">
-                    <p class="text-[11px] font-extrabold uppercase tracking-[0.14em] text-leaf">Award categories</p>
-                    <h3 class="mt-1.5 text-lg font-extrabold tracking-tight">{{ count($cats) }} categories, two awards each</h3>
-                    <p class="mt-1 text-[13.5px] text-slate2">People’s Choice and Jury Choice in every category.</p>
-                    <ul class="mt-4 flex flex-wrap gap-2">
-                        @foreach(array_slice($cats, 0, 12) as $c)
-                            <li class="rounded-full bg-cloud px-3 py-1.5 text-[12.5px] font-semibold text-night">{{ $c }}</li>
-                        @endforeach
-                        @if(count($cats) > 12)<li class="rounded-full border border-dashed border-hair px-3 py-1.5 text-[12.5px] font-semibold text-slate2">+{{ count($cats) - 12 }} more</li>@endif
-                    </ul>
-                    <a href="#join" class="mt-auto inline-flex items-center gap-1.5 pt-5 text-sm font-bold text-leaf hover:underline">Nominate your brand free <x-plat.icon name="arrow-right" class="w-4 h-4" /></a>
-                </div>
-            @endif
-        </div>
-
-        {{-- One national stage: every category is judged centrally, under one set of rules. --}}
-        <div class="mt-5 flex items-center gap-4 rounded-2xl border border-hair bg-white p-4 sm:p-5">
-            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold to-golddk text-night"><x-plat.icon name="trophy" class="w-5 h-5" /></span>
+        <div class="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-6">
             <div class="min-w-0">
-                <h3 class="text-lg font-extrabold tracking-tight">One Nation. One Stage.</h3>
-                <p class="text-sm text-slate2">Brands compete nationally under one set of rules.</p>
+                <div class="mb-2.5 flex items-center justify-between gap-3">
+                    <p class="text-[12px] font-extrabold uppercase tracking-[0.12em] text-white/70">Past recipients</p>
+                    @if($media['recipients'])@include('central.home.marquee-controls', ['id' => 'recipientsRow', 'dark' => true, 'compact' => true])@endif
+                </div>
+                @if($media['recipients'])
+                    <div id="recipientsRow" data-marquee="12" class="-mx-4 flex gap-3 px-4 sm:mx-0 sm:px-0" aria-label="Past award recipients">
+                        @foreach($media['recipients'] as $r)
+                            <figure class="w-[40vw] max-w-[184px] shrink-0 overflow-hidden rounded-xl bg-white/[0.06] ring-1 ring-white/12 sm:w-[184px] sm:max-w-none">
+                                <div class="relative">@include('central.home.photo', ['p' => ['src' => $r['src'], 'alt' => $r['caption'], 'portrait' => true], 'ratio' => '4/5', 'class' => 'rounded-none'])<span class="absolute bottom-1.5 left-1.5 rounded bg-gold px-1.5 text-[9.5px] font-extrabold uppercase leading-4 text-night">Past recipient</span></div>
+                                <figcaption class="p-2.5 text-[13px] font-bold leading-snug">{{ $r['caption'] }}</figcaption>
+                            </figure>
+                        @endforeach
+                    </div>
+                @else
+                    <div class="flex items-center gap-3 rounded-2xl border border-dashed border-white/20 bg-white/[0.04] p-4 sm:p-5">
+                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-gold"><x-plat.icon name="award" class="w-5 h-5" /></span>
+                        <p class="text-[14px] leading-relaxed text-white/80">Award recipients will be featured here, each linked to their brand profile.</p>
+                    </div>
+                @endif
+
+            </div>
+
+            <div class="grid content-start gap-3">
+                {{-- #voting kept for links shared before the redesign. --}}
+                <div id="voting" class="scroll-mt-24 rounded-2xl border border-white/12 bg-white/[0.05] p-4 sm:p-5">
+                    <p class="flex flex-wrap items-center gap-2 text-[12px] font-extrabold uppercase tracking-[0.12em] text-white/70">
+                        Current nominees
+                        @if($open)<span class="rounded bg-flag px-1.5 py-px text-[10px] font-extrabold tracking-wide text-white">LIVE</span>@endif
+                        @if($e)<span class="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold normal-case tracking-normal text-white/85">{{ $e['label'] }}</span>@endif
+                    </p>
+                    @if($open)
+                        <p class="mt-1.5 text-[14px] leading-relaxed text-white/85">{{ $e['title'] }} — free to vote. {{ $e['rule'] }}.@if($e['ends']) Closes {{ $e['ends'] }}.@endif</p>
+                        @if(($award['voting_open'] ?? false) && $award['closes_at'])
+                            <div class="mt-3 flex gap-2" data-countdown="{{ $award['closes_at'] }}" aria-label="Time left to vote">
+                                @foreach(['days', 'hrs', 'min', 'sec'] as $unit)
+                                    <div class="w-12 rounded-lg bg-white/[0.08] py-1.5 text-center"><span class="block text-[17px] font-extrabold tabular-nums" data-unit="{{ $unit }}">--</span><span class="text-[10px] text-white/55">{{ $unit }}</span></div>
+                                @endforeach
+                            </div>
+                        @endif
+                        @if($e['nominees'])
+                            <ul class="mt-3 grid gap-1.5" data-vote-finder>
+                                @foreach(array_slice($e['nominees'], 0, 6) as $n)
+                                    <li><a href="{{ $n['url'] }}" class="flex min-h-10 items-center justify-between gap-2 rounded-lg bg-white/[0.06] px-3 text-[14px] font-semibold hover:bg-white/10"><span class="truncate">{{ $n['name'] }}</span> <span class="shrink-0 text-[12.5px] font-bold text-gold">Vote →</span></a></li>
+                                @endforeach
+                            </ul>
+                        @endif
+                        <a href="{{ $e['url'] }}" class="mt-3 inline-flex min-h-10 items-center gap-1.5 text-[14px] font-bold text-gold hover:underline">Vote now · see all nominees <x-plat.icon name="arrow-right" class="w-4 h-4" /></a>
+                    @elseif($e && $e['phase'] === 'scheduled')
+                        <p class="mt-1.5 text-[14px] leading-relaxed text-white/85">Public voting for {{ $e['title'] }} @if($e['starts'])opens {{ $e['starts'] }}@else opens soon @endif. Voting is free.</p>
+                    @elseif($e && $e['phase'] === 'paused')
+                        <p class="mt-1.5 text-[14px] leading-relaxed text-white/85">Public voting for {{ $e['title'] }} is paused for now. Please check back soon.</p>
+                    @elseif($e)
+                        <p class="mt-1.5 text-[14px] leading-relaxed text-white/85">Public voting for {{ $e['title'] }} has ended. Nominee profiles appear during active voting campaigns.</p>
+                    @else
+                        <p class="mt-1.5 text-[14px] leading-relaxed text-white/85">Nominee profiles appear during active voting campaigns.</p>
+                    @endif
+                </div>
+
+                <div class="rounded-2xl bg-[linear-gradient(135deg,#1769AA,#073B66)] p-4 ring-1 ring-white/15 sm:p-5">
+                    <p class="text-[12px] font-extrabold uppercase tracking-[0.12em] text-gold">{{ $award['status'] }} · free entry</p>
+                    <p class="mt-2 text-[18px] font-extrabold leading-snug">{{ $award['title'] }}</p>
+                    @if($award['bn'])<p class="font-body text-[14px] text-sky-200" lang="bn">{{ $award['bn'] }}</p>@endif
+                    <p class="mt-2 text-[13.5px] text-white/80">{{ $categoryCount }} categories · People’s Choice and Jury Choice in every category.</p>
+                    <div class="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <a href="{{ $joinUrl }}" class="inline-flex h-11 items-center justify-center rounded-xl bg-gold px-5 text-[14px] font-extrabold text-night hover:brightness-105">Create profile to enter</a>
+                        @if($awardUrl)<a href="{{ $awardUrl }}" class="inline-flex h-11 items-center justify-center rounded-xl border border-white/30 px-5 text-[14px] font-bold hover:bg-white/10">Categories & rules</a>@endif
+                    </div>
+                    {{-- How each award is decided (Showcase::recognitionTypes; jury size, weights and age limits appear only when configured). --}}
+                    <details class="group mt-4 border-t border-white/15 pt-3">
+                        <summary class="flex cursor-pointer list-none items-center justify-between gap-2 text-[13.5px] font-bold">How winners are chosen <x-plat.icon name="chevron-down" class="w-4 h-4 transition group-open:rotate-180" /></summary>
+                        <ul class="mt-2 grid gap-1.5 text-[13px] text-white/80">
+                            @foreach($recognition as $r)
+                                <li><b class="text-white">{{ $r['name'] }}</b> — {{ $r['desc'] }} <span class="text-white/60">({{ $r['how'] }})</span></li>
+                            @endforeach
+                        </ul>
+                    </details>
+                </div>
+                {{-- Voting rules, stated only as strongly as VoteService enforces them. --}}
+                <p class="flex items-start gap-2 px-1 text-[12.5px] leading-relaxed text-white/70"><x-plat.icon name="lock" class="mt-0.5 w-3.5 h-3.5 shrink-0" /> <span>One vote per mobile number per category in each voting period. Numbers are not OTP-verified; votes are screened for abuse. Paid promotions never affect results.</span></p>
             </div>
         </div>
-        <p class="mx-auto mt-6 flex w-fit max-w-full items-center justify-center gap-2 text-center text-[15px] font-semibold text-night"><x-plat.icon name="trophy" class="w-[18px] h-[18px] shrink-0 text-golddk" /> Award entry is free and doesn’t need membership.</p>
+        <p class="mx-auto mt-7 flex w-fit max-w-full items-center justify-center gap-2 text-center text-[15px] font-semibold text-white"><x-plat.icon name="trophy" class="w-[18px] h-[18px] shrink-0 text-gold" /> Award entry is free and doesn’t need membership.</p>
     </div>
 </section>

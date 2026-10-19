@@ -64,14 +64,16 @@ class HomepageLaunchTest extends TestCase
     {
         config(['payment.support_whatsapp' => '+880 1900-000000']);
         $bar = $this->phoneBar();
-        $this->assertStringContainsString('Create Free Profile', $bar);
+        $this->assertStringContainsString('Create Free Business Profile', $bar);
         $this->assertStringContainsString('href="https://wa.me/8801900000000?text=', $bar);
-        $this->assertStringContainsString('WhatsApp', strip_tags($bar));
+        // Icon-only button, named for screen readers.
+        $this->assertStringContainsString('aria-label="Chat with MetaSoft BD on WhatsApp"', $bar);
+        $this->assertSame('', trim(strip_tags(preg_replace('~^.*?(<a[^>]*wa.me.*?</a>).*$~s', '$1', $bar))), 'No visible WhatsApp label.');
 
         // No configured number: no guessed link, only the profile button.
         config(['payment.support_whatsapp' => '']);
         $bar = $this->phoneBar();
-        $this->assertStringContainsString('Create Free Profile', $bar);
+        $this->assertStringContainsString('Create Free Business Profile', $bar);
         $this->assertStringNotContainsString('wa.me', $bar);
     }
 

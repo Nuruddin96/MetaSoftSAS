@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Brand;
+use App\Support\Home\HomeMedia;
 use App\Support\Home\Showcase;
 use App\Support\Platform\HomepageContent;
 use Illuminate\Http\Request;
@@ -70,6 +71,14 @@ class HomeController extends Controller
             'automation' => Showcase::automationFeatures(),
             'sponsorTiers' => Showcase::sponsorTiers(),
             'profiles' => Showcase::profilesForClient(),
+            // Real photos/documents for the Concept C sections (only files that exist).
+            'media' => [
+                'moments' => HomeMedia::moments(),
+                'journey' => HomeMedia::programme(),
+                'consultancy' => HomeMedia::consultancy(),
+                'certificate' => HomeMedia::certificate(),
+                'recipients' => HomeMedia::recipients(),
+            ],
             'whatsapp' => preg_replace('/\D/', '', (string) config('payment.support_whatsapp')),
         ]);
     }

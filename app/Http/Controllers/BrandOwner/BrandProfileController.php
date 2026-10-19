@@ -33,7 +33,8 @@ class BrandProfileController extends Controller
 
         return view('brand-owner.brand', [
             'brand' => $brand->load('category', 'pendingChange'),
-            'categories' => BrandCategory::active()->ordered()->get(),
+            // Active categories, plus the brand's own if it was retired (chunk68.sql) so the form keeps it.
+            'categories' => BrandCategory::where(fn ($w) => $w->where('is_active', true)->orWhere('id', $brand->brand_category_id))->ordered()->get(),
             'locations' => BdLocations::map(),
             'reviewFields' => $brand->reviewFields(),
             'completion' => $brand->completion(),
@@ -52,7 +53,8 @@ class BrandProfileController extends Controller
         $data = $request->validate([
             'name' => 'required|string|min:2|max:150',
             'logo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-            'brand_category_id' => ['required', Rule::exists('brand_categories', 'id')->where('is_active', 1)],
+            // An active category, or the one the brand already has (even if since retired).
+            'brand_category_id' => ['required', Rule::exists('brand_categories', 'id')->where(fn ($w) => $w->where('is_active', 1)->orWhere('id', $brand->brand_category_id))],
             'sub_category' => 'nullable|string|max:100',
             'founder_name' => 'required|string|max:150',
             'phone' => ['required', 'regex:/^01[3-9]\d{8}$/', Rule::unique('brands', 'phone')->ignore($brand->id)],
