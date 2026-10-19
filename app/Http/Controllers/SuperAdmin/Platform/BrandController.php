@@ -326,6 +326,10 @@ class BrandController extends Controller
         if (isset($changes['phone']) && Brand::withTrashed()->where('phone', $changes['phone'])->whereKeyNot($brand->id)->exists()) {
             return back()->with('error', 'Another business profile already uses the requested mobile number.');
         }
+        if (isset($changes['brand_category_id']) && (int) $changes['brand_category_id'] !== (int) $brand->brand_category_id
+            && ! BrandCategory::whereKey($changes['brand_category_id'])->where('is_active', true)->exists()) {
+            return back()->with('error', 'The requested category has since been retired. Reject this request or ask the owner to choose a current category.');
+        }
         if (isset($changes['logo_path']) && $brand->logo_path && $brand->logo_path !== $changes['logo_path']) {
             Storage::disk('public')->delete($brand->logo_path);
         }
@@ -362,7 +366,8 @@ class BrandController extends Controller
     {
         return [
             'brand' => $brand,
-            'categories' => BrandCategory::ordered()->get(),
+            // Current categories, plus this brand's own if it was retired (chunk68.sql), so editing never forces a change.
+            'categories' => BrandCategory::where(fn ($w) => $w->where('is_active', true)->orWhere('id', $brand->brand_category_id))->ordered()->get(),
             'locations' => BdLocations::map(),
         ];
     }
@@ -378,7 +383,8 @@ class BrandController extends Controller
             'name' => 'required|string|min:2|max:150',
             'slug' => ['nullable', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', 'max:160', Rule::unique('brands', 'slug')->ignore($brand?->id)],
             'logo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-            'brand_category_id' => 'required|exists:brand_categories,id',
+            // An active category, or the one the brand already has: retired categories take no new brands.
+            'brand_category_id' => ['required', Rule::exists('brand_categories', 'id')->where(fn ($w) => $w->where('is_active', 1)->when($brand?->brand_category_id, fn ($q, $id) => $q->orWhere('id', $id)))],
             'sub_category' => 'nullable|string|max:100',
             'founder_name' => 'required|string|max:150',
             // One mobile number = one business profile (soft-deleted ones included, like the unique key).
