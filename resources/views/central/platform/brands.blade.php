@@ -78,3 +78,7 @@
     </div>
 </section>
 @endsection
+
+@section('footer')
+    <x-plat.site-footer />
+@endsection

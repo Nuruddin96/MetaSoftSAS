@@ -16,6 +16,8 @@ class PlatformSchema
 
     private static ?bool $reviewReady = null;
 
+    private static ?bool $coverReady = null;
+
     public static function ready(): bool
     {
         if (self::$ready === null) {
@@ -46,10 +48,25 @@ class PlatformSchema
         return self::$reviewReady;
     }
 
+    /** Has database/sql/chunk69.sql (brands.cover_path) been imported? */
+    public static function coverReady(): bool
+    {
+        if (self::$coverReady === null) {
+            try {
+                self::$coverReady = self::ready() && Schema::hasColumn('brands', 'cover_path');
+            } catch (Throwable) {
+                self::$coverReady = false;
+            }
+        }
+
+        return self::$coverReady;
+    }
+
     /** Tests create the tables mid-process; let them reset the memoized answer. */
     public static function flush(): void
     {
         self::$ready = null;
         self::$reviewReady = null;
+        self::$coverReady = null;
     }
 }
