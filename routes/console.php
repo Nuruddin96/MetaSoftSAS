@@ -58,3 +58,11 @@ Schedule::command('platform:campaign-tick')
     ->everyFiveMinutes()
     ->onOneServer()
     ->withoutOverlapping();
+
+// Brand directory: archive (never delete) discovery listings whose source
+// re-check date has passed — they are already hidden from public pages.
+// See PlatformDirectoryMaintain; a no-op until chunk70.sql is imported.
+Schedule::command('platform:directory-maintain --apply')
+    ->dailyAt('03:30')
+    ->onOneServer()
+    ->withoutOverlapping();

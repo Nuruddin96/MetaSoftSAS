@@ -39,3 +39,12 @@ the current task. Keep each entry short: date, decision, reason.
   certificate is published.
 - There is no record of permission to use the Government of Bangladesh seal or
   emblem, so don't use it on the site.
+- **2026-10-20** Discovery directory (`brand_directory_listings`, chunk70.sql)
+  is a separate table from `brands` on purpose: researched listings of
+  well-known brands (data: `database/data/brand-directory.json`) must never
+  enter voting, awards, brand counts or carry the Verified badge. Public pages
+  label them "Public listing" and say the business has not joined or been
+  verified by MetaSoft BD; listing pages are `noindex` and use text monograms,
+  never the brands' logos. A matching registration only records a claim;
+  Super Admin replaces a listing only with an approved brand that has the
+  Verified badge plus identity evidence. Listings are archived, never deleted.

@@ -12,7 +12,7 @@
         <h1 class="mt-2 text-[28px] font-extrabold leading-tight tracking-tight sm:text-[36px]">
             {{ $category ? $category->name : 'Discover Bangladeshi brands' }}
         </h1>
-        <p class="mt-2 max-w-2xl text-[15px] text-slate2">Every brand here is reviewed by the MetaSoft BD team before it is listed. The <x-plat.verified class="inline -mt-0.5" /> badge marks brands whose details we have verified.</p>
+        <p class="mt-2 max-w-2xl text-[15px] text-slate2">Every registered brand here is reviewed by the MetaSoft BD team before it is listed. The <x-plat.verified class="inline -mt-0.5" /> badge marks brands whose details we have verified.</p>
 
         <form method="GET" action="{{ route('brands.index') }}" class="mt-6 grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]" role="search">
             <label class="relative">
@@ -49,7 +49,9 @@
 </section>
 
 <section class="{{ $wrap }} py-8 sm:py-10">
-    @if($brands->isEmpty())
+    @if($brands->isEmpty() && $listings->isNotEmpty())
+        <p class="rounded-xl border border-dashed border-hair bg-white px-4 py-3 text-sm text-slate2">No registered brand matches yet. <a href="{{ route('owner.register') }}" class="font-bold text-leaf hover:underline">List your brand</a></p>
+    @elseif($brands->isEmpty())
         <div class="rounded-[24px] border border-dashed border-hair bg-white px-6 py-14 text-center">
             <x-plat.icon name="store" class="mx-auto w-8 h-8 text-slate2" />
             <h2 class="mt-3 text-lg font-extrabold">No brands found</h2>
@@ -67,6 +69,19 @@
             @endforeach
         </div>
         <div class="mt-8">{{ $brands->links() }}</div>
+    @endif
+
+    @if($listings->isNotEmpty())
+        {{-- Discovery listings (BrandDirectoryListing): researched from official sources, not registered — kept visibly separate. --}}
+        <div id="listings" class="mt-12 scroll-mt-20">
+            <h2 class="text-xl font-extrabold tracking-tight sm:text-2xl">Well-known brands in Bangladesh</h2>
+            <p class="mt-1.5 max-w-3xl text-[14px] text-slate2">A public directory compiled by MetaSoft BD from each brand’s official website. These businesses have not joined, endorsed or partnered with MetaSoft BD and are not verified by us.</p>
+            <div class="mt-5 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+                @foreach($listings as $listing)
+                    <x-plat.listing-card :listing="$listing" />
+                @endforeach
+            </div>
+        </div>
     @endif
 
     <div class="mt-12 flex flex-col items-start justify-between gap-4 rounded-[24px] bg-[linear-gradient(135deg,#1769AA,#052B4C)] p-6 text-white sm:flex-row sm:items-center sm:p-8">

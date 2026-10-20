@@ -35,6 +35,8 @@ Route::get('brand/{slug}', [BrandDirectoryController::class, 'show'])->where('sl
 
 Route::middleware('platform.ready')->group(function () {
     Route::get('brands', [BrandDirectoryController::class, 'index'])->name('brands.index');
+    // Discovery listings researched by the team (not registered brands) — BrandDirectoryListing.
+    Route::get('directory/{slug}', [BrandDirectoryController::class, 'listing'])->where('slug', '[a-z0-9-]+')->name('directory.show');
 
     Route::get('vote/{slug}', [VoteController::class, 'show'])->where('slug', '[a-z0-9-]+')->name('vote.show');
     Route::post('vote/{slug}', [VoteController::class, 'cast'])->where('slug', '[a-z0-9-]+')

@@ -15,6 +15,7 @@ use App\Http\Controllers\SuperAdmin\Platform\AuditController as PlatformAuditCon
 use App\Http\Controllers\SuperAdmin\Platform\AwardController as PlatformAwardController;
 use App\Http\Controllers\SuperAdmin\Platform\BrandCategoryController as PlatformCategoryController;
 use App\Http\Controllers\SuperAdmin\Platform\BrandController as PlatformBrandController;
+use App\Http\Controllers\SuperAdmin\Platform\DirectoryListingController as PlatformDirectoryController;
 use App\Http\Controllers\SuperAdmin\Platform\HomepageController as PlatformHomepageController;
 use App\Http\Controllers\SuperAdmin\Platform\VoteCampaignController as PlatformCampaignController;
 use Illuminate\Support\Facades\Route;
@@ -38,6 +39,11 @@ Route::middleware('platform.ready')->group(function () {
     Route::post('brand-changes/{change}/approve', [PlatformBrandController::class, 'approveChange'])->whereNumber('change')->name('brands.changes.approve');
     Route::post('brand-changes/{change}/reject', [PlatformBrandController::class, 'rejectChange'])->whereNumber('change')->name('brands.changes.reject');
 
+    // Discovery listings (researched, not registered) — replace / archive / restore, never delete.
+    Route::get('directory', [PlatformDirectoryController::class, 'index'])->name('directory.index');
+    Route::post('directory/{listing}/replace', [PlatformDirectoryController::class, 'replace'])->whereNumber('listing')->name('directory.replace');
+    Route::post('directory/{listing}/archive', [PlatformDirectoryController::class, 'archive'])->whereNumber('listing')->name('directory.archive');
+    Route::post('directory/{listing}/restore', [PlatformDirectoryController::class, 'restore'])->whereNumber('listing')->name('directory.restore');
     Route::get('brand-categories', [PlatformCategoryController::class, 'index'])->name('brand-categories.index');
     Route::post('brand-categories', [PlatformCategoryController::class, 'store'])->name('brand-categories.store');
     Route::put('brand-categories/{category}', [PlatformCategoryController::class, 'update'])->whereNumber('category')->name('brand-categories.update');

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Platform;
 use App\Http\Controllers\Controller;
 use App\Models\Brand;
 use App\Models\BrandCategory;
+use App\Models\BrandDirectoryListing;
 use App\Support\Home\Showcase;
 use App\Support\Platform\BdLocations;
 use App\Support\Platform\HomepageContent;
@@ -13,6 +14,8 @@ use Illuminate\Http\Request;
 
 /**
  * Public brand directory (/brands) and brand profile (/brand/{slug}) — approved brands only.
+ * Discovery listings (BrandDirectoryListing — researched, not registered)
+ * appear in their own labelled section of /brands and on /directory/{slug}.
  * The homepage's sample brands (Showcase) also get a profile page here while
  * Super Admin → Homepage allows sample content; a real brand with the same
  * slug always wins.
@@ -39,8 +42,17 @@ class BrandDirectoryController extends Controller
             ->orderByDesc('is_featured')->orderBy('featured_order')->latest('approved_at')
             ->paginate(24)->withQueryString();
 
+        // Discovery listings: same search + category filter; they have no division and are never "verified".
+        $listings = PlatformSchema::directoryReady() && ! $division && ! $request->boolean('verified') && $brands->currentPage() === 1
+            ? BrandDirectoryListing::listed()->with('category')
+                ->when($q !== '', fn ($w) => $w->where(fn ($s) => $s->where('name', 'like', "%{$q}%")->orWhere('description', 'like', "%{$q}%")))
+                ->when($category, fn ($w) => $w->where('brand_category_id', $category->id))
+                ->orderBy('name')->take(60)->get()
+            : collect();
+
         return view('central.platform.brands', [
             'brands' => $brands,
+            'listings' => $listings,
             'q' => $q,
             'category' => $category,
             'division' => $division,
@@ -68,6 +80,28 @@ class BrandDirectoryController extends Controller
             'recognitions' => $brand->recognitions()->with('award', 'category')->latest()->get(),
             'finalists' => $brand->nominations()->whereIn('status', ['finalist', 'shortlisted'])->with('award', 'category')->latest()->get(),
             'related' => Brand::published()->where('id', '!=', $brand->id)->where('brand_category_id', $brand->brand_category_id)->with(Brand::CARD_RELATIONS)->inRandomOrder()->take(4)->get(),
+        ]);
+    }
+
+    /**
+     * Discovery listing page. A listing replaced by its verified registered
+     * brand redirects to that brand's profile — temporarily (302), so the
+     * old link works again if Super Admin restores the listing.
+     */
+    public function listing(string $slug)
+    {
+        abort_unless(PlatformSchema::directoryReady(), 404);
+        $listing = BrandDirectoryListing::where('slug', $slug)->with('category', 'replacedBy')->firstOrFail();
+        if ($listing->replacedBy?->isPublished()) {
+            return redirect()->to($listing->replacedBy->profileUrl());
+        }
+        abort_unless($listing->isListed(), 404);
+
+        return view('central.platform.listing', [
+            'listing' => $listing,
+            'related' => $listing->brand_category_id
+                ? BrandDirectoryListing::listed()->with('category')->where('brand_category_id', $listing->brand_category_id)->whereKeyNot($listing->id)->orderBy('name')->take(4)->get()
+                : collect(),
         ]);
     }
 

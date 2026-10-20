@@ -44,6 +44,19 @@
 
 <div class="grid gap-5 xl:grid-cols-[1fr_380px]">
     <div class="space-y-5">
+        @if(($directoryMatches ?? collect())->isNotEmpty())
+            {{-- Discovery listings with this brand's name or website (DirectoryListings). Replacing needs approval + Verified badge with identity evidence. --}}
+            <section class="{{ $box }} border-amber-200">
+                <h2 class="mb-2 font-bold">📒 Matches a directory listing</h2>
+                <ul class="space-y-1 text-sm">
+                    @foreach($directoryMatches as $l)
+                        <li><b>{{ $l->name }}</b> <span class="text-mute">· {{ $l->official_domain ?? 'no website' }} · {{ $l->status }} · {{ str_replace('_', ' ', $l->membership_status) }}</span></li>
+                    @endforeach
+                </ul>
+                <p class="mt-2 text-xs text-mute">Check that this registration is the real business before replacing the listing.</p>
+                <a href="{{ route('super.directory.index', ['q' => $directoryMatches->first()->name]) }}" class="mt-2 inline-block text-sm font-semibold text-leaf hover:underline">Manage in Directory →</a>
+            </section>
+        @endif
         @if($pending)
             <section class="{{ $box }} border-sky-200">
                 <h2 class="mb-3 font-bold">✏️ Profile change request <span class="text-xs font-normal text-mute">· {{ $pending->updated_at->diffForHumans() }}</span></h2>

@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Brand;
 use App\Models\BrandCategory;
 use App\Models\BrandChangeRequest;
+use App\Models\BrandDirectoryListing;
 use App\Models\PlatformAuditLog;
 use App\Models\SuperAdmin;
 use App\Rules\FacebookPageUrl;
 use App\Support\Platform\BdLocations;
+use App\Support\Platform\DirectoryListings;
 use App\Support\Platform\PlatformNotifier;
 use App\Support\Platform\PlatformSchema;
 use App\Support\Platform\VoteService;
@@ -79,6 +81,7 @@ class BrandController extends Controller
         }
 
         PlatformAuditLog::record('brand.created_by_admin', $brand, ['name' => $brand->name, 'status' => $brand->status]);
+        app(DirectoryListings::class)->recordClaim($brand);
 
         return redirect()->route('super.brands.show', $brand)->with('success', 'Brand added.');
     }
@@ -93,6 +96,12 @@ class BrandController extends Controller
             'audit' => PlatformAuditLog::where('subject_type', 'Brand')->where('subject_id', $brand->id)->latest('id')->take(30)->get(),
             'reviewReady' => $reviewReady = PlatformSchema::reviewReady(),
             'contactCheckedBy' => $reviewReady && $brand->contact_checked_by ? SuperAdmin::whereKey($brand->contact_checked_by)->value('name') : null,
+            // Discovery listings with the same name/website, or already claimed by or replaced with this brand.
+            'directoryMatches' => PlatformSchema::directoryReady()
+                ? app(DirectoryListings::class)->matches($brand)
+                    ->concat(BrandDirectoryListing::where('claimed_by_brand_id', $brand->id)->orWhere('replaced_by_brand_id', $brand->id)->get())
+                    ->unique('id')->values()
+                : collect(),
         ]);
     }
 
@@ -131,6 +140,7 @@ class BrandController extends Controller
             // Leave active campaigns cleanly; vote history stays for audit.
             $brand->voteEntries()->update(['is_active' => false]);
             PlatformAuditLog::record('brand.deleted', $brand, ['name' => $brand->name, 'slug' => $brand->slug], $reason);
+            app(DirectoryListings::class)->releaseClaims($brand, 'Registered brand deleted.');
             $brand->delete();
         });
 
@@ -183,6 +193,9 @@ class BrandController extends Controller
             $changes['contact_checked'] = $brand->contactChecked();
         }
         PlatformAuditLog::record('brand.'.$action, $brand, $changes, $reason);
+        if ($action === 'reject') {
+            app(DirectoryListings::class)->releaseClaims($brand, 'Registered brand rejected.');
+        }
 
         [$type, $title, $body] = match ($action) {
             'approve' => ['brand_approved', 'Your brand is live on MetaSoft BD 🎉', $brand->name.' has been approved. Your public profile: '.$brand->profileUrl()],

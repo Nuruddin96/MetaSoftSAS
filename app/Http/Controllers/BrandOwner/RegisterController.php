@@ -9,6 +9,7 @@ use App\Models\BrandOwner;
 use App\Models\PlatformAuditLog;
 use App\Rules\FacebookPageUrl;
 use App\Support\Platform\BdLocations;
+use App\Support\Platform\DirectoryListings;
 use App\Support\Platform\PlatformNotifier;
 use App\Support\Platform\PlatformSchema;
 use App\Support\Platform\VoteService;
@@ -125,6 +126,8 @@ class RegisterController extends Controller
             route('owner.dashboard'));
         PlatformNotifier::admins('brand_submitted', 'New brand submitted: '.$brand->name,
             $brand->founder_name.' · '.$brand->district.', '.$brand->division, route('super.brands.show', $brand));
+        // Same name or official website as a discovery listing: flag it for review — never linked or replaced automatically.
+        app(DirectoryListings::class)->recordClaim($brand);
 
         return redirect()->route('owner.dashboard')->with('success', 'Welcome! Your brand has been submitted for review.');
     }

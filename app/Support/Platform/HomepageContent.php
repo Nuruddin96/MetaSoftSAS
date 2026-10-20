@@ -5,6 +5,7 @@ namespace App\Support\Platform;
 use App\Models\Award;
 use App\Models\Brand;
 use App\Models\BrandCategory;
+use App\Models\BrandDirectoryListing;
 use App\Models\PlatformSetting;
 use App\Models\Vote;
 use App\Models\VoteCampaign;
@@ -161,6 +162,22 @@ class HomepageContent
             'url' => route('voting.campaign', $campaign->slug),
             'nominees' => $nominees,
         ];
+    }
+
+    /**
+     * Homepage "Well-known brands in Bangladesh": up to $max discovery
+     * listings the data file picked for the homepage (homepage_order), in
+     * that order. Never mixed into ourBrands(), stats() or realBrandCount() —
+     * these businesses are not registered on the platform.
+     */
+    public function directoryPicks(int $max = 9): Collection
+    {
+        if (! PlatformSchema::directoryReady()) {
+            return collect();
+        }
+
+        return BrandDirectoryListing::listed()->with('category')->whereNotNull('homepage_order')
+            ->orderBy('homepage_order')->orderBy('name')->take($max)->get();
     }
 
     public function realBrandCount(): int

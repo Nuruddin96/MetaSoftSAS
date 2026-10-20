@@ -3,6 +3,7 @@
     $platTabs = [
         ['super.brands.index', 'Brands', 'super.brands.index|super.brands.show|super.brands.edit|super.brands.create', \App\Models\Brand::where('status', 'pending')->count()],
         ['super.brands.changes', 'Change requests', 'super.brands.changes', \App\Models\BrandChangeRequest::where('status', 'pending')->whereHas('brand')->count()],
+        ['super.directory.index', 'Directory', 'super.directory.*', \App\Support\Platform\PlatformSchema::directoryReady() ? \App\Models\BrandDirectoryListing::where('membership_status', 'claim_pending')->count() : 0],
         ['super.brand-categories.index', 'Categories', 'super.brand-categories.*', 0],
         ['super.awards.index', 'Awards', 'super.awards.*', \App\Models\AwardNomination::where('status', 'submitted')->count()],
         ['super.campaigns.index', 'Voting', 'super.campaigns.*', 0],
