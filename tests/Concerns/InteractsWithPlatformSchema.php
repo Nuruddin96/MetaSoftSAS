@@ -92,6 +92,7 @@ trait InteractsWithPlatformSchema
             $t->string('district', 50);
             $t->string('division', 50);
             $t->string('logo_path')->nullable();
+            $t->string('cover_path')->nullable();
             $t->text('description')->nullable();
             $t->text('products_info')->nullable();
             foreach (['website', 'facebook', 'instagram', 'tiktok', 'youtube'] as $c) {

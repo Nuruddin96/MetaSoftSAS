@@ -23,15 +23,19 @@
 @endpush
 
 @section('content')
-@php $wrap = 'mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8'; @endphp
+@php
+    $wrap = 'mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8';
+    // A page can ask for a shorter header (the registration page does).
+    $compact = trim($__env->yieldContent('compact-header')) !== '';
+@endphp
 <div class="plat-theme flex min-h-screen flex-col bg-cloud font-plat text-night">
     <header class="sticky top-0 z-40 border-b border-hair bg-white/90 backdrop-blur-md">
-        <div class="{{ $wrap }} flex h-16 items-center justify-between gap-3">
+        <div class="{{ $wrap }} flex {{ $compact ? 'h-12 sm:h-14' : 'h-16' }} items-center justify-between gap-3">
             <a href="{{ url('/') }}" class="flex items-center gap-2.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf">
                 <x-ui.brand-mark />
                 <span class="leading-none">
                     <span class="block whitespace-nowrap text-[15px] font-extrabold tracking-tight min-[360px]:text-[17px]">MetaSoft BD</span>
-                    <span class="mt-1 hidden text-[9.5px] font-bold uppercase tracking-[0.16em] text-leaf sm:block">Brand & Entrepreneur Network</span>
+                    <span class="mt-0.5 block whitespace-nowrap text-[7.5px] font-bold uppercase tracking-[0.1em] text-leaf min-[360px]:text-[8.5px] min-[360px]:tracking-[0.12em] sm:mt-1 sm:text-[9.5px] sm:tracking-[0.16em]">Brand & Entrepreneur Network</span>
                 </span>
             </a>
             <nav class="hidden items-center gap-1 md:flex" aria-label="Primary">
@@ -45,7 +49,7 @@
                     <a href="{{ route('owner.dashboard') }}" class="whitespace-nowrap rounded-xl bg-night px-4 py-2.5 text-sm font-bold text-white hover:bg-navy">My dashboard</a>
                 @else
                     <a href="{{ route('owner.login') }}" class="hidden rounded-lg px-3 py-2 text-sm font-semibold hover:bg-cloud sm:inline-flex">Brand login</a>
-                    <a href="{{ route('owner.register') }}" class="whitespace-nowrap rounded-xl bg-leaf px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-leafdk">List your brand</a>
+                    <a href="{{ route('owner.register') }}" class="whitespace-nowrap rounded-xl bg-leaf {{ $compact ? 'px-3 py-1.5 text-[13px]' : 'px-4 py-2.5 text-sm' }} font-bold text-white shadow-sm hover:bg-leafdk">List your brand</a>
                 @endif
             </div>
         </div>
@@ -58,6 +62,10 @@
         @yield('page')
     </main>
 
+    {{-- A page may supply its own footer (e.g. the registration page uses the homepage-style x-plat.site-footer). --}}
+    @hasSection('footer')
+        @yield('footer')
+    @else
     <footer class="border-t border-hair bg-white">
         <div class="{{ $wrap }} flex flex-col gap-4 py-8 text-sm text-slate2 sm:flex-row sm:items-center sm:justify-between">
             <p class="flex items-center gap-2"><x-ui.brand-mark size="sm" /> <span><b class="text-night">MetaSoft BD</b> · Bangladesh’s Entrepreneur & Brand Growth Network</span></p>
@@ -69,5 +77,6 @@
             </nav>
         </div>
     </footer>
+    @endif
 </div>
 @endsection

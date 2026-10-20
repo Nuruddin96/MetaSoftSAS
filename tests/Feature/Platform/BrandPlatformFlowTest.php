@@ -82,7 +82,7 @@ class BrandPlatformFlowTest extends TestCase
     {
         $this->makePlatformCategory();
 
-        $this->get(route('owner.register'))->assertOk()->assertSee('List your brand on MetaSoft BD')->assertSee('Optional');
+        $this->get(route('owner.register'))->assertOk()->assertSee('List Your Brand')->assertSee('Add more details (optional)');
         $this->get('/')->assertOk()->assertSee(route('owner.register'), false);
     }
 

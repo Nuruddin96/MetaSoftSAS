@@ -10,6 +10,7 @@ use App\Models\PlatformAuditLog;
 use App\Rules\FacebookPageUrl;
 use App\Support\Platform\BdLocations;
 use App\Support\Platform\PlatformNotifier;
+use App\Support\Platform\PlatformSchema;
 use App\Support\Platform\VoteService;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -27,6 +28,8 @@ use Illuminate\Validation\ValidationException;
  * Page link are required. One mobile number = one business profile: the
  * number is normalized (01XXXXXXXXX) before every check, and the unique keys
  * on brand_owners.phone and brands.phone (chunk67.sql) back the check up.
+ * An optional cover image is accepted once chunk69.sql (brands.cover_path)
+ * is imported; before that the upload box is hidden and a cover is ignored.
  */
 class RegisterController extends Controller
 {
@@ -41,6 +44,7 @@ class RegisterController extends Controller
         return view('brand-owner.register', [
             'categories' => BrandCategory::active()->ordered()->get(),
             'locations' => BdLocations::map(),
+            'coverEnabled' => PlatformSchema::coverReady(),
         ]);
     }
 
@@ -72,6 +76,8 @@ class RegisterController extends Controller
             'website' => 'nullable|url|max:255',
             'facebook' => ['required', 'string', 'max:255', new FacebookPageUrl],
             'instagram' => 'nullable|url|max:255',
+            // Same limits as gallery photos (BrandProfileController::addGallery).
+            'cover' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:3072',
         ], [
             'phone.regex' => 'Enter a valid Bangladeshi mobile number (01XXXXXXXXX).',
             'terms.accepted' => 'Please accept the platform rules to continue.',
@@ -98,12 +104,15 @@ class RegisterController extends Controller
         }
 
         $logoPath = $request->file('logo')->store('brands/logos', 'public');
+        $coverPath = PlatformSchema::coverReady() && $request->hasFile('cover')
+            ? $request->file('cover')->store('brands/covers', 'public')
+            : null;
 
         try {
-            [$owner, $brand] = DB::transaction(fn () => $this->createOwnerAndBrand($data, $logoPath));
+            [$owner, $brand] = DB::transaction(fn () => $this->createOwnerAndBrand($data, $logoPath, $coverPath));
         } catch (UniqueConstraintViolationException) {
             // A parallel request registered the same email/phone first (unique keys on brand_owners and brands).
-            Storage::disk('public')->delete($logoPath);
+            Storage::disk('public')->delete(array_filter([$logoPath, $coverPath]));
             throw ValidationException::withMessages(['account' => self::ACCOUNT_UNAVAILABLE]);
         }
 
@@ -121,7 +130,7 @@ class RegisterController extends Controller
     }
 
     /** @return array{0: BrandOwner, 1: Brand} */
-    private function createOwnerAndBrand(array $data, string $logoPath): array
+    private function createOwnerAndBrand(array $data, string $logoPath, ?string $coverPath): array
     {
         $owner = BrandOwner::create([
             'name' => $data['founder_name'],
@@ -147,7 +156,7 @@ class RegisterController extends Controller
             'facebook' => $data['facebook'],
             'instagram' => $data['instagram'] ?? null,
             'status' => 'pending',
-        ]);
+        ] + ($coverPath ? ['cover_path' => $coverPath] : []));
 
         return [$owner, $brand];
     }

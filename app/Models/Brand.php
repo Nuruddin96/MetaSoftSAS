@@ -174,6 +174,16 @@ class Brand extends Model
         return $this->logo_path ? asset('storage/'.$this->logo_path) : null;
     }
 
+    /** Profile banner: the uploaded cover (chunk69.sql), else the first gallery photo, else none (the gradient shows). */
+    public function coverUrl(): ?string
+    {
+        if ($this->cover_path) {
+            return asset('storage/'.$this->cover_path);
+        }
+
+        return $this->galleryUrls()[0] ?? null;
+    }
+
     public function galleryUrls(): array
     {
         return array_map(fn ($p) => asset('storage/'.$p), $this->gallery ?? []);
@@ -295,7 +305,7 @@ class Brand extends Model
             'name' => $this->name,
             'initials' => $this->initials(),
             'logo' => $this->logoUrl(),
-            'cover' => $this->galleryUrls()[0] ?? null,
+            'cover' => $this->coverUrl(),
             'from' => $from,
             'to' => $to,
             'category' => $this->category?->name ?? 'Brand',

@@ -80,6 +80,16 @@ return [
     // mailer. In-app notifications are always created.
     'notify_email' => env('PLATFORM_NOTIFY_EMAIL', false),
 
+    // MetaSoft BD's own official social profiles, shown as icons in the
+    // platform footer. Empty until the real URLs are set in .env, so the
+    // footer never links to a guessed or unofficial account.
+    'social' => [
+        'facebook' => env('PLATFORM_SOCIAL_FACEBOOK'),
+        'youtube' => env('PLATFORM_SOCIAL_YOUTUBE'),
+        'instagram' => env('PLATFORM_SOCIAL_INSTAGRAM'),
+        'tiktok' => env('PLATFORM_SOCIAL_TIKTOK'),
+    ],
+
     /*
     | Public voting anti-abuse thresholds (App\Support\Platform\VoteService).
     | There is no SMS OTP yet: no SMS gateway is configured on this

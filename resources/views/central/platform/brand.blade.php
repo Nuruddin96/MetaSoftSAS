@@ -16,59 +16,58 @@
     $openEntry = $entries->first();
 @endphp
 
-<section class="relative overflow-hidden" style="background:linear-gradient(135deg,{{ $from }},{{ $to }})">
-    <span class="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-white/10" aria-hidden="true"></span>
-    <span class="absolute left-1/3 top-10 h-48 w-48 rounded-full bg-white/[0.06]" aria-hidden="true"></span>
-    <div class="{{ $wrap }} relative h-32 sm:h-40">
-        <a href="{{ route('brands.index') }}" class="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-[13px] font-bold text-night shadow-sm hover:bg-white sm:left-6">
-            <x-plat.icon name="chevron-right" class="w-3.5 h-3.5 rotate-180" /> All brands
-        </a>
-        @if($brand->isSponsoredNow())
-            <span class="absolute right-4 top-4 sm:right-6"><x-plat.badge type="sponsored" label="Sponsored" /></span>
-        @endif
-    </div>
-</section>
+{{-- Premium header: the brand's cover (uploaded cover → first gallery photo → brand gradient) fading into navy, the logo on a white tile, and the name with its "✓ Verified" pill (only when verified). --}}
+<section class="relative isolate overflow-hidden bg-night text-white" data-brand-hero>
+    @if($cover = $brand->coverUrl())
+        <img src="{{ $cover }}" alt="" class="absolute inset-0 -z-20 h-full w-full object-cover" fetchpriority="high" data-brand-cover>
+    @else
+        <div class="absolute inset-0 -z-20" style="background:linear-gradient(135deg,{{ $from }},{{ $to }})"></div>
+    @endif
+    <div class="absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgba(11,37,69,0.10)_0%,rgba(11,37,69,0.45)_45%,rgba(11,37,69,0.92)_78%,#0B2545_100%)]" aria-hidden="true"></div>
 
-<section class="{{ $wrap }}">
-    <div class="relative -mt-14 rounded-[24px] border border-hair bg-white p-5 shadow-[0_12px_40px_-20px_rgba(10,20,40,0.25)] sm:p-8">
-        <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-            <div class="flex items-end gap-4">
-                <x-plat.logo :initials="$brand->initials()" :from="$from" :to="$to" :size="96" ring :src="$brand->logoUrl()" :alt="$brand->name.' logo'" class="-mt-16 shadow-lg sm:-mt-20" />
-                <div class="min-w-0 pb-1">
-                    <h1 class="flex items-center gap-2 text-[24px] font-extrabold leading-tight tracking-tight sm:text-[30px]">
-                        <span class="break-words">{{ $brand->name }}</span>
-                        @if($brand->is_verified)<x-plat.verified size="w-5 h-5 sm:w-6 sm:h-6" />@endif
-                    </h1>
-                    <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-slate2">
-                        <span class="font-semibold text-night">{{ $brand->category?->name ?? 'Brand' }}</span>
-                        @if($brand->sub_category)<span aria-hidden="true">·</span> {{ $brand->sub_category }}@endif
-                        <span aria-hidden="true">·</span>
+    <div class="{{ $wrap }} relative">
+        <div class="flex items-start justify-between gap-3 pt-4">
+            <a href="{{ route('brands.index') }}" class="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-[13px] font-bold text-night shadow-sm hover:bg-white">
+                <x-plat.icon name="chevron-right" class="w-3.5 h-3.5 rotate-180" /> All brands
+            </a>
+            @if($brand->isSponsoredNow())<x-plat.badge type="sponsored" label="Sponsored" />@endif
+        </div>
+
+        <div class="flex flex-col gap-4 pb-6 pt-24 sm:flex-row sm:items-end sm:justify-between sm:pb-8 sm:pt-40">
+            <div class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:gap-5">
+                <span class="inline-flex w-fit shrink-0 rounded-[22px] bg-white p-1.5 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.6)]">
+                    <x-plat.logo :initials="$brand->initials()" :from="$from" :to="$to" :size="96" :src="$brand->logoUrl()" :alt="$brand->name.' logo'" />
+                </span>
+                <div class="min-w-0 sm:pb-1">
+                    <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                        <h1 class="break-words text-[26px] font-extrabold leading-tight tracking-tight sm:text-[34px]">{{ $brand->name }}</h1>
+                        @if($brand->is_verified)<x-plat.verified-pill class="mt-1" />@endif
+                    </div>
+                    <p class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-white/75">
+                        <span class="rounded-full bg-white/12 px-2 py-0.5 text-[12px] font-semibold text-white ring-1 ring-white/15">{{ $brand->category?->name ?? 'Brand' }}</span>
+                        @if($brand->sub_category)<span>{{ $brand->sub_category }}</span><span aria-hidden="true">·</span>@endif
                         <span class="inline-flex items-center gap-1"><x-plat.icon name="map-pin" class="w-3.5 h-3.5" /> {{ $brand->district }}, {{ $brand->division }}</span>
                         @if($brand->founded_year)<span aria-hidden="true">·</span> Since {{ $brand->founded_year }}@endif
                     </p>
+                    @if($badges)
+                        <div class="mt-2.5 flex flex-wrap gap-2">
+                            @foreach($badges as $b)<x-plat.badge :type="$b['type']" :label="$b['label']" />@endforeach
+                        </div>
+                    @endif
                 </div>
             </div>
-            <div class="flex flex-wrap gap-2">
+            <div class="flex shrink-0 flex-wrap gap-2">
                 @if($openEntry)
-                    <a href="{{ $brand->voteUrl() }}" class="inline-flex items-center gap-2 rounded-xl bg-flag px-5 py-3 text-sm font-bold text-white shadow-sm hover:brightness-95">
+                    <a href="{{ $brand->voteUrl() }}" class="inline-flex items-center gap-2 rounded-xl bg-flag px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:brightness-95">
                         <x-plat.icon name="vote" class="w-4 h-4" /> Vote for {{ Str::limit($brand->name, 22) }}
                     </a>
                 @endif
                 <button type="button" data-share data-share-url="{{ $brand->profileUrl() }}" data-share-title="{{ $brand->name }}" data-share-text="Discover {{ $brand->name }} on MetaSoft BD"
-                        class="inline-flex items-center gap-2 rounded-xl border border-hair px-4 py-3 text-sm font-bold hover:border-leaf">
+                        class="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-bold text-white backdrop-blur hover:bg-white/20">
                     <x-plat.icon name="share" class="w-4 h-4" /> Share
                 </button>
             </div>
         </div>
-
-        @if($badges || $brand->is_verified)
-            <div class="mt-5 flex flex-wrap gap-2 border-t border-hair pt-5">
-                @if($brand->is_verified)<x-plat.badge type="verified" label="MetaSoft BD Verified" />@endif
-                @foreach($badges as $b)
-                    <x-plat.badge :type="$b['type']" :label="$b['label']" />
-                @endforeach
-            </div>
-        @endif
     </div>
 </section>
 
@@ -184,4 +183,8 @@
         </div>
     </section>
 @endif
+@endsection
+
+@section('footer')
+    <x-plat.site-footer />
 @endsection
