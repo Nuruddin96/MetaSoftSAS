@@ -18,6 +18,8 @@ class PlatformSchema
 
     private static ?bool $coverReady = null;
 
+    private static ?bool $directoryReady = null;
+
     public static function ready(): bool
     {
         if (self::$ready === null) {
@@ -62,11 +64,26 @@ class PlatformSchema
         return self::$coverReady;
     }
 
+    /** Has database/sql/chunk70.sql (brand_directory_listings) been imported? */
+    public static function directoryReady(): bool
+    {
+        if (self::$directoryReady === null) {
+            try {
+                self::$directoryReady = self::ready() && Schema::hasTable('brand_directory_listings');
+            } catch (\Throwable) {
+                self::$directoryReady = false;
+            }
+        }
+
+        return self::$directoryReady;
+    }
+
     /** Tests create the tables mid-process; let them reset the memoized answer. */
     public static function flush(): void
     {
         self::$ready = null;
         self::$reviewReady = null;
         self::$coverReady = null;
+        self::$directoryReady = null;
     }
 }

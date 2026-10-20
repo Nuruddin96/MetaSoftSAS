@@ -57,6 +57,7 @@ class HomeController extends Controller
             'votingNote' => $votingNote,
             'trending' => Showcase::trending(),
             'ourBrands' => $content->ourBrands(),
+            'directoryPicks' => $content->directoryPicks(),
             'voteEntry' => $content->voteEntry(),
             'realBrands' => $content->realBrandCount(),
             'categories' => $content->categories(),

@@ -26,7 +26,8 @@
 @section('content')
 {{--
     Concept C homepage (approved design: design-preview concept C). Order:
-    hero → photo strip → Brands building Bangladesh → Verified badge →
+    hero → photo strip → Brands building Bangladesh → Well-known brands
+    (discovery listings) → Verified badge →
     Our journey → Consultancy & networking → Awards → Company credentials →
     Join → footer. Real data throughout; sections whose material isn't
     supplied yet show an honest fallback (HomeMedia).
@@ -45,6 +46,7 @@
         @endif
 
         @include('central.home.our-brands')
+        @include('central.home.directory')
         @include('central.home.verified')
         @include('central.home.journey')
         @include('central.home.consultancy')

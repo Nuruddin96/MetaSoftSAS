@@ -299,6 +299,43 @@ trait InteractsWithPlatformSchema
         PlatformSchema::flush();
     }
 
+    /** database/sql/chunk70.sql — discovery listings (BrandDirectoryListing). */
+    protected function setUpDirectorySchema(): void
+    {
+        Schema::create('brand_directory_listings', function (Blueprint $t) {
+            $t->id();
+            $t->string('name', 150);
+            $t->string('name_key', 150)->index();
+            $t->string('slug', 160)->unique();
+            $t->unsignedBigInteger('brand_category_id')->nullable();
+            $t->string('description', 600)->nullable();
+            $t->string('website')->nullable();
+            $t->string('official_domain', 190)->nullable()->index();
+            $t->string('facebook')->nullable();
+            $t->string('ownership', 20)->default('unconfirmed');
+            $t->string('ownership_note', 300)->nullable();
+            $t->string('source_type', 30)->default('public_research');
+            $t->string('membership_status', 20)->default('not_member');
+            $t->string('verification_status', 20)->default('needs_review');
+            $t->string('source_url')->nullable();
+            $t->json('sources')->nullable();
+            $t->date('source_checked_at')->nullable();
+            $t->date('expires_at')->nullable();
+            $t->unsignedTinyInteger('replacement_priority')->default(5);
+            $t->unsignedBigInteger('replaced_by_brand_id')->nullable();
+            $t->unsignedBigInteger('claimed_by_brand_id')->nullable();
+            $t->timestamp('claimed_at')->nullable();
+            $t->string('status', 20)->default('active');
+            $t->timestamp('archived_at')->nullable();
+            $t->string('archive_reason', 30)->nullable();
+            $t->unsignedSmallInteger('homepage_order')->nullable();
+            $t->string('review_note', 500)->nullable();
+            $t->timestamps();
+        });
+
+        PlatformSchema::flush();
+    }
+
     protected function makePlatformCategory(string $name = 'Fashion & Apparel', array $attrs = []): BrandCategory
     {
         return BrandCategory::create(array_merge(['name' => $name, 'slug' => Str::slug($name), 'sort_order' => 1, 'is_active' => true], $attrs));
