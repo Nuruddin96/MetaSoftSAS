@@ -211,9 +211,53 @@ class DirectoryListingsTest extends TestCase
             ->assertSee(route('directory.show', 'brac'), false)
             ->getContent();
 
-        $this->assertSame(8, substr_count($html, 'Public listing'));
+        // Unclaimed listings carry the red dot (with its tooltip/screen-reader text), not a text label.
+        $this->assertSame(8, substr_count($html, 'title="Public listing — not claimed by the brand"'));
+        $this->assertStringContainsString('Red dot = public listing, not claimed by the brand.', $html);
+        $this->assertStringNotContainsString('>Public listing</span>', $html);
         $this->assertStringNotContainsString(route('directory.show', 'grameenphone'), $html, 'Only homepage picks appear on the homepage.');
         $this->assertSame(0, app(HomepageContent::class)->realBrandCount());
+    }
+
+    public function test_homepage_always_fills_eight_cards_when_a_pick_is_hidden(): void
+    {
+        $this->importAll();
+        BrandDirectoryListing::where('slug', 'brac')->update(['verification_status' => 'needs_review']);
+
+        $picks = app(HomepageContent::class)->directoryPicks();
+        $this->assertCount(8, $picks);
+        $this->assertSame(['aarong', 'pran', 'walton', 'apex', 'bkash', 'pathao', '10-minute-school'], $picks->take(7)->pluck('slug')->all(), 'Picks keep their homepage order.');
+        $this->assertNotContains('brac', $picks->pluck('slug'));
+        $this->assertNotContains('akij-group', $picks->pluck('slug'), 'Hidden listings never backfill.');
+
+        $html = $this->get('/')->assertOk()->getContent();
+        $this->assertSame(8, substr_count($html, 'title="Public listing — not claimed by the brand"'));
+    }
+
+    public function test_official_logos_and_red_dot_follow_the_listing_record(): void
+    {
+        $this->importAll();
+        $aarong = BrandDirectoryListing::where('slug', 'aarong')->first();
+        $bkash = BrandDirectoryListing::where('slug', 'bkash')->first();
+
+        // Every saved logo belongs to a real listing and is recorded with its official source.
+        $sources = json_decode(file_get_contents(database_path('data/brand-directory-logos.json')), true)['logos'];
+        foreach (glob(public_path('images/directory/logos/*.png')) as $file) {
+            $slug = basename($file, '.png');
+            $this->assertArrayHasKey($slug, $sources);
+            $this->assertNotNull(BrandDirectoryListing::where('slug', $slug)->where('verification_status', 'verified')->first(), $slug);
+        }
+        $this->assertFileDoesNotExist(public_path('images/directory/logos/akij-group.png'));
+
+        $this->assertStringEndsWith('images/directory/logos/aarong.png', $aarong->logoUrl());
+        $this->assertNull($bkash->logoUrl(), 'No reliable official icon → neutral monogram.');
+        $this->assertStringContainsString('images/directory/logos/aarong.png', Blade::render('<x-plat.listing-card :listing="$l" />', ['l' => $aarong]));
+
+        // Claimed listings lose the dot; the status comes from the record, not the name.
+        $this->assertTrue($aarong->isUnclaimed());
+        $aarong->update(['membership_status' => 'claim_pending', 'claimed_by_brand_id' => $this->brand('Aarong Claim')->id]);
+        $card = Blade::render('<x-plat.listing-card :listing="$l" />', ['l' => $aarong->fresh()]);
+        $this->assertStringNotContainsString('not claimed by the brand', $card);
     }
 
     public function test_homepage_search_finds_public_listings_in_their_own_labelled_group(): void
@@ -240,7 +284,7 @@ class DirectoryListingsTest extends TestCase
         $this->assertSame(0, substr_count($html, route('directory.show', 'akij-group')));
         $this->assertStringContainsString(route('directory.show', 'bkash'), $html);
         // Browsing entrepreneurs adds no listing group to the results (the regular homepage section still renders).
-        $this->get('/?browse=entrepreneurs')->assertOk()->assertDontSee('public listing');
+        $this->assertDoesNotMatchRegularExpression('/\d+ public listings?\b/', $this->get('/?browse=entrepreneurs')->assertOk()->getContent());
     }
 
     public function test_homepage_search_works_before_the_directory_table_exists(): void
@@ -258,7 +302,7 @@ class DirectoryListingsTest extends TestCase
 
         $card = Blade::render('<x-plat.listing-card :listing="$listing" />', ['listing' => $listing]);
         $this->assertStringNotContainsString('metasoft-verified.png', $card);
-        $this->assertStringContainsString('Public listing', $card);
+        $this->assertStringContainsString('not claimed by the brand', $card);
 
         $this->get(route('directory.show', 'bkash'))->assertOk()->assertDontSee('metasoft-verified.png', false);
     }

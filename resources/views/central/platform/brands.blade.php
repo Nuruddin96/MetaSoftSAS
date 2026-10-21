@@ -75,7 +75,7 @@
         {{-- Discovery listings (BrandDirectoryListing): researched from official sources, not registered — kept visibly separate. --}}
         <div id="listings" class="mt-12 scroll-mt-20">
             <h2 class="text-xl font-extrabold tracking-tight sm:text-2xl">Well-known brands in Bangladesh</h2>
-            <p class="mt-1.5 max-w-3xl text-[14px] text-slate2">A public directory compiled by MetaSoft BD from each brand’s official website. These businesses have not joined, endorsed or partnered with MetaSoft BD and are not verified by us.</p>
+            <p class="mt-1.5 max-w-3xl text-[14px] text-slate2">A public directory compiled by MetaSoft BD from each brand’s official website. These businesses have not joined, endorsed or partnered with MetaSoft BD and are not verified by us. <span><span class="mr-1 inline-block h-2 w-2 rounded-full bg-red-500 align-middle" aria-hidden="true"></span>Red dot = public listing, not claimed by the brand.</span></p>
             <div class="mt-5 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
                 @foreach($listings as $listing)
                     <x-plat.listing-card :listing="$listing" />

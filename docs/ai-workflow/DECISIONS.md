@@ -57,3 +57,15 @@ the current task. Keep each entry short: date, decision, reason.
   never the brands' logos. A matching registration only records a claim;
   Super Admin replaces a listing only with an approved brand that has the
   Verified badge plus identity evidence. Listings are archived, never deleted.
+- **2026-10-21** (supersedes the "Public listing" label and "never the brands'
+  logos" in the entry above, at the owner's request) Directory cards show the
+  icon each brand publishes on its own official website, saved as static files
+  (`public/images/directory/logos/{slug}.png`, sources in
+  `database/data/brand-directory-logos.json`; no schema change), or the
+  neutral monogram when no reliable icon ≥96px exists. Covers are neutral
+  tints — no brand photography is copied. Unclaimed listings
+  (`membership_status = not_member`, no claim) carry a red dot with
+  title/screen-reader text, explained in each section intro; showcase sample
+  brands get the same dot instead of "Sample", and a registered (`live`) brand
+  never does. The homepage always shows 8 listings: picks first, then other
+  public listings by name if a pick is hidden.

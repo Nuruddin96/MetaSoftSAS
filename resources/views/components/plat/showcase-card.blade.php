@@ -3,8 +3,8 @@
     cover strip (or the brand gradient), an overlapping logo, then the name
     with the blue MetaSoft BD Verified seal beside it, but only when
     `verified` is true (brands.is_verified, set by Super Admin). Same labels
-    as x-plat.brand-card: "Sponsored" for paid placements, "Sample" for
-    sample fill-ins. The whole card opens the brand's /brand/{slug} page.
+    as x-plat.brand-card: "Sponsored" for paid placements, a red dot for
+    sample fill-ins (never a registered `live` brand). The whole card opens the brand's /brand/{slug} page.
     The directory and profile pages keep using x-plat.brand-card.
 --}}
 @props(['brand'])
@@ -14,8 +14,8 @@
         <span class="absolute inset-0 bg-gradient-to-t from-black/25 to-transparent"></span>
         @if(($brand['tag'] ?? null) === 'sponsored')
             <span class="absolute right-2 top-2 rounded bg-white/95 px-1.5 text-[10.5px] font-bold leading-[18px] text-slate2" title="Paid placement">Sponsored</span>
-        @elseif($brand['sample'] ?? false)
-            <span class="absolute right-2 top-2 rounded bg-white/95 px-1.5 text-[10.5px] font-semibold leading-[18px] text-slate2">Sample</span>
+        @elseif(($brand['sample'] ?? false) && ! ($brand['live'] ?? false))
+            <span class="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" title="Sample brand — not a registered business"><span class="sr-only">Sample brand</span></span>
         @endif
     </div>
     <div class="px-3 pb-3 sm:px-3.5 sm:pb-3.5">

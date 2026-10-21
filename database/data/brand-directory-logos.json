@@ -1,0 +1,17 @@
+{
+    "note": "Icons saved to public/images/directory/logos/{slug}.png, each downloaded on 2026-10-21 from the icon the brand itself declares on its official website (apple-touch / app icon, at least 96px). Listings not here use the neutral monogram: their sites only publish favicons too small to display (16-32px), block automated requests, or the file was not a valid image. No brand photography is copied; covers are neutral tints.",
+    "logos": {
+        "10-minute-school": "https://cdn.10minuteschool.com/image/icon-512x512_1702964557063.png",
+        "aarong": "https://www.aarong.com/apple-touch-icon.png",
+        "chaldal": "https://i.chaldn.com/asset/egg-chaldal-web-release-id-29483/https/Default/stores/chaldal/root/touch-icon-iphone.png",
+        "grameenphone": "https://www.grameenphone.com/pwa-icon/icon-192x192.png",
+        "nagad": "https://nagad.com.bd/_nuxt/icons/icon_512x512.f451ed.png",
+        "pathao": "https://pathao.com/favicon.png",
+        "pickaboo": "https://www.pickaboo.com/apple-icon.png",
+        "pran": "https://www.pranfoods.net/pran_fav.png",
+        "rfl": "https://rflbd.com/Application/storage/app/public/relativeContentPath/settings/2024-07-10___RFL Logo for Website -100 X 100 (2).png",
+        "robi": "https://www.robi.com.bd/favicon/apple-icon.png",
+        "shajgoj": "https://shop.shajgoj.com/favicon.png",
+        "shohoz": "https://www.shohoz.com/assets/icons/icon-180x180.png"
+    }
+}

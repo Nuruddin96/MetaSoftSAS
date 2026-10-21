@@ -108,6 +108,36 @@ class BrandDirectoryListing extends Model
         return route('directory.show', $this->slug);
     }
 
+    /**
+     * The brand's own icon, as published on its official website, when the
+     * team saved one (public/images/directory/logos/{slug}.png — sources in
+     * database/data/brand-directory-logos.json). Null → neutral monogram.
+     */
+    public function logoUrl(): ?string
+    {
+        $file = 'images/directory/logos/'.$this->slug.'.png';
+
+        return $this->slug && is_file(public_path($file)) ? asset($file) : null;
+    }
+
+    /** Neutral cover band: no brand photography is copied, only a muted tint picked from the slug. */
+    public function coverGradient(): array
+    {
+        $pairs = [['#E2E8F0', '#CBD5E1'], ['#DBEAFE', '#BFDBFE'], ['#E0E7FF', '#C7D2FE'], ['#DCFCE7', '#BBF7D0'], ['#FEF3C7', '#FDE68A'], ['#FCE7F3', '#FBCFE8'], ['#E0F2FE', '#BAE6FD'], ['#F1F5F9', '#E2E8F0']];
+
+        return $pairs[crc32((string) $this->slug) % count($pairs)];
+    }
+
+    /**
+     * Still a team-researched public listing that no registered brand has
+     * claimed (membership_status not_member, no claim). Cards mark these
+     * with a small red dot; claimed or replaced listings never get it.
+     */
+    public function isUnclaimed(): bool
+    {
+        return $this->membership_status === 'not_member' && ! $this->claimed_by_brand_id && ! $this->replaced_by_brand_id;
+    }
+
     public function initials(): string
     {
         $words = preg_split('/\s+/u', trim($this->name)) ?: [];

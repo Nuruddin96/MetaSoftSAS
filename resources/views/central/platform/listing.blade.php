@@ -2,7 +2,7 @@
     Discovery listing page (/directory/{slug}) — a well-known brand the
     MetaSoft BD team listed from its official public sources. It is not a
     registered profile: no Verified badge, no voting, no contact details,
-    no logo copied from the brand, and a plain notice that the business has
+    only the icon the brand publishes on its official website (or a monogram), and a plain notice that the business has
     not joined or been verified by MetaSoft BD. Links to the official
     sources are rel="nofollow noopener".
 --}}
@@ -25,7 +25,7 @@
             <x-plat.icon name="chevron-right" class="w-3.5 h-3.5 rotate-180" /> Brand directory
         </a>
         <div class="mt-4 flex items-center gap-4">
-            <x-plat.logo :initials="$listing->initials()" from="#475569" to="#1E293B" :size="72" />
+            <x-plat.logo :initials="$listing->initials()" from="#475569" to="#1E293B" :size="72" :src="$listing->logoUrl()" :alt="$listing->name.' logo'" class="border border-hair object-contain!" />
             <div class="min-w-0">
                 <h1 class="break-words text-[26px] font-extrabold leading-tight tracking-tight sm:text-[32px]">{{ $listing->name }}</h1>
                 <p class="mt-1 text-[14px] text-slate2">

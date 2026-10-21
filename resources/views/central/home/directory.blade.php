@@ -1,9 +1,9 @@
 {{--
     Well-known brands in Bangladesh — discovery listings picked for the
-    homepage (HomepageContent::directoryPicks(), 6–9 cards). Kept apart from
+    homepage (HomepageContent::directoryPicks(), always 8 cards when 8 are public). Kept apart from
     "Our Brands": these businesses were listed by the MetaSoft BD team from
     their official websites and have not joined or been verified, so the
-    cards carry a "Public listing" label and never the Verified seal.
+    cards carry a red dot while unclaimed (explained in the intro) and never the Verified seal.
     Hidden entirely when there are no listings.
 --}}
 @if(($directoryPicks ?? collect())->isNotEmpty())
@@ -13,7 +13,7 @@
             <div class="min-w-0">
                 <p class="{{ $eyebrow }}"><span class="{{ $rule }}"></span> Brand directory</p>
                 <h2 id="directoryTitle" class="{{ $h2 }}">Well-known brands in Bangladesh</h2>
-                <p class="mt-1.5 max-w-3xl text-[14.5px] text-slate2">Compiled from each brand’s official website so you can find them in one place. Listed for discovery — not members of, partners of or verified by MetaSoft BD.</p>
+                <p class="mt-1.5 max-w-3xl text-[14.5px] text-slate2">Compiled from each brand’s official website so you can find them in one place. Listed for discovery — not members of, partners of or verified by MetaSoft BD. <span><span class="mr-1 inline-block h-2 w-2 rounded-full bg-red-500 align-middle" aria-hidden="true"></span>Red dot = public listing, not claimed by the brand.</span></p>
             </div>
             <a href="{{ route('brands.index') }}#listings" class="hidden shrink-0 items-center gap-1 text-sm font-bold text-leaf hover:underline sm:inline-flex">Full directory <x-plat.icon name="arrow-right" class="w-4 h-4" /></a>
         </div>
