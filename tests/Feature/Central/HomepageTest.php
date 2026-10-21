@@ -8,6 +8,7 @@ use App\Support\Home\Showcase;
 use App\Support\Platform\HomepageContent;
 use App\Support\Platform\PlatformSchema;
 use Illuminate\Auth\SessionGuard;
+use Illuminate\Support\Facades\Blade;
 use Tests\TestCase;
 
 /**
@@ -68,7 +69,22 @@ class HomepageTest extends TestCase
     {
         $home = $this->get('/')->assertOk();
 
-        $home->assertSee('>Sample</span>', false)->assertDontSee('votes so far');
+        $home->assertSee('title="Sample brand — not a registered business"', false)->assertDontSee('votes so far');
+        // Sample brand cards show a red dot instead of a "Sample" text label.
+        $home->assertDontSee('leading-[18px] text-slate2">Sample</span>', false);
+    }
+
+    public function test_registered_brands_never_get_the_sample_dot(): void
+    {
+        $card = ['live' => true, 'sample' => true, 'slug' => 'x', 'name' => 'Real Co', 'initials' => 'RC', 'logo' => null, 'cover' => null,
+            'from' => '#000', 'to' => '#111', 'category' => 'Food', 'district' => 'Dhaka', 'verified' => false, 'tag' => null, 'url' => '/brand/x'];
+
+        foreach (['showcase-card', 'brand-card'] as $component) {
+            $html = Blade::render('<x-plat.'.$component.' :brand="$b" />', ['b' => $card]);
+            $this->assertStringNotContainsString('Sample brand', $html, $component);
+            $html = Blade::render('<x-plat.'.$component.' :brand="$b" />', ['b' => ['live' => false] + $card]);
+            $this->assertStringContainsString('Sample brand', $html, $component);
+        }
     }
 
     public function test_homepage_links_to_business_automation_and_existing_auth(): void

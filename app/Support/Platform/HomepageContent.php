@@ -165,19 +165,22 @@ class HomepageContent
     }
 
     /**
-     * Homepage "Well-known brands in Bangladesh": up to $max discovery
-     * listings the data file picked for the homepage (homepage_order), in
-     * that order. Never mixed into ourBrands(), stats() or realBrandCount() —
-     * these businesses are not registered on the platform.
+     * Homepage "Well-known brands in Bangladesh": exactly $max (two full
+     * rows of four) public listings — the data file's picks
+     * (homepage_order) first, in that order, then other public listings by
+     * name when a pick is hidden, expired or replaced, so the section never
+     * shrinks to a part row. Never mixed into ourBrands(), stats() or
+     * realBrandCount() — these businesses are not registered on the platform.
      */
-    public function directoryPicks(int $max = 9): Collection
+    public function directoryPicks(int $max = 8): Collection
     {
         if (! PlatformSchema::directoryReady()) {
             return collect();
         }
 
-        return BrandDirectoryListing::listed()->with('category')->whereNotNull('homepage_order')
-            ->orderBy('homepage_order')->orderBy('name')->take($max)->get();
+        return BrandDirectoryListing::listed()->with('category')
+            ->orderByRaw('homepage_order IS NULL')->orderBy('homepage_order')->orderBy('name')
+            ->take($max)->get();
     }
 
     /**

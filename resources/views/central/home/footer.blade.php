@@ -51,7 +51,7 @@
     <div class="border-t border-white/10">
         <div class="{{ $wrap }} flex flex-col gap-1.5 py-5 text-[14px] text-white/70 sm:flex-row sm:items-center sm:justify-between">
             <p>© {{ date('Y') }} MetaSoft BD · Dhaka, Bangladesh. All rights reserved.</p>
-            @if($preview)<p>Brands, people and figures marked “Sample” are sample content for preview.</p>@endif
+            @if($preview)<p>Brands marked with a red dot, and people and figures marked “Sample”, are sample content for preview.</p>@endif
         </div>
     </div>
 </footer>
