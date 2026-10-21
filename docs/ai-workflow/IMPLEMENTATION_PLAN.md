@@ -31,6 +31,7 @@ registered brands, with a safe replacement workflow when a genuine brand registe
 - 2026-10-20 — chunk70.sql, model, DirectoryListings service, import/maintain commands, public pages, admin Directory page, registration claim hook.
 - 2026-10-20 — DirectoryListingsTest 17/17; Platform+Central+SuperAdmin 248/248; full suite 1,899 tests, 12 failures = baseline (an earlier run had 13: one flaky extra); npm run build:clean OK; local SQLite visual check of /, /brands, /directory/aarong.
 - 2026-10-20 — review pass: corrected 4 ownership notes to match their recorded sources (bKash, Singer, Bata, Banglalink); replaced-listing redirect now 302 (rollback-safe); marketplace seller URLs (2+ path segments) no longer count as an official-domain match; re-import with a newer check renews expiry-archived listings. DirectoryListingsTest 20/20; related suites 252/252; full suite 12 failures = baseline; build:clean unchanged CSS.
+- 2026-10-21 — PR #12 merged (883d5bc), not deployed. chunk70.sql validated on a disposable MariaDB 10.4.32 (twice, IF NOT EXISTS; FKs/InnoDB/utf8mb4_unicode_ci); import dry run there = 30 would-create, 0 written; write path checked in a rolled-back transaction (19/19). Super Admin Directory reviewed at desktop + 390px; fixed: hidden-but-active rows (e.g. Akij Group) now marked "not public". DirectoryListingsTest 20/20; related suites 252/252; full suite 1,902 tests, 12 baseline failures.
 
 <!-- Template — copy into this section when a new objective starts:
 

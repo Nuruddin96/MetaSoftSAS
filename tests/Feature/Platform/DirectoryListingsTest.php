@@ -345,7 +345,10 @@ class DirectoryListingsTest extends TestCase
 
         $this->get(route('super.directory.index'))->assertRedirect();
         $this->actingAs($this->makePlatformAdmin(), 'super_admin')
-            ->get(route('super.directory.index', ['filter' => 'needs_review']))->assertOk()->assertSee('Akij Group');
+            ->get(route('super.directory.index', ['filter' => 'needs_review']))->assertOk()->assertSee('Akij Group')
+            ->assertSee('not public');
+        // Publicly listed rows carry no "not public" marker.
+        $this->get(route('super.directory.index', ['q' => 'Aarong']))->assertOk()->assertSee('Aarong')->assertDontSee('not public');
     }
 
     // --- expiry + category capacity ----------------------------------------------------------

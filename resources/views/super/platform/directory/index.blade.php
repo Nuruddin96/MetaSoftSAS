@@ -48,6 +48,8 @@
                         <p class="font-semibold">
                             @if($l->isListed())<a href="{{ $l->url() }}" target="_blank" class="text-leaf hover:underline">{{ $l->name }}</a>@else{{ $l->name }}@endif
                             <span class="ml-1 rounded px-1.5 py-0.5 text-[11px] {{ $l->status === 'active' ? 'bg-leaf/10 text-leafdk' : 'bg-ink/10 text-ink' }}">{{ $l->status }}@if($l->archive_reason) · {{ $l->archive_reason }}@endif</span>
+                            {{-- Active but not on public pages: needs_review, past its re-check date or replaced. --}}
+                            @if($l->status === 'active' && ! $l->isListed())<span class="ml-1 rounded bg-amber/15 px-1.5 py-0.5 text-[11px] text-amber-700" title="Not shown on public pages">not public</span>@endif
                         </p>
                         <p class="text-xs text-mute">{{ $l->category?->name ?? 'No category' }} · {{ $l->official_domain ?? 'no website' }} · priority {{ $l->replacement_priority }}@if($l->homepage_order) · homepage #{{ $l->homepage_order }}@endif</p>
                         @if($l->review_note)<p class="mt-1 max-w-md text-xs text-amber-800">{{ $l->review_note }}</p>@endif
