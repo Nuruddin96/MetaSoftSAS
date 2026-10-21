@@ -5,6 +5,15 @@ the current task. Keep each entry short: date, decision, reason.
 
 ## Production data and schema
 
+- **2026-10-21** `chunk70.sql` (`brand_directory_listings`, `CREATE TABLE IF NOT EXISTS`)
+  was applied once through the live app connection (`DB::unprepared`), after the
+  backup `~/backups/directory-chunk70-apply-20261021-035931`. Then
+  `php artisan platform:directory-import --apply` was run once: 30 rows, 29 public,
+  Akij Group `needs_review` and hidden. Re-running either is harmless: the SQL is a
+  no-op, and the import reports "unchanged". Listings expire on 2027-04-20, and the
+  daily `platform:directory-maintain --apply` job then archives them unless the
+  sources are re-checked and re-imported. Rollback before any claim or replacement:
+  `DROP TABLE brand_directory_listings` (nothing references it).
 - **2026-10-19** `chunk68.sql` (50 business categories; 8 old ones set
   `is_active=0`) was applied once. Re-running it would re-retire any category an admin
   re-activated.
