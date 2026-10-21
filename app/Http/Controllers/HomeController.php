@@ -38,12 +38,20 @@ class HomeController extends Controller
             $resultsTitle = '“'.$q.'”';
         }
 
+        // Discovery listings (BrandDirectoryListing) matching the same search, shown as their own labelled group.
+        $listingResults = match (true) {
+            $browse === 'brands' => $content->searchListings(null),
+            $results !== null && $browse !== 'entrepreneurs' => $content->searchListings($q),
+            default => collect(),
+        };
+
         [$voting, $votingNote] = $content->voting();
         $award = $content->award();
 
         return view('central.home', [
             'q' => $q,
             'results' => $results,
+            'listingResults' => $listingResults,
             'resultsTitle' => $resultsTitle,
             'browsing' => in_array($browse, ['brands', 'entrepreneurs'], true),
             'preview' => (bool) config('platform.showcase_preview'),

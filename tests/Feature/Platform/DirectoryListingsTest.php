@@ -13,10 +13,12 @@ use App\Models\VoteEntry;
 use App\Support\Platform\BusinessCategories;
 use App\Support\Platform\DirectoryListings;
 use App\Support\Platform\HomepageContent;
+use App\Support\Platform\PlatformSchema;
 use DomainException;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Tests\Concerns\InteractsWithPlatformSchema;
 use Tests\TestCase;
@@ -212,6 +214,41 @@ class DirectoryListingsTest extends TestCase
         $this->assertSame(8, substr_count($html, 'Public listing'));
         $this->assertStringNotContainsString(route('directory.show', 'grameenphone'), $html, 'Only homepage picks appear on the homepage.');
         $this->assertSame(0, app(HomepageContent::class)->realBrandCount());
+    }
+
+    public function test_homepage_search_finds_public_listings_in_their_own_labelled_group(): void
+    {
+        $this->importAll();
+
+        // Regression: the hero/header search used to answer "No brands … match" for every listing.
+        $this->get('/?q=Aarong')->assertOk()
+            ->assertDontSee('No brands or entrepreneurs match')
+            ->assertSee(route('directory.show', 'aarong'), false)
+            ->assertSee('1 public listing')
+            ->assertSee('have not joined, endorsed or partnered with MetaSoft BD');
+
+        // Category names match too; hidden (needs_review) listings never do.
+        $this->get('/?q=Telecommunications')->assertOk()
+            ->assertSee(route('directory.show', 'grameenphone'), false)
+            ->assertSee(route('directory.show', 'robi'), false);
+        $this->get('/?q=Akij')->assertOk()
+            ->assertSee('No brands or entrepreneurs match')
+            ->assertDontSee(route('directory.show', 'akij-group'), false);
+
+        // "Browse all brands" lists every public listing (29), still without the Verified badge on them.
+        $html = $this->get('/?browse=brands')->assertOk()->assertSee('29 public listings')->getContent();
+        $this->assertSame(0, substr_count($html, route('directory.show', 'akij-group')));
+        $this->assertStringContainsString(route('directory.show', 'bkash'), $html);
+        // Browsing entrepreneurs adds no listing group to the results (the regular homepage section still renders).
+        $this->get('/?browse=entrepreneurs')->assertOk()->assertDontSee('public listing');
+    }
+
+    public function test_homepage_search_works_before_the_directory_table_exists(): void
+    {
+        Schema::drop('brand_directory_listings');
+        PlatformSchema::flush();
+
+        $this->get('/?q=Aarong')->assertOk()->assertSee('No brands or entrepreneurs match');
     }
 
     public function test_listings_never_show_the_verified_badge(): void

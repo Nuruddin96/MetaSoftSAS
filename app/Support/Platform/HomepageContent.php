@@ -180,6 +180,27 @@ class HomepageContent
             ->orderBy('homepage_order')->orderBy('name')->take($max)->get();
     }
 
+    /**
+     * Discovery listings for the homepage search / "browse all brands"
+     * results (central/home/results.blade.php), in their own labelled group:
+     * those matching $q by name, description or category, or every public
+     * listing when $q is null. Only listed() rows — Akij-style needs_review,
+     * expired and replaced listings never appear.
+     */
+    public function searchListings(?string $q, int $max = 60): Collection
+    {
+        $q = $q === null ? null : trim($q);
+        if ($q === '' || ! PlatformSchema::directoryReady()) {
+            return collect();
+        }
+
+        return BrandDirectoryListing::listed()->with('category')
+            ->when($q !== null, fn ($w) => $w->where(fn ($s) => $s->where('name', 'like', "%{$q}%")
+                ->orWhere('description', 'like', "%{$q}%")
+                ->orWhereHas('category', fn ($c) => $c->where('name', 'like', "%{$q}%"))))
+            ->orderBy('name')->take($max)->get();
+    }
+
     public function realBrandCount(): int
     {
         return $this->published()->count();
